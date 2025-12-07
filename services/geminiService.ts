@@ -1,15 +1,20 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { Contact, LeadScoreResult } from "../types";
+import { GoogleGenAI, Type } from '@google/genai';
+import { Contact, LeadScoreResult } from '../types';
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getClient = () => {
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (!apiKey) {
+    throw new Error('Gemini API key missing. Set VITE_API_KEY in your .env');
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 /**
  * Analyzes a contact's profile and interaction history to generate a "Lead Score" 
  * and strategic advice.
  */
 export const analyzeLead = async (contact: Contact): Promise<LeadScoreResult> => {
-  const model = "gemini-2.5-flash";
+  const model = 'gemini-2.5-flash';
 
   const prompt = `
     Analyze the following CRM contact data to determine a lead quality score (0-100) and win probability.
@@ -29,25 +34,26 @@ export const analyzeLead = async (contact: Contact): Promise<LeadScoreResult> =>
   `;
 
   try {
+    const ai = getClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
       config: {
-        responseMimeType: "application/json",
+        responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            score: { type: Type.INTEGER, description: "Lead score from 0 to 100" },
-            winProbability: { type: Type.INTEGER, description: "Probability of closing won in %" },
-            reasoning: { type: Type.STRING, description: "Short explanation of the score calculation" },
-            nextBestAction: { type: Type.STRING, description: "Strategic recommendation for the salesperson" },
+            score: { type: Type.INTEGER, description: 'Lead score from 0 to 100' },
+            winProbability: { type: Type.INTEGER, description: 'Probability of closing won in %' },
+            reasoning: { type: Type.STRING, description: 'Short explanation of the score calculation' },
+            nextBestAction: { type: Type.STRING, description: 'Strategic recommendation for the salesperson' },
             riskFactors: { 
               type: Type.ARRAY, 
               items: { type: Type.STRING },
-              description: "List of potential risks"
+              description: 'List of potential risks'
             }
           },
-          required: ["score", "winProbability", "reasoning", "nextBestAction", "riskFactors"]
+          required: ['score', 'winProbability', 'reasoning', 'nextBestAction', 'riskFactors']
         }
       }
     });
@@ -55,16 +61,16 @@ export const analyzeLead = async (contact: Contact): Promise<LeadScoreResult> =>
     if (response.text) {
       return JSON.parse(response.text) as LeadScoreResult;
     }
-    throw new Error("No response text");
+    throw new Error('No response text');
   } catch (error) {
-    console.error("Gemini Analysis Failed:", error);
+    console.error('Gemini Analysis Failed:', error);
     // Fallback mock for demo if API fails or quota exceeded
     return {
       score: 50,
       winProbability: 50,
-      reasoning: "AI Analysis unavailable. Defaulting to neutral score.",
-      nextBestAction: "Check connection and try again.",
-      riskFactors: ["API Error"]
+      reasoning: 'AI Analysis unavailable. Defaulting to neutral score.',
+      nextBestAction: 'Check connection and try again.',
+      riskFactors: ['API Error']
     };
   }
 };
@@ -73,7 +79,7 @@ export const analyzeLead = async (contact: Contact): Promise<LeadScoreResult> =>
  * Generates a concise summary of all interactions for a quick catch-up.
  */
 export const summarizeHistory = async (contact: Contact): Promise<string> => {
-  const model = "gemini-2.5-flash";
+  const model = 'gemini-2.5-flash';
   
   const prompt = `
     Summarize the relationship history with ${contact.name} from ${contact.company} in 2 sentences.
@@ -84,13 +90,14 @@ export const summarizeHistory = async (contact: Contact): Promise<string> => {
   `;
 
   try {
+    const ai = getClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
     });
-    return response.text || "No summary available.";
+    return response.text || 'No summary available.';
   } catch (e) {
     console.error(e);
-    return "Could not generate summary.";
+    return 'Could not generate summary.';
   }
 };

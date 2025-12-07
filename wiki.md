@@ -177,7 +177,9 @@ npm run test         # Run test suite
 ```
 
 ### Environment Setup
-- **GEMINI_API_KEY**: Required for AI features
+- **VITE_API_KEY**: Required for AI features (exposed to the browser)
+- **VITE_SUPABASE_URL**: Supabase project URL (exposed to the browser)
+- **VITE_SUPABASE_ANON_KEY**: Supabase anon key (exposed to the browser)
 - **.env.local**: Local environment configuration
 - **Vite Configuration**: Environment variable injection
 
