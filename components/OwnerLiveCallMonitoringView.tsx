@@ -66,7 +66,7 @@ const ActionModal: React.FC<ActionModalProps> = ({ open, title, confirmLabel, on
   );
 };
 
-const CallMonitoringView: React.FC = () => {
+const OwnerLiveCallMonitoringView: React.FC = () => {
   const [filterAgent, setFilterAgent] = useState('All');
   const [filterType, setFilterType] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -559,7 +559,7 @@ const CallMonitoringView: React.FC = () => {
           <div className="flex items-center gap-3">
               <h1 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                   <Phone className="w-5 h-5 text-brand-blue" />
-                  Live Monitor
+                  Daily Call Monitoring
               </h1>
               <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
               <div className="flex items-center gap-2 text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md text-slate-600 dark:text-slate-300">
@@ -1232,4 +1232,4 @@ const CallMonitoringView: React.FC = () => {
   );
 };
 
-export default CallMonitoringView;
+export default OwnerLiveCallMonitoringView;

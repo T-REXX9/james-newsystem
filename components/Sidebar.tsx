@@ -20,7 +20,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user }) => {
     { id: 'staff', icon: UserCog, label: 'Staff & Agents' },
     { id: 'mail', icon: Mail, label: 'Inbox' },
     { id: 'calendar', icon: Calendar, label: 'Calendar' },
-    { id: 'calls', icon: Phone, label: 'Calls' },
+    { id: 'calls', icon: Phone, label: 'Daily Call Monitoring' },
     { id: 'tasks', icon: CheckSquare, label: 'Tasks' },
   ];
 

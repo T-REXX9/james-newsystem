@@ -26,6 +26,7 @@ export interface UserProfile {
   access_rights?: string[]; // List of module IDs allowed
   birthday?: string;
   mobile?: string;
+  monthly_quota?: number;
 }
 
 export interface ProfileRow extends UserProfile {

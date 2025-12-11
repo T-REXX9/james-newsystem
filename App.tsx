@@ -9,7 +9,8 @@ import PipelineView from './components/PipelineView';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
 import StaffView from './components/StaffView';
-import CallMonitoringView from './components/CallMonitoringView';
+import OwnerLiveCallMonitoringView from './components/OwnerLiveCallMonitoringView';
+import DailyCallMonitoringView from './components/DailyCallMonitoringView';
 import ProductDatabase from './components/ProductDatabase';
 import CustomerDatabase from './components/CustomerDatabase';
 import ReorderReport from './components/ReorderReport';
@@ -214,7 +215,14 @@ const App: React.FC = () => {
                 <CustomerDatabase />
             </div>
         );
-        case 'calls': return <CallMonitoringView />;
+        case 'calls': {
+            const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
+            return isSalesAgent ? (
+                <DailyCallMonitoringView currentUser={userProfile} />
+            ) : (
+                <OwnerLiveCallMonitoringView />
+            );
+        }
         case 'tasks': return <TasksView currentUser={userProfile} />;
         case 'mail': return renderComingSoon('Inbox');
         case 'calendar': return renderComingSoon('Calendar');

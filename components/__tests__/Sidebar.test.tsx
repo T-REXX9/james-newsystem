@@ -28,7 +28,7 @@ const moduleLabels = [
   'Staff & Agents',
   'Inbox',
   'Calendar',
-  'Calls',
+  'Daily Call Monitoring',
   'Tasks'
 ];
 

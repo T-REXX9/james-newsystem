@@ -22,7 +22,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'staff', label: 'Staff & Agents' },
   { id: 'mail', label: 'Inbox' },
   { id: 'calendar', label: 'Calendar' },
-  { id: 'calls', label: 'Calls' },
+  { id: 'calls', label: 'Daily Call Monitoring' },
   { id: 'tasks', label: 'Tasks' },
   { id: 'settings', label: 'Settings & Permissions' },
 ];
