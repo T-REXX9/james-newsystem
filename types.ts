@@ -328,3 +328,165 @@ export interface TeamMessage {
   created_at: string;
   is_from_owner: boolean;
 }
+
+// --- Customer Database Enhancement Types ---
+
+export interface PersonalComment {
+  id: string;
+  contact_id: string;
+  author_id: string;
+  author_name: string;
+  author_avatar?: string;
+  text: string;
+  timestamp: string;
+}
+
+export interface SalesReport {
+  id: string;
+  contact_id: string;
+  date: string;
+  time: string;
+  products: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+  }>;
+  totalAmount: number;
+  currency: string;
+  salesAgent: string;
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvalDate?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface DiscountRequest {
+  id: string;
+  contact_id: string;
+  inquiry_id?: string;
+  requestDate: string;
+  discountPercentage: number;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvalDate?: string;
+  notes?: string;
+}
+
+export interface UpdatedContactDetails {
+  id: string;
+  contact_id: string;
+  changedFields: Record<string, {
+    oldValue: any;
+    newValue: any;
+  }>;
+  submittedBy: string;
+  submittedDate: string;
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvalDate?: string;
+  notes?: string;
+}
+
+export interface SalesProgress {
+  id: string;
+  contact_id: string;
+  inquiryDate: string;
+  inquiry: string;
+  stage: DealStage;
+  stageChangedDate: string;
+  expectedClosureDate?: string;
+  outcome?: 'closed_won' | 'closed_lost';
+  outcomDate?: string;
+  lostReason?: string;
+  notes?: string;
+}
+
+export interface IncidentReport {
+  id: string;
+  contact_id: string;
+  reportDate: string;
+  incidentDate: string;
+  issueType: 'product_quality' | 'service_quality' | 'delivery' | 'other';
+  description: string;
+  reportedBy: string;
+  attachments?: string[];
+  approvalStatus: 'pending' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvalDate?: string;
+  notes?: string;
+}
+
+export interface SalesReturn {
+  id: string;
+  contact_id: string;
+  incident_report_id: string;
+  returnDate: string;
+  products: Array<{
+    name: string;
+    quantity: number;
+    originalPrice: number;
+    refundAmount: number;
+  }>;
+  totalRefund: number;
+  currency: string;
+  reason: string;
+  status: 'processed' | 'pending';
+  processedBy?: string;
+  processedDate?: string;
+  notes?: string;
+}
+
+export interface PurchaseHistory {
+  id: string;
+  contact_id: string;
+  purchaseDate: string;
+  products: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+  }>;
+  totalAmount: number;
+  currency: string;
+  paymentStatus: 'paid' | 'pending' | 'overdue';
+  invoiceNumber?: string;
+  notes?: string;
+}
+
+export interface InquiryHistory {
+  id: string;
+  contact_id: string;
+  inquiryDate: string;
+  product: string;
+  quantity: number;
+  status: 'converted' | 'pending' | 'cancelled';
+  convertedToPurchase?: boolean;
+  notes?: string;
+}
+
+export interface PaymentTerms {
+  id: string;
+  contact_id: string;
+  termsType: 'cash' | 'credit' | 'installment';
+  creditDays?: number;
+  installmentMonths?: number;
+  startDate: string;
+  endDate?: string;
+  status: 'active' | 'expired' | 'upgraded' | 'downgraded';
+  previousTerms?: string;
+  changedDate: string;
+  changedBy?: string;
+  reason?: string;
+}
+
+export interface CustomerMetrics {
+  contact_id: string;
+  averageMonthlyPurchase: number;
+  purchaseFrequency: number; // Days between purchases
+  outstandingBalance: number;
+  totalPurchases: number;
+  lastPurchaseDate?: string;
+  averageOrderValue: number;
+  currency: string;
+}

@@ -3,10 +3,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Contact, Comment, CustomerStatus, UserProfile } from '../types';
 import { analyzeLead } from '../services/geminiService';
 import CompanyName from './CompanyName';
+import CustomerMetricsView from './CustomerMetricsView';
+import SalesReportTab from './SalesReportTab';
+import IncidentReportTab from './IncidentReportTab';
+import SalesReturnTab from './SalesReturnTab';
+import PurchaseHistoryTab from './PurchaseHistoryTab';
+import InquiryHistoryTab from './InquiryHistoryTab';
+import PersonalCommentsTab from './PersonalCommentsTab';
+import UpdateContactApprovalModal from './UpdateContactApprovalModal';
+import DiscountRequestModal from './DiscountRequestModal';
 import { 
   MoreHorizontal, Phone, Mail, Calendar, CheckSquare, FileText, 
   MessageSquare, Send, Star, Pencil, ChevronRight,
-  Layout, Briefcase, Clock, CheckCircle, AlertTriangle, ShoppingBag, History, Smartphone, User, Users, DollarSign, MapPin, Cake, Building
+  Layout, Briefcase, Clock, CheckCircle, AlertTriangle, ShoppingBag, History, Smartphone, User, Users, DollarSign, MapPin, Cake, Building, TrendingUp, AlertCircle, Gift
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -18,12 +27,14 @@ interface ContactDetailsProps {
 }
 
 const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, onClose, onUpdate }) => {
-  const [activeTab, setActiveTab] = useState('Timeline');
+  const [activeTab, setActiveTab] = useState('Overview');
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<Comment[]>(contact.comments || []);
   const [aiAnalysis, setAiAnalysis] = useState<{score: number, probability: number} | null>(
     contact.aiScore ? { score: contact.aiScore, probability: contact.winProbability || 0 } : null
   );
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
@@ -100,6 +111,17 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     .sort((a, b) => parseInt(a.name) - parseInt(b.name)) 
     : [];
 
+  const tabs = [
+    { id: 'Overview', label: 'Overview', icon: Layout },
+    { id: 'Metrics', label: 'Metrics', icon: TrendingUp },
+    { id: 'SalesReports', label: 'Sales Reports', icon: FileText },
+    { id: 'PurchaseHistory', label: 'Purchase History', icon: ShoppingBag },
+    { id: 'InquiryHistory', label: 'Inquiries', icon: AlertCircle },
+    { id: 'IncidentReports', label: 'Incidents', icon: AlertTriangle },
+    { id: 'SalesReturns', label: 'Returns', icon: ShoppingBag },
+    { id: 'PersonalComments', label: 'Comments', icon: MessageSquare }
+  ];
+
   return (
     <div ref={scrollContainerRef} className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto pb-20 animate-fadeIn relative z-30">
       {/* Top Navigation / Header Back */}
@@ -109,6 +131,20 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
               <span className="font-medium text-sm">Back to Customer Database</span>
           </div>
           <div className="flex items-center gap-3">
+               <button 
+                onClick={() => setIsDiscountModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300 rounded-lg text-sm font-bold transition-colors"
+               >
+                   <Gift className="w-4 h-4" />
+                   Request Discount
+               </button>
+               <button 
+                onClick={() => setIsUpdateModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-bold transition-colors"
+               >
+                   <Pencil className="w-4 h-4" />
+                   Update Details
+               </button>
                <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
                    <Star className="w-5 h-5" />
                </button>
@@ -178,201 +214,272 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
           </div>
       </div>
 
-      <div className="p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* LEFT COLUMN: Customer Intelligence */}
-          <div className="lg:col-span-4 space-y-6">
-              
-              {/* Dealership Info */}
-              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
-                  <div className="flex items-center gap-2 mb-4 border-b border-slate-100 dark:border-slate-700 pb-3">
-                      <Briefcase className="w-5 h-5 text-brand-blue dark:text-blue-400" />
-                      <h3 className="font-bold text-slate-800 dark:text-white">Dealership & Terms</h3>
-                  </div>
-                  <div className="space-y-3 text-sm">
-                      <div className="flex justify-between">
-                          <span className="text-slate-500">Business Line</span>
-                          <span className="font-medium text-slate-700 dark:text-slate-200">{contact.businessLine || 'N/A'}</span>
-                      </div>
-                       <div className="flex justify-between">
-                          <span className="text-slate-500">VAT Type</span>
-                          <span className="font-medium text-slate-700 dark:text-slate-200">{contact.vatType} ({contact.vatPercentage}%)</span>
-                      </div>
-                      <div className="flex justify-between">
-                          <span className="text-slate-500">Since</span>
-                          <span className="font-medium text-slate-700 dark:text-slate-200">{contact.dealershipSince || contact.customerSince}</span>
-                      </div>
-                      <div className="flex justify-between">
-                          <span className="text-slate-500">Credit Limit</span>
-                          <span className="font-medium text-slate-700 dark:text-slate-200">{contact.creditLimit ? `₱${contact.creditLimit.toLocaleString()}` : '0'}</span>
-                      </div>
-                       <div className="flex justify-between">
-                          <span className="text-slate-500">Quota</span>
-                          <span className="font-medium text-slate-700 dark:text-slate-200">{contact.dealershipQuota ? `₱${contact.dealershipQuota.toLocaleString()}` : '0'}</span>
-                      </div>
-                  </div>
-              </div>
-
-               {/* Addresses */}
-               <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
-                  <div className="flex items-center gap-2 mb-4 border-b border-slate-100 dark:border-slate-700 pb-3">
-                      <MapPin className="w-5 h-5 text-brand-blue dark:text-blue-400" />
-                      <h3 className="font-bold text-slate-800 dark:text-white">Locations</h3>
-                  </div>
-                  <div className="space-y-4 text-sm">
-                      <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase mb-1">Official Address</p>
-                          <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                            {contact.address}, {contact.province}, {contact.city}
-                          </p>
-                      </div>
-                       <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase mb-1">Delivery Address</p>
-                          <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                            {contact.deliveryAddress || 'Same as above'}
-                          </p>
-                      </div>
-                  </div>
-              </div>
-
-              {/* Contact Persons */}
-              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
-                   <div className="flex items-center gap-2 mb-4 border-b border-slate-100 dark:border-slate-700 pb-3">
-                      <Users className="w-5 h-5 text-brand-blue dark:text-blue-400" />
-                      <h3 className="font-bold text-slate-800 dark:text-white">Contact Persons</h3>
-                  </div>
-                  <div className="space-y-4">
-                      {contact.contactPersons && contact.contactPersons.length > 0 ? (
-                          contact.contactPersons.map((person, idx) => (
-                             <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700">
-                                 <div className="flex items-center gap-2 mb-1">
-                                     <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">{person.name}</span>
-                                     <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">{person.position}</span>
-                                 </div>
-                                 <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                     {person.mobile && <div className="flex items-center gap-2"><Smartphone className="w-3 h-3" /> {person.mobile}</div>}
-                                     {person.telephone && <div className="flex items-center gap-2"><Phone className="w-3 h-3" /> {person.telephone}</div>}
-                                     {person.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3" /> {person.email}</div>}
-                                     {person.birthday && <div className="flex items-center gap-2"><Cake className="w-3 h-3" /> {person.birthday}</div>}
-                                 </div>
-                             </div>
-                          ))
-                      ) : (
-                          <p className="text-sm text-slate-400 italic">No contact persons listed.</p>
-                      )}
-                  </div>
-              </div>
-
-          </div>
-
-          {/* CENTER/RIGHT: Timeline, Sales, Comments */}
-          <div className="lg:col-span-8 space-y-6">
-              
-              {/* Sales History Chart */}
-              {yearlySalesData.length > 0 && (
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden p-5">
-                    <h3 className="font-bold text-slate-800 dark:text-white mb-4">Sales Performance (Yearly)</h3>
-                    <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={yearlySalesData}>
-                                <defs>
-                                    <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#0F5298" stopOpacity={0.2}/>
-                                    <stop offset="95%" stopColor="#0F5298" stopOpacity={0}/>
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
-                                <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />
-                                <YAxis stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `${val/1000}k`} />
-                                <Tooltip 
-                                    contentStyle={{ backgroundColor: '#121212', borderRadius: '8px', border: 'none', color: '#f8fafc' }}
-                                    formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Sales']}
-                                />
-                                <Area type="monotone" dataKey="amount" stroke="#0F5298" fillOpacity={1} fill="url(#colorAmount)" />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-              )}
-              
-               {/* Comments Section */}
-              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col h-[400px]">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-t-xl">
-                      <div className="flex items-center gap-2 text-slate-800 dark:text-white font-bold">
-                          <MessageSquare className="w-5 h-5 text-brand-blue" />
-                          <h3>Comments & Notes</h3>
-                      </div>
-                  </div>
-                  
-                  <div className="flex-1 overflow-y-auto p-4 space-y-5">
-                      {contact.comment && (
-                          <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/20 p-3 rounded-lg text-sm text-yellow-800 dark:text-yellow-200 mb-4">
-                              <span className="font-bold">Important Note:</span> {contact.comment}
-                          </div>
-                      )}
-
-                      {comments.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm">
-                              <MessageSquare className="w-10 h-10 mb-2 opacity-20" />
-                              <p>No comments yet.</p>
-                          </div>
-                      ) : (
-                          comments.map((comment) => {
-                              // If the logged in user matches the author or if it's explicitly labeled 'Owner' and the current user is Owner
-                              const isMe = currentUser && comment.author === currentUser.full_name;
-                              return (
-                                  <div key={comment.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
-                                      <div className="flex-shrink-0">
-                                           <img 
-                                              src={comment.avatar || "https://i.pravatar.cc/150"} 
-                                              className={`w-8 h-8 rounded-full border-2 ${isMe ? 'border-brand-blue' : 'border-slate-200 dark:border-slate-600'}`} 
-                                              alt={comment.author} 
-                                          />
-                                      </div>
-                                      <div className={`flex flex-col max-w-[85%] ${isMe ? 'items-end' : 'items-start'}`}>
-                                          <div className="flex items-center gap-2 mb-1">
-                                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{comment.author}</span>
-                                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${isMe || comment.role === 'Owner' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}>
-                                                  {comment.role}
-                                              </span>
-                                          </div>
-                                          <div className={`p-3 rounded-2xl text-sm shadow-sm ${
-                                              isMe 
-                                              ? 'bg-brand-blue text-white rounded-tr-none' 
-                                              : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-tl-none'
-                                          }`}>
-                                              {comment.text}
-                                          </div>
-                                          <span className="text-[10px] text-slate-400 mt-1">{comment.timestamp}</span>
-                                      </div>
-                                  </div>
-                              );
-                          })
-                      )}
-                      <div ref={commentsEndRef} />
-                  </div>
-
-                  <div className="p-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-b-xl">
-                      <div className="relative">
-                          <input
-                              type="text"
-                              value={newComment}
-                              onChange={(e) => setNewComment(e.target.value)}
-                              onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
-                              placeholder="Add a private note..."
-                              className="w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg pl-4 pr-12 py-3 text-sm focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition-all shadow-sm text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
-                          />
-                          <button 
-                              onClick={handleAddComment}
-                              className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors ${newComment.trim() ? 'bg-brand-blue text-white' : 'text-slate-300 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
-                          >
-                              <Send className="w-4 h-4" />
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          </div>
+      {/* Tab Navigation */}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-8 sticky top-[73px] z-10 overflow-x-auto">
+        <div className="flex gap-1">
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'border-brand-blue text-brand-blue font-bold'
+                    : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {/* Tab Content */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Overview Tab */}
+        {activeTab === 'Overview' && (
+          <div className="p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+              
+              {/* LEFT COLUMN: Customer Intelligence */}
+              <div className="lg:col-span-4 space-y-6">
+                  
+                  {/* Dealership Info */}
+                  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
+                      <div className="flex items-center gap-2 mb-4 border-b border-slate-100 dark:border-slate-700 pb-3">
+                          <Briefcase className="w-5 h-5 text-brand-blue dark:text-blue-400" />
+                          <h3 className="font-bold text-slate-800 dark:text-white">Dealership & Terms</h3>
+                      </div>
+                      <div className="space-y-3 text-sm">
+                          <div className="flex justify-between">
+                              <span className="text-slate-500">Business Line</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{contact.businessLine || 'N/A'}</span>
+                          </div>
+                           <div className="flex justify-between">
+                              <span className="text-slate-500">VAT Type</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{contact.vatType} ({contact.vatPercentage}%)</span>
+                          </div>
+                          <div className="flex justify-between">
+                              <span className="text-slate-500">Since</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{contact.dealershipSince || contact.customerSince}</span>
+                          </div>
+                          <div className="flex justify-between">
+                              <span className="text-slate-500">Credit Limit</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{contact.creditLimit ? `₱${contact.creditLimit.toLocaleString()}` : '0'}</span>
+                          </div>
+                           <div className="flex justify-between">
+                              <span className="text-slate-500">Quota</span>
+                              <span className="font-medium text-slate-700 dark:text-slate-200">{contact.dealershipQuota ? `₱${contact.dealershipQuota.toLocaleString()}` : '0'}</span>
+                          </div>
+                      </div>
+                  </div>
+
+                   {/* Addresses */}
+                   <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
+                      <div className="flex items-center gap-2 mb-4 border-b border-slate-100 dark:border-slate-700 pb-3">
+                          <MapPin className="w-5 h-5 text-brand-blue dark:text-blue-400" />
+                          <h3 className="font-bold text-slate-800 dark:text-white">Locations</h3>
+                      </div>
+                      <div className="space-y-4 text-sm">
+                          <div>
+                              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Official Address</p>
+                              <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                                {contact.address}, {contact.province}, {contact.city}
+                              </p>
+                          </div>
+                           <div>
+                              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Delivery Address</p>
+                              <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                                {contact.deliveryAddress || 'Same as above'}
+                              </p>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Contact Persons */}
+                  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
+                       <div className="flex items-center gap-2 mb-4 border-b border-slate-100 dark:border-slate-700 pb-3">
+                          <Users className="w-5 h-5 text-brand-blue dark:text-blue-400" />
+                          <h3 className="font-bold text-slate-800 dark:text-white">Contact Persons</h3>
+                      </div>
+                      <div className="space-y-4">
+                          {contact.contactPersons && contact.contactPersons.length > 0 ? (
+                              contact.contactPersons.map((person, idx) => (
+                                 <div key={idx} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700">
+                                     <div className="flex items-center gap-2 mb-1">
+                                         <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">{person.name}</span>
+                                         <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300">{person.position}</span>
+                                     </div>
+                                     <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                                         {person.mobile && <div className="flex items-center gap-2"><Smartphone className="w-3 h-3" /> {person.mobile}</div>}
+                                         {person.telephone && <div className="flex items-center gap-2"><Phone className="w-3 h-3" /> {person.telephone}</div>}
+                                         {person.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3" /> {person.email}</div>}
+                                         {person.birthday && <div className="flex items-center gap-2"><Cake className="w-3 h-3" /> {person.birthday}</div>}
+                                     </div>
+                                 </div>
+                              ))
+                          ) : (
+                              <p className="text-sm text-slate-400 italic">No contact persons listed.</p>
+                          )}
+                      </div>
+                  </div>
+
+              </div>
+
+              {/* CENTER/RIGHT: Timeline, Sales, Comments */}
+              <div className="lg:col-span-8 space-y-6">
+                  
+                  {/* Sales History Chart */}
+                  {yearlySalesData.length > 0 && (
+                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden p-5">
+                        <h3 className="font-bold text-slate-800 dark:text-white mb-4">Sales Performance (Yearly)</h3>
+                        <div className="h-64 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={yearlySalesData}>
+                                    <defs>
+                                        <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#0F5298" stopOpacity={0.2}/>
+                                        <stop offset="95%" stopColor="#0F5298" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
+                                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />
+                                    <YAxis stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `${val/1000}k`} />
+                                    <Tooltip 
+                                        contentStyle={{ backgroundColor: '#121212', borderRadius: '8px', border: 'none', color: '#f8fafc' }}
+                                        formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Sales']}
+                                    />
+                                    <Area type="monotone" dataKey="amount" stroke="#0F5298" fillOpacity={1} fill="url(#colorAmount)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                  )}
+                  
+                   {/* Comments Section */}
+                  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col h-[400px]">
+                      <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-t-xl">
+                          <div className="flex items-center gap-2 text-slate-800 dark:text-white font-bold">
+                              <MessageSquare className="w-5 h-5 text-brand-blue" />
+                              <h3>Comments & Notes</h3>
+                          </div>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                          {contact.comment && (
+                              <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/20 p-3 rounded-lg text-sm text-yellow-800 dark:text-yellow-200 mb-4">
+                                  <span className="font-bold">Important Note:</span> {contact.comment}
+                              </div>
+                          )}
+
+                          {comments.length === 0 ? (
+                              <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm">
+                                  <MessageSquare className="w-10 h-10 mb-2 opacity-20" />
+                                  <p>No comments yet.</p>
+                              </div>
+                          ) : (
+                              comments.map((comment) => {
+                                  // If the logged in user matches the author or if it's explicitly labeled 'Owner' and the current user is Owner
+                                  const isMe = currentUser && comment.author === currentUser.full_name;
+                                  return (
+                                      <div key={comment.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
+                                          <div className="flex-shrink-0">
+                                               <img 
+                                                  src={comment.avatar || "https://i.pravatar.cc/150"} 
+                                                  className={`w-8 h-8 rounded-full border-2 ${isMe ? 'border-brand-blue' : 'border-slate-200 dark:border-slate-600'}`} 
+                                                  alt={comment.author} 
+                                              />
+                                          </div>
+                                          <div className={`flex flex-col max-w-[85%] ${isMe ? 'items-end' : 'items-start'}`}>
+                                              <div className="flex items-center gap-2 mb-1">
+                                                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{comment.author}</span>
+                                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${isMe || comment.role === 'Owner' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}>
+                                                      {comment.role}
+                                                  </span>
+                                              </div>
+                                              <div className={`p-3 rounded-2xl text-sm shadow-sm ${
+                                                  isMe 
+                                                  ? 'bg-brand-blue text-white rounded-tr-none' 
+                                                  : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 rounded-tl-none'
+                                              }`}>
+                                                  {comment.text}
+                                              </div>
+                                              <span className="text-[10px] text-slate-400 mt-1">{comment.timestamp}</span>
+                                          </div>
+                                      </div>
+                                  );
+                              })
+                          )}
+                          <div ref={commentsEndRef} />
+                      </div>
+
+                      <div className="p-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-b-xl">
+                          <div className="relative">
+                              <input
+                                  type="text"
+                                  value={newComment}
+                                  onChange={(e) => setNewComment(e.target.value)}
+                                  onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
+                                  placeholder="Add a private note..."
+                                  className="w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg pl-4 pr-12 py-3 text-sm focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition-all shadow-sm text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
+                              />
+                              <button 
+                                  onClick={handleAddComment}
+                                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors ${newComment.trim() ? 'bg-brand-blue text-white' : 'text-slate-300 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
+                              >
+                                  <Send className="w-4 h-4" />
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+        )}
+
+        {/* Metrics Tab */}
+        {activeTab === 'Metrics' && <CustomerMetricsView contactId={contact.id} />}
+
+        {/* Sales Reports Tab */}
+        {activeTab === 'SalesReports' && <SalesReportTab contactId={contact.id} currentUserId={currentUser?.id} />}
+
+        {/* Purchase History Tab */}
+        {activeTab === 'PurchaseHistory' && <PurchaseHistoryTab contactId={contact.id} />}
+
+        {/* Inquiry History Tab */}
+        {activeTab === 'InquiryHistory' && <InquiryHistoryTab contactId={contact.id} />}
+
+        {/* Incident Reports Tab */}
+        {activeTab === 'IncidentReports' && <IncidentReportTab contactId={contact.id} currentUserId={currentUser?.id} />}
+
+        {/* Sales Returns Tab */}
+        {activeTab === 'SalesReturns' && <SalesReturnTab contactId={contact.id} currentUserId={currentUser?.id} />}
+
+        {/* Personal Comments Tab */}
+        {activeTab === 'PersonalComments' && (
+          <PersonalCommentsTab 
+            contactId={contact.id} 
+            currentUserId={currentUser?.id}
+            currentUserName={currentUser?.full_name}
+            currentUserAvatar={currentUser?.avatar_url}
+          />
+        )}
+      </div>
+
+      {/* Modals */}
+      <UpdateContactApprovalModal
+        contact={contact}
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        currentUserId={currentUser?.id}
+      />
+
+      <DiscountRequestModal
+        contactId={contact.id}
+        isOpen={isDiscountModalOpen}
+        onClose={() => setIsDiscountModalOpen(false)}
+      />
     </div>
   );
 };

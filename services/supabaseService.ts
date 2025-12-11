@@ -500,3 +500,412 @@ export const subscribeToCallMonitoringUpdates = (onChange: () => void) => {
     }
   };
 };
+
+// --- CUSTOMER DATABASE ENHANCEMENTS ---
+
+// Personal Comments
+export const fetchPersonalComments = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('personal_comments')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('timestamp', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching personal comments:', err);
+    return [];
+  }
+};
+
+export const createPersonalComment = async (contactId: string, authorId: string, authorName: string, text: string, authorAvatar?: string) => {
+  try {
+    const { error } = await supabase.from('personal_comments').insert({
+      contact_id: contactId,
+      author_id: authorId,
+      author_name: authorName,
+      author_avatar: authorAvatar,
+      text,
+      timestamp: new Date().toISOString()
+    });
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating personal comment:', err);
+    throw err;
+  }
+};
+
+// Sales Reports
+export const fetchSalesReports = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('sales_reports')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching sales reports:', err);
+    return [];
+  }
+};
+
+export const createSalesReport = async (report: any) => {
+  try {
+    const { error } = await supabase.from('sales_reports').insert(report);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating sales report:', err);
+    throw err;
+  }
+};
+
+export const updateSalesReportApproval = async (reportId: string, approvalStatus: string, approvedBy?: string) => {
+  try {
+    const { error } = await supabase
+      .from('sales_reports')
+      .update({
+        approval_status: approvalStatus,
+        approved_by: approvedBy,
+        approval_date: new Date().toISOString()
+      })
+      .eq('id', reportId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error updating sales report approval:', err);
+    throw err;
+  }
+};
+
+// Discount Requests
+export const fetchDiscountRequests = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('discount_requests')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('request_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching discount requests:', err);
+    return [];
+  }
+};
+
+export const createDiscountRequest = async (request: any) => {
+  try {
+    const { error } = await supabase.from('discount_requests').insert(request);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating discount request:', err);
+    throw err;
+  }
+};
+
+export const updateDiscountRequestApproval = async (requestId: string, status: string, approvedBy?: string) => {
+  try {
+    const { error } = await supabase
+      .from('discount_requests')
+      .update({
+        status,
+        approved_by: approvedBy,
+        approval_date: new Date().toISOString()
+      })
+      .eq('id', requestId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error updating discount request:', err);
+    throw err;
+  }
+};
+
+// Updated Contact Details
+export const fetchUpdatedContactDetails = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('updated_contact_details')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('submitted_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching updated contact details:', err);
+    return [];
+  }
+};
+
+export const createUpdatedContactDetails = async (details: any) => {
+  try {
+    const { error } = await supabase.from('updated_contact_details').insert(details);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating updated contact details:', err);
+    throw err;
+  }
+};
+
+export const approveContactDetailsUpdate = async (updateId: string, approvedBy: string) => {
+  try {
+    const { error } = await supabase
+      .from('updated_contact_details')
+      .update({
+        approval_status: 'approved',
+        approved_by: approvedBy,
+        approval_date: new Date().toISOString()
+      })
+      .eq('id', updateId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error approving contact details update:', err);
+    throw err;
+  }
+};
+
+// Sales Progress
+export const fetchSalesProgress = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('sales_progress')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('inquiry_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching sales progress:', err);
+    return [];
+  }
+};
+
+export const createSalesProgress = async (progress: any) => {
+  try {
+    const { error } = await supabase.from('sales_progress').insert(progress);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating sales progress:', err);
+    throw err;
+  }
+};
+
+export const updateSalesProgress = async (progressId: string, updates: any) => {
+  try {
+    const { error } = await supabase
+      .from('sales_progress')
+      .update(updates)
+      .eq('id', progressId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error updating sales progress:', err);
+    throw err;
+  }
+};
+
+// Incident Reports
+export const fetchIncidentReports = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('incident_reports')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('report_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching incident reports:', err);
+    return [];
+  }
+};
+
+export const createIncidentReport = async (report: any) => {
+  try {
+    const { error } = await supabase.from('incident_reports').insert(report);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating incident report:', err);
+    throw err;
+  }
+};
+
+export const approveIncidentReport = async (reportId: string, approvedBy: string) => {
+  try {
+    const { error } = await supabase
+      .from('incident_reports')
+      .update({
+        approval_status: 'approved',
+        approved_by: approvedBy,
+        approval_date: new Date().toISOString()
+      })
+      .eq('id', reportId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error approving incident report:', err);
+    throw err;
+  }
+};
+
+// Sales Returns
+export const fetchSalesReturns = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('sales_returns')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('return_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching sales returns:', err);
+    return [];
+  }
+};
+
+export const createSalesReturn = async (returnData: any) => {
+  try {
+    const { error } = await supabase.from('sales_returns').insert(returnData);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating sales return:', err);
+    throw err;
+  }
+};
+
+export const processSalesReturn = async (returnId: string, processedBy: string) => {
+  try {
+    const { error } = await supabase
+      .from('sales_returns')
+      .update({
+        status: 'processed',
+        processed_by: processedBy,
+        processed_date: new Date().toISOString()
+      })
+      .eq('id', returnId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error processing sales return:', err);
+    throw err;
+  }
+};
+
+// Purchase History
+export const fetchPurchaseHistory = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('purchase_history')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('purchase_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching purchase history:', err);
+    return [];
+  }
+};
+
+export const createPurchaseHistoryEntry = async (entry: any) => {
+  try {
+    const { error } = await supabase.from('purchase_history').insert(entry);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating purchase history entry:', err);
+    throw err;
+  }
+};
+
+// Inquiry History
+export const fetchInquiryHistory = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('inquiry_history')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('inquiry_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching inquiry history:', err);
+    return [];
+  }
+};
+
+export const createInquiryHistoryEntry = async (entry: any) => {
+  try {
+    const { error } = await supabase.from('inquiry_history').insert(entry);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating inquiry history entry:', err);
+    throw err;
+  }
+};
+
+// Payment Terms
+export const fetchPaymentTerms = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('payment_terms')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('changed_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching payment terms:', err);
+    return [];
+  }
+};
+
+export const createPaymentTerms = async (terms: any) => {
+  try {
+    const { error } = await supabase.from('payment_terms').insert(terms);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error creating payment terms:', err);
+    throw err;
+  }
+};
+
+// Customer Metrics
+export const fetchCustomerMetrics = async (contactId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('customer_metrics')
+      .select('*')
+      .eq('contact_id', contactId)
+      .single();
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
+    return data || null;
+  } catch (err) {
+    console.error('Error fetching customer metrics:', err);
+    return null;
+  }
+};
+
+export const updateCustomerMetrics = async (contactId: string, metrics: any) => {
+  try {
+    const { data: existing } = await supabase
+      .from('customer_metrics')
+      .select('id')
+      .eq('contact_id', contactId)
+      .single();
+    
+    if (existing) {
+      const { error } = await supabase
+        .from('customer_metrics')
+        .update(metrics)
+        .eq('contact_id', contactId);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('customer_metrics')
+        .insert({ contact_id: contactId, ...metrics });
+      if (error) throw error;
+    }
+  } catch (err) {
+    console.error('Error updating customer metrics:', err);
+    throw err;
+  }
+};
