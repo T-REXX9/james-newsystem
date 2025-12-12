@@ -17,6 +17,30 @@ export enum CustomerStatus {
   BLACKLISTED = 'Blacklisted'
 }
 
+export type NotificationType = 'info' | 'success' | 'warning' | 'error';
+
+export interface Notification {
+  id: string;
+  recipient_id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  action_url?: string;
+  metadata?: Record<string, any>;
+  is_read: boolean;
+  created_at: string;
+  read_at?: string;
+}
+
+export interface CreateNotificationInput {
+  recipient_id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  action_url?: string;
+  metadata?: Record<string, any>;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -489,4 +513,81 @@ export interface CustomerMetrics {
   lastPurchaseDate?: string;
   averageOrderValue: number;
   currency: string;
+}
+
+// Management Page Types
+export interface SalesPerformanceData {
+  salesPersonName: string;
+  currentMonthSales: number;
+  previousMonthSales: number;
+  salesChange: number;
+  percentageChange: number;
+  customerCount: number;
+}
+
+export interface CityPerformanceData {
+  city: string;
+  currentMonthSales: number;
+  previousMonthSales: number;
+  salesChange: number;
+  percentageChange: number;
+  customerCount: number;
+}
+
+export interface CustomerStatusPerformance {
+  status: CustomerStatus;
+  currentMonthSales: number;
+  previousMonthSales: number;
+  salesChange: number;
+  percentageChange: number;
+  customerCount: number;
+}
+
+export interface PaymentTypePerformance {
+  paymentType: 'cash' | 'credit' | 'term';
+  currentMonthSales: number;
+  previousMonthSales: number;
+  salesChange: number;
+  percentageChange: number;
+  customerCount: number;
+}
+
+export interface CustomerStatusNotification {
+  id: string;
+  contactId: string;
+  company: string;
+  city: string;
+  salesman: string;
+  status: CustomerStatus;
+  notificationType: 'sales_increase' | 'sales_decrease' | 'inactive' | 'inactive_critical' | 'inquiry_only';
+  lastPurchaseDate?: string;
+  daysSinceLastPurchase?: number;
+  currentMonthSales?: number;
+  previousMonthSales?: number;
+  salesChange?: number;
+  inquiryToSalesRatio?: number;
+  outstandingBalance?: number;
+  severity: 'high' | 'medium' | 'low';
+  createdAt: string;
+}
+
+export interface InquiryOnlyAlert {
+  id: string;
+  contactId: string;
+  company: string;
+  city: string;
+  salesman: string;
+  totalInquiries: number;
+  totalPurchases: number;
+  inquiryToPurchaseRatio: number;
+  lastInquiryDate?: string;
+  lastPurchaseDate?: string;
+}
+
+export interface MonthlyTeamPerformance {
+  month: string;
+  totalSales: number;
+  activeSalesCount: number;
+  totalCustomers: number;
+  averageOrderValue: number;
 }

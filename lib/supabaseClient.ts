@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, MOCK_CONTACTS, MOCK_PIPELINE_DEALS, MOCK_PRODUCTS, MOCK_REORDER_REPORT, MOCK_TASKS, MOCK_TEAM_MESSAGES, generateAvatarUrl, generateCallMonitoringSeed, STAFF_ROLES } from '../constants';
+import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, MOCK_CONTACTS, MOCK_PIPELINE_DEALS, MOCK_PRODUCTS, MOCK_REORDER_REPORT, MOCK_TASKS, MOCK_TEAM_MESSAGES, MOCK_NOTIFICATIONS, generateAvatarUrl, generateCallMonitoringSeed, STAFF_ROLES } from '../constants';
 
-type TableName = 'contacts' | 'deals' | 'users' | 'profiles' | 'products' | 'tasks' | 'reorder-report' | 'call_logs' | 'inquiries' | 'purchases' | 'team_messages';
+type TableName = 'contacts' | 'deals' | 'users' | 'profiles' | 'products' | 'tasks' | 'reorder-report' | 'call_logs' | 'inquiries' | 'purchases' | 'team_messages' | 'notifications';
 
 interface MockUser {
   id: string;
@@ -46,6 +46,7 @@ const seedData = () => {
     localStorage.removeItem(DB_PREFIX + 'inquiries');
     localStorage.removeItem(DB_PREFIX + 'purchases');
     localStorage.removeItem(DB_PREFIX + 'team_messages');
+    localStorage.removeItem(DB_PREFIX + 'notifications');
     localStorage.setItem(DB_PREFIX + 'version', DB_VERSION);
   }
 
@@ -55,6 +56,7 @@ const seedData = () => {
   if (!getTable('reorder-report').length) setTable('reorder-report', MOCK_REORDER_REPORT);
   if (!getTable('tasks').length) setTable('tasks', MOCK_TASKS);
   if (!getTable('team_messages').length) setTable('team_messages', MOCK_TEAM_MESSAGES);
+  if (!getTable('notifications').length) setTable('notifications', MOCK_NOTIFICATIONS);
 
   const existingCallLogs = getTable('call_logs');
   const existingInquiries = getTable('inquiries');

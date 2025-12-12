@@ -2,6 +2,11 @@
 
 
 
+
+
+
+
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
@@ -17,12 +22,12 @@ import ReorderReport from './components/ReorderReport';
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
 import SalesAgentDashboard from './components/SalesAgentDashboard';
+import ManagementView from './components/ManagementView';
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
-
-const App: React.FC = () => {
+import { NotificationProvider } from './components/NotificationProvider';const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [appLoading, setAppLoading] = useState(true);
@@ -105,18 +110,6 @@ const App: React.FC = () => {
   };
 
   // 2. Render Logic
-  if (appLoading) {
-    return (
-        <div className="h-screen w-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
-            <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
-        </div>
-    );
-  }
-
-  if (!session) {
-      return <Login />;
-  }
-
   const renderComingSoon = (title: string) => (
      <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
         <div className="w-20 h-20 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center">
@@ -224,6 +217,11 @@ const App: React.FC = () => {
             );
         }
         case 'tasks': return <TasksView currentUser={userProfile} />;
+        case 'management': return (
+            <div className="h-full overflow-y-auto">
+                <ManagementView currentUser={userProfile} />
+            </div>
+        );
         case 'mail': return renderComingSoon('Inbox');
         case 'calendar': return renderComingSoon('Calendar');
         default: return renderComingSoon(activeTab.charAt(0).toUpperCase() + activeTab.slice(1));
@@ -232,22 +230,32 @@ const App: React.FC = () => {
 
   return (
     <ToastProvider>
-      <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 flex flex-col">
-        <TopNav 
-          activeTab={activeTab} 
-          onNavigate={setActiveTab} 
-          user={userProfile} 
-          onSignOut={handleSignOut} 
-        />
-        
-        <div className="flex flex-1 overflow-hidden pt-14">
-            <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={userProfile} />
+      {session && userProfile && (
+        <NotificationProvider userId={userProfile.id}>
+          <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 flex flex-col">
+            <TopNav 
+              activeTab={activeTab} 
+              onNavigate={setActiveTab} 
+              user={userProfile} 
+              onSignOut={handleSignOut} 
+            />
             
-            <main className="flex-1 ml-16 print:ml-0 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950">
-                {renderContent()}
-            </main>
+            <div className="flex flex-1 overflow-hidden pt-14">
+                <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={userProfile} />
+                
+                <main className="flex-1 ml-16 print:ml-0 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950">
+                    {renderContent()}
+                </main>
+            </div>
+          </div>
+        </NotificationProvider>
+      )}
+      {appLoading && !session && (
+        <div className="h-screen w-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
+            <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
         </div>
-      </div>
+      )}
+      {!session && !appLoading && <Login />}
     </ToastProvider>
   );
 };

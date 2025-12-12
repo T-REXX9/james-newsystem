@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { LayoutDashboard, Mail, Calendar, Phone, CheckSquare, Users, Settings, HelpCircle, Columns, UserCog, Package, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Mail, Calendar, Phone, CheckSquare, Users, Settings, HelpCircle, Columns, UserCog, Package, ClipboardList, BarChart3 } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface SidebarProps {
@@ -18,6 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user }) => {
     { id: 'products', icon: Package, label: 'Product Database' },
     { id: 'reorder', icon: ClipboardList, label: 'Reorder Report' },
     { id: 'staff', icon: UserCog, label: 'Staff & Agents' },
+    { id: 'management', icon: BarChart3, label: 'Management' },
     { id: 'mail', icon: Mail, label: 'Inbox' },
     { id: 'calendar', icon: Calendar, label: 'Calendar' },
     { id: 'calls', icon: Phone, label: 'Daily Call Monitoring' },

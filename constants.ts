@@ -1,6 +1,6 @@
 
 
-import { Contact, DealStage, PipelineDeal, PipelineColumn, CustomerStatus, Product, Task, ReorderReportEntry, CallLogEntry, Inquiry, Purchase, TeamMessage } from './types';
+import { Contact, DealStage, PipelineDeal, PipelineColumn, CustomerStatus, Product, Task, ReorderReportEntry, CallLogEntry, Inquiry, Purchase, TeamMessage, Notification } from './types';
 
 export const DEFAULT_STAFF_ACCESS_RIGHTS = ['dashboard', 'pipelines', 'mail', 'calendar', 'tasks'];
 export const DEFAULT_STAFF_ROLE = 'Sales Agent';
@@ -20,6 +20,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'products', label: 'Product Database' },
   { id: 'reorder', label: 'Reorder Report' },
   { id: 'staff', label: 'Staff & Agents' },
+  { id: 'management', label: 'Management' },
   { id: 'mail', label: 'Inbox' },
   { id: 'calendar', label: 'Calendar' },
   { id: 'calls', label: 'Daily Call Monitoring' },
@@ -1252,3 +1253,78 @@ export const generateCallMonitoringSeed = (days = 30): { callLogs: CallLogEntry[
 
   return { callLogs, inquiries, purchases };
 };
+
+export const MOCK_NOTIFICATIONS: Notification[] = [
+  {
+    id: 'notif-1',
+    recipient_id: 'user_admin_001',
+    title: 'New Task Assigned',
+    message: 'Follow up with Jiffy Lube regarding Q4 restock proposal has been assigned to you.',
+    type: 'info',
+    action_url: '/tasks',
+    metadata: { taskId: 't1', priority: 'High' },
+    is_read: false,
+    created_at: new Date(Date.now() - 5 * 60000).toISOString(), // 5 minutes ago
+    read_at: undefined
+  },
+  {
+    id: 'notif-2',
+    recipient_id: 'user_admin_001',
+    title: 'Sales Report Approved',
+    message: 'Your monthly sales report for November has been approved and published.',
+    type: 'success',
+    action_url: '/dashboard',
+    metadata: { reportId: 'report-nov-2024' },
+    is_read: false,
+    created_at: new Date(Date.now() - 45 * 60000).toISOString(), // 45 minutes ago
+    read_at: undefined
+  },
+  {
+    id: 'notif-3',
+    recipient_id: 'user_admin_001',
+    title: 'Low Stock Alert',
+    message: 'Motul 300V SAE 0W40 inventory is below minimum threshold. Please reorder soon.',
+    type: 'warning',
+    action_url: '/products',
+    metadata: { productId: 'prod-motul-300v', currentStock: 12, minThreshold: 50 },
+    is_read: false,
+    created_at: new Date(Date.now() - 2 * 3600000).toISOString(), // 2 hours ago
+    read_at: undefined
+  },
+  {
+    id: 'notif-4',
+    recipient_id: 'user_admin_001',
+    title: 'Contact Update Request',
+    message: 'Your request to update contact information for Banawe Auto has been rejected.',
+    type: 'error',
+    action_url: '/customers',
+    metadata: { contactId: 'contact-banawe', reason: 'Missing verification documents' },
+    is_read: true,
+    created_at: new Date(Date.now() - 24 * 3600000).toISOString(), // 1 day ago
+    read_at: new Date(Date.now() - 23 * 3600000).toISOString()
+  },
+  {
+    id: 'notif-5',
+    recipient_id: 'user_admin_001',
+    title: 'Discount Request Approved',
+    message: 'Customer request for 10% volume discount on Castrol products has been approved.',
+    type: 'success',
+    action_url: '/dashboard',
+    metadata: { discountId: 'disc-001', percentage: 10 },
+    is_read: true,
+    created_at: new Date(Date.now() - 48 * 3600000).toISOString(), // 2 days ago
+    read_at: new Date(Date.now() - 47 * 3600000).toISOString()
+  },
+  {
+    id: 'notif-6',
+    recipient_id: 'user_admin_001',
+    title: 'System Maintenance Scheduled',
+    message: 'System maintenance will occur on December 15 from 11 PM to 1 AM. Plan accordingly.',
+    type: 'info',
+    action_url: undefined,
+    metadata: { maintenanceDate: '2024-12-15', duration: '2 hours' },
+    is_read: true,
+    created_at: new Date(Date.now() - 3 * 24 * 3600000).toISOString(), // 3 days ago
+    read_at: new Date(Date.now() - 2.9 * 24 * 3600000).toISOString()
+  }
+];

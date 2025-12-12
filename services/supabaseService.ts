@@ -4,7 +4,7 @@
 
 import { supabase } from '../lib/supabaseClient';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STAFF_ROLES } from '../constants';
-import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError } from '../types';
+import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType } from '../types';
 
 // With our local mock DB, we can just query directly.
 // The Mock DB handles the seeding from constants, so we trust it returns data.
@@ -907,5 +907,559 @@ export const updateCustomerMetrics = async (contactId: string, metrics: any) => 
   } catch (err) {
     console.error('Error updating customer metrics:', err);
     throw err;
+  }
+};
+
+// Management Page Functions
+export const fetchInactiveCustomers = async (inactiveDays: number = 30): Promise<any[]> => {
+  try {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
+    const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*, customer_metrics(*)')
+      .eq('status', 'Inactive')
+      .lte('customer_metrics.last_purchase_date', cutoffDateStr);
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching inactive customers:', err);
+    return [];
+  }
+};
+
+export const fetchInactiveCriticalCustomers = async (inactiveDays: number = 30): Promise<any[]> => {
+  try {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
+    const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*, customer_metrics(*)')
+      .eq('status', 'Inactive')
+      .lte('customer_metrics.last_purchase_date', cutoffDateStr)
+      .gt('customer_metrics.outstanding_balance', 0);
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching inactive critical customers:', err);
+    return [];
+  }
+};
+
+export const fetchInquiryOnlyCustomers = async (minRatio: number = 2): Promise<any[]> => {
+  try {
+    const { data: contacts, error } = await supabase
+      .from('contacts')
+      .select('*');
+    
+    if (error) throw error;
+
+    // Fetch inquiry and purchase data for each contact
+    const inquiryOnlyCustomers = [];
+    for (const contact of contacts || []) {
+      const { data: inquiries } = await supabase
+        .from('inquiry_history')
+        .select('*')
+        .eq('contact_id', contact.id);
+      
+      const { data: purchases } = await supabase
+        .from('purchase_history')
+        .select('*')
+        .eq('contact_id', contact.id);
+
+      const inquiryCount = inquiries?.length || 0;
+      const purchaseCount = purchases?.length || 0;
+      
+      if (purchaseCount > 0 && inquiryCount / purchaseCount >= minRatio) {
+        inquiryOnlyCustomers.push({
+          ...contact,
+          totalInquiries: inquiryCount,
+          totalPurchases: purchaseCount,
+          inquiryToPurchaseRatio: (inquiryCount / purchaseCount).toFixed(2)
+        });
+      } else if (purchaseCount === 0 && inquiryCount > 0) {
+        inquiryOnlyCustomers.push({
+          ...contact,
+          totalInquiries: inquiryCount,
+          totalPurchases: 0,
+          inquiryToPurchaseRatio: 'Infinity'
+        });
+      }
+    }
+
+    return inquiryOnlyCustomers;
+  } catch (err) {
+    console.error('Error fetching inquiry-only customers:', err);
+    return [];
+  }
+};
+
+export const fetchMonthlySalesPerformanceBySalesperson = async (year: number, month: number): Promise<any[]> => {
+  try {
+    const { data: contacts, error } = await supabase
+      .from('contacts')
+      .select('*, purchase_history(*)')
+      .order('salesman');
+
+    if (error) throw error;
+
+    const performanceMap = new Map();
+    
+    for (const contact of contacts || []) {
+      const salesman = contact.salesman || 'Unassigned';
+      const purchases = contact.purchase_history || [];
+      
+      // Filter purchases for the specific month/year
+      let monthSales = 0;
+      let prevMonthSales = 0;
+      
+      for (const purchase of purchases) {
+        const purchaseDate = new Date(purchase.purchase_date);
+        if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
+          monthSales += parseFloat(purchase.total_amount) || 0;
+        }
+        if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === (month === 1 ? 12 : month - 1)) {
+          prevMonthSales += parseFloat(purchase.total_amount) || 0;
+        }
+      }
+
+      if (monthSales > 0 || prevMonthSales > 0) {
+        if (!performanceMap.has(salesman)) {
+          performanceMap.set(salesman, {
+            salesPersonName: salesman,
+            currentMonthSales: 0,
+            previousMonthSales: 0,
+            customerCount: 0
+          });
+        }
+        
+        const perf = performanceMap.get(salesman);
+        perf.currentMonthSales += monthSales;
+        perf.previousMonthSales += prevMonthSales;
+        perf.customerCount += 1;
+      }
+    }
+
+    // Calculate deltas
+    const results = Array.from(performanceMap.values()).map((perf: any) => ({
+      ...perf,
+      salesChange: perf.currentMonthSales - perf.previousMonthSales,
+      percentageChange: perf.previousMonthSales > 0 
+        ? ((perf.currentMonthSales - perf.previousMonthSales) / perf.previousMonthSales * 100)
+        : 0
+    }));
+
+    return results;
+  } catch (err) {
+    console.error('Error fetching sales performance by salesperson:', err);
+    return [];
+  }
+};
+
+export const fetchMonthlySalesPerformanceByCity = async (year: number, month: number): Promise<any[]> => {
+  try {
+    const { data: contacts, error } = await supabase
+      .from('contacts')
+      .select('*, purchase_history(*)')
+      .order('city');
+
+    if (error) throw error;
+
+    const performanceMap = new Map();
+    
+    for (const contact of contacts || []) {
+      const city = contact.city || 'Unknown';
+      const purchases = contact.purchase_history || [];
+      
+      let monthSales = 0;
+      let prevMonthSales = 0;
+      
+      for (const purchase of purchases) {
+        const purchaseDate = new Date(purchase.purchase_date);
+        if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
+          monthSales += parseFloat(purchase.total_amount) || 0;
+        }
+        if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === (month === 1 ? 12 : month - 1)) {
+          prevMonthSales += parseFloat(purchase.total_amount) || 0;
+        }
+      }
+
+      if (monthSales > 0 || prevMonthSales > 0) {
+        if (!performanceMap.has(city)) {
+          performanceMap.set(city, {
+            city,
+            currentMonthSales: 0,
+            previousMonthSales: 0,
+            customerCount: 0
+          });
+        }
+        
+        const perf = performanceMap.get(city);
+        perf.currentMonthSales += monthSales;
+        perf.previousMonthSales += prevMonthSales;
+        perf.customerCount += 1;
+      }
+    }
+
+    const results = Array.from(performanceMap.values()).map((perf: any) => ({
+      ...perf,
+      salesChange: perf.currentMonthSales - perf.previousMonthSales,
+      percentageChange: perf.previousMonthSales > 0 
+        ? ((perf.currentMonthSales - perf.previousMonthSales) / perf.previousMonthSales * 100)
+        : 0
+    }));
+
+    return results;
+  } catch (err) {
+    console.error('Error fetching sales performance by city:', err);
+    return [];
+  }
+};
+
+export const fetchSalesPerformanceByCustomerStatus = async (year: number, month: number): Promise<any[]> => {
+  try {
+    const { data: contacts, error } = await supabase
+      .from('contacts')
+      .select('*, purchase_history(*)');
+
+    if (error) throw error;
+
+    const performanceMap = new Map();
+    const statusOrder = ['Active', 'Inactive', 'Prospective', 'Blacklisted'];
+
+    for (const contact of contacts || []) {
+      const status = contact.status || 'Unknown';
+      const purchases = contact.purchase_history || [];
+      
+      let monthSales = 0;
+      let prevMonthSales = 0;
+      
+      for (const purchase of purchases) {
+        const purchaseDate = new Date(purchase.purchase_date);
+        if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
+          monthSales += parseFloat(purchase.total_amount) || 0;
+        }
+        if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === (month === 1 ? 12 : month - 1)) {
+          prevMonthSales += parseFloat(purchase.total_amount) || 0;
+        }
+      }
+
+      if (monthSales > 0 || prevMonthSales > 0) {
+        if (!performanceMap.has(status)) {
+          performanceMap.set(status, {
+            status,
+            currentMonthSales: 0,
+            previousMonthSales: 0,
+            customerCount: 0
+          });
+        }
+        
+        const perf = performanceMap.get(status);
+        perf.currentMonthSales += monthSales;
+        perf.previousMonthSales += prevMonthSales;
+        perf.customerCount += 1;
+      }
+    }
+
+    const results = statusOrder
+      .filter(s => performanceMap.has(s))
+      .map(s => {
+        const perf = performanceMap.get(s);
+        return {
+          ...perf,
+          salesChange: perf.currentMonthSales - perf.previousMonthSales,
+          percentageChange: perf.previousMonthSales > 0 
+            ? ((perf.currentMonthSales - perf.previousMonthSales) / perf.previousMonthSales * 100)
+            : 0
+        };
+      });
+
+    return results;
+  } catch (err) {
+    console.error('Error fetching sales performance by customer status:', err);
+    return [];
+  }
+};
+
+export const fetchSalesPerformanceByPaymentType = async (year: number, month: number): Promise<any[]> => {
+  try {
+    const { data: paymentTerms, error } = await supabase
+      .from('payment_terms')
+      .select('*, purchase_history(*)');
+
+    if (error) throw error;
+
+    const performanceMap = new Map(['cash', 'credit', 'term'].map(t => [t, {
+      paymentType: t,
+      currentMonthSales: 0,
+      previousMonthSales: 0,
+      customerCount: new Set()
+    }]));
+
+    for (const term of paymentTerms || []) {
+      const termType = term.terms_type || 'cash';
+      const purchases = term.purchase_history || [];
+      
+      for (const purchase of purchases) {
+        const purchaseDate = new Date(purchase.purchase_date);
+        if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
+          performanceMap.get(termType).currentMonthSales += parseFloat(purchase.total_amount) || 0;
+          performanceMap.get(termType).customerCount.add(term.contact_id);
+        }
+        if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === (month === 1 ? 12 : month - 1)) {
+          performanceMap.get(termType).previousMonthSales += parseFloat(purchase.total_amount) || 0;
+        }
+      }
+    }
+
+    const results = Array.from(performanceMap.values()).map((perf: any) => ({
+      paymentType: perf.paymentType,
+      currentMonthSales: perf.currentMonthSales,
+      previousMonthSales: perf.previousMonthSales,
+      customerCount: perf.customerCount.size,
+      salesChange: perf.currentMonthSales - perf.previousMonthSales,
+      percentageChange: perf.previousMonthSales > 0 
+        ? ((perf.currentMonthSales - perf.previousMonthSales) / perf.previousMonthSales * 100)
+        : 0
+    }));
+
+    return results;
+  } catch (err) {
+    console.error('Error fetching sales performance by payment type:', err);
+    return [];
+  }
+};
+
+// --- NOTIFICATIONS SERVICE ---
+
+export const fetchNotifications = async (userId: string, limit: number = 50): Promise<Notification[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('recipient_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data as Notification[]) || [];
+  } catch (err) {
+    console.error('Error fetching notifications:', err);
+    return [];
+  }
+};
+
+export const fetchUnreadNotifications = async (userId: string): Promise<Notification[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('recipient_id', userId)
+      .eq('is_read', false)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data as Notification[]) || [];
+  } catch (err) {
+    console.error('Error fetching unread notifications:', err);
+    return [];
+  }
+};
+
+export const getUnreadCount = async (userId: string): Promise<number> => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact' })
+      .eq('recipient_id', userId)
+      .eq('is_read', false);
+    if (error) throw error;
+    return data?.length || 0;
+  } catch (err) {
+    console.error('Error getting unread count:', err);
+    return 0;
+  }
+};
+
+export const createNotification = async (input: CreateNotificationInput): Promise<Notification | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert(input)
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    return (data as Notification) || null;
+  } catch (err) {
+    console.error('Error creating notification:', err);
+    return null;
+  }
+};
+
+export const createBulkNotifications = async (inputs: CreateNotificationInput[]): Promise<Notification[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert(inputs)
+      .select();
+    if (error) throw error;
+    return (data as Notification[]) || [];
+  } catch (err) {
+    console.error('Error creating bulk notifications:', err);
+    return [];
+  }
+};
+
+export const markAsRead = async (notificationId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('id', notificationId);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error marking notification as read:', err);
+    return false;
+  }
+};
+
+export const markAllAsRead = async (userId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('recipient_id', userId)
+      .eq('is_read', false);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error marking all notifications as read:', err);
+    return false;
+  }
+};
+
+export const deleteNotification = async (notificationId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', notificationId);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error deleting notification:', err);
+    return false;
+  }
+};
+
+export const subscribeToNotifications = (
+  userId: string,
+  callback: (notification: Notification) => void
+): (() => void) => {
+  const channel = supabase
+    .channel(`notifications:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `recipient_id=eq.${userId}`
+      },
+      (payload) => {
+        callback(payload.new as Notification);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
+// --- NOTIFICATION HELPER FUNCTIONS ---
+
+export const notifyUser = async (
+  userId: string,
+  title: string,
+  message: string,
+  type: NotificationType,
+  actionUrl?: string,
+  metadata?: Record<string, any>
+): Promise<Notification | null> => {
+  return createNotification({
+    recipient_id: userId,
+    title,
+    message,
+    type,
+    action_url: actionUrl,
+    metadata
+  });
+};
+
+export const notifyRole = async (
+  role: string,
+  title: string,
+  message: string,
+  type: NotificationType,
+  actionUrl?: string,
+  metadata?: Record<string, any>
+): Promise<Notification[]> => {
+  try {
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', role);
+    
+    if (profileError) throw profileError;
+    
+    const inputs: CreateNotificationInput[] = (profiles || []).map((profile: any) => ({
+      recipient_id: profile.id,
+      title,
+      message,
+      type,
+      action_url: actionUrl,
+      metadata
+    }));
+
+    return createBulkNotifications(inputs);
+  } catch (err) {
+    console.error('Error notifying role:', err);
+    return [];
+  }
+};
+
+export const notifyAll = async (
+  title: string,
+  message: string,
+  type: NotificationType,
+  actionUrl?: string,
+  metadata?: Record<string, any>
+): Promise<Notification[]> => {
+  try {
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('id');
+    
+    if (profileError) throw profileError;
+    
+    const inputs: CreateNotificationInput[] = (profiles || []).map((profile: any) => ({
+      recipient_id: profile.id,
+      title,
+      message,
+      type,
+      action_url: actionUrl,
+      metadata
+    }));
+
+    return createBulkNotifications(inputs);
+  } catch (err) {
+    console.error('Error notifying all:', err);
+    return [];
   }
 };
