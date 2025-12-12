@@ -8,6 +8,7 @@ interface AgentCallActivityProps {
   contacts: Contact[];
   maxItems?: number;
   title?: string;
+  className?: string;
 }
 
 type ActivityItem = (CallLogEntry & { type: 'call' }) | (Inquiry & { type: 'inquiry' });
@@ -56,7 +57,8 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
   inquiries,
   contacts,
   maxItems = 8,
-  title = 'Recent Activity'
+  title = 'Recent Activity',
+  className = ''
 }) => {
   const contactsMap = useMemo(() => {
     const map = new Map<string, Contact>();
@@ -78,7 +80,7 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
   const getContactName = (contactId: string) => contactsMap.get(contactId)?.company || 'Unknown contact';
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+    <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col ${className}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Phone className="w-5 h-5 text-brand-blue" />
@@ -90,7 +92,7 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
       {recentActivity.length === 0 ? (
         <div className="text-center p-10 text-slate-400 dark:text-slate-500">No recent activity</div>
       ) : (
-        <div className="space-y-3 max-h-96 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
+        <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
           {recentActivity.map((item) => {
             const isCall = item.type === 'call';
             const directionColor =

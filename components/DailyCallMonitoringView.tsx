@@ -6,10 +6,12 @@ import {
   Bell,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Clock,
   Filter,
   Loader2,
+  Mail,
   MessageSquare,
   Package,
   Phone,
@@ -24,10 +26,20 @@ import {
   UserCheck,
   UserPlus,
   UserX,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
+import {
+  countCallLogsByChannelInRange,
+  countCallLogsInRange,
+  countCallOutcomes,
+  countUniqueContactsInRange,
+  getStartOfMonth,
+  getStartOfToday,
+  isWithinCurrentMonth
+} from './callMetricsUtils';
 import {
   fetchCallLogs,
   fetchContacts,
@@ -50,7 +62,7 @@ interface DailyCallMonitoringViewProps {
   currentUser: UserProfile | null;
 }
 
-interface NotificationItem {
+interface ActivityItem {
   id: string;
   title: string;
   message: string;
@@ -58,7 +70,7 @@ interface NotificationItem {
   type: 'report' | 'stock';
 }
 
-interface NotificationWithRead extends NotificationItem {
+interface ActivityItemWithRead extends ActivityItem {
   read: boolean;
 }
 
@@ -68,15 +80,9 @@ interface VirtualizedListOptions {
   overscan?: number;
 }
 
-const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
+type ClientListKey = 'active' | 'inactivePositive' | 'prospectivePositive';
 
-const isWithinCurrentMonth = (value?: string | null) => {
-  if (!value) return false;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return false;
-  const now = new Date();
-  return parsed.getFullYear() === now.getFullYear() && parsed.getMonth() === now.getMonth();
-};
+const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
 
 const getCurrentMonthPurchases = (purchases: Purchase[]) =>
   purchases.filter((purchase) => isWithinCurrentMonth(purchase.purchased_at) && purchase.status === 'paid');
@@ -132,6 +138,13 @@ const formatComment = (value?: string | null) => {
   return trimmed.length > 90 ? `${trimmed.slice(0, 87)}...` : trimmed;
 };
 
+const matchesSearch = (contact: Contact, query: string) => {
+  if (!query) return true;
+  const normalized = query.toLowerCase();
+  const fields = [contact.company, contact.name, contact.province, contact.city];
+  return fields.some((field) => (field || '').toLowerCase().includes(normalized));
+};
+
 const useVirtualizedList = <T,>(items: T[], options: VirtualizedListOptions = {}) => {
   const { itemHeight = 96, viewportHeight = 320, overscan = 3 } = options;
   const [scrollTop, setScrollTop] = useState(0);
@@ -181,6 +194,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [teamMessages, setTeamMessages] = useState<TeamMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [hasLoadedData, setHasLoadedData] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
   const [repFilter, setRepFilter] = useState('All');
@@ -191,21 +206,37 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortField, setSortField] = useState<'priority' | 'lastContact' | 'lastPurchase' | 'salesValue'>('priority');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [readNotifications, setReadNotifications] = useState<Set<string>>(() => new Set());
+  const [readActivityIds, setReadActivityIds] = useState<Set<string>>(() => new Set());
+  const [showFullTimeline, setShowFullTimeline] = useState(false);
+  const [openClientLists, setOpenClientLists] = useState<Record<ClientListKey, boolean>>({
+    active: false,
+    inactivePositive: false,
+    prospectivePositive: false
+  });
 
-  const agentName = currentUser?.full_name || '';
+  const agentDataName = currentUser?.full_name?.trim() || null;
+  const agentDisplayName = useMemo(() => {
+    if (currentUser?.full_name?.trim()) {
+      return currentUser.full_name.trim();
+    }
+    if (currentUser?.email) {
+      const prefix = currentUser.email.split('@')[0];
+      if (prefix) return prefix;
+    }
+    return 'Sales Agent';
+  }, [currentUser]);
+  const isSalesAgent = Boolean(currentUser?.role && currentUser.role.toLowerCase().includes('agent'));
+  const dataUnavailable = !loading && !hasLoadedData;
+
+  const toggleClientList = useCallback((listKey: ClientListKey) => {
+    setOpenClientLists((previous) => ({
+      ...previous,
+      [listKey]: !previous[listKey]
+    }));
+  }, []);
 
   const loadAgentData = useCallback(async () => {
-    if (!agentName) {
-      setContacts([]);
-      setCallLogs([]);
-      setInquiries([]);
-      setPurchases([]);
-      setTeamMessages([]);
-      setLoading(false);
-      return;
-    }
-
+    if (!agentDataName || !isSalesAgent) return;
     setLoading(true);
     try {
       const [contactData, callLogData, inquiryData, purchaseData, messageData] = await Promise.all([
@@ -216,33 +247,41 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         fetchTeamMessages()
       ]);
 
-      const assignedContacts = contactData.filter((contact) => contact.salesman === agentName);
+      const assignedContacts = contactData.filter((contact) => contact.salesman === agentDataName);
       const contactIds = new Set(assignedContacts.map((contact) => contact.id));
 
       setContacts(assignedContacts);
-      setCallLogs(callLogData.filter((log) => log.agent_name === agentName));
+      setCallLogs(callLogData.filter((log) => log.agent_name === agentDataName));
       setInquiries(inquiryData.filter((inquiry) => contactIds.has(inquiry.contact_id)));
       setPurchases(purchaseData.filter((purchase) => contactIds.has(purchase.contact_id)));
       setTeamMessages(messageData.filter((message) => message.is_from_owner));
+      setLoadError(null);
+      setHasLoadedData(true);
     } catch (error) {
       console.error('Error loading daily call monitoring data', error);
+      setLoadError('Call activity could not be loaded. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [agentName]);
+  }, [agentDataName, isSalesAgent]);
 
   useEffect(() => {
+    if (!agentDataName || !isSalesAgent) {
+      setLoading(false);
+      return;
+    }
     loadAgentData();
-  }, [loadAgentData]);
+  }, [agentDataName, isSalesAgent, loadAgentData]);
 
   useEffect(() => {
+    if (!agentDataName || !isSalesAgent) return;
     const unsubscribe = subscribeToCallMonitoringUpdates(() => {
       loadAgentData();
     });
     return () => {
       unsubscribe();
     };
-  }, [loadAgentData]);
+  }, [agentDataName, isSalesAgent, loadAgentData]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -250,12 +289,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     }, 300);
     return () => clearTimeout(handler);
   }, [searchValue]);
-
-  useEffect(() => {
-    if (contacts.length && !selectedClientId) {
-      setSelectedClientId(contacts[0].id);
-    }
-  }, [contacts, selectedClientId]);
 
   const selectedClient = useMemo(
     () => contacts.find((contact) => contact.id === selectedClientId) || null,
@@ -326,14 +359,20 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     () => currentMonthPurchases.reduce((sum, purchase) => sum + (purchase.amount || 0), 0),
     [currentMonthPurchases]
   );
-  const percentAchieved = Math.min(100, Math.round((achievements / quota) * 100 || 0));
-  const remainingQuota = Math.max(0, quota - achievements);
+  const achievementsValue = hasLoadedData ? achievements : null;
+  const percentAchieved =
+    achievementsValue !== null ? Math.min(100, Math.round(((achievementsValue / quota) * 100) || 0)) : null;
+  const remainingQuota = achievementsValue !== null ? Math.max(0, quota - achievementsValue) : null;
 
   const noPurchaseContacts = useMemo(
     () => clientsNoPurchaseThisMonth(contacts, purchases),
     [contacts, purchases]
   );
   const noPurchaseSet = useMemo(() => new Set(noPurchaseContacts.map((contact) => contact.id)), [noPurchaseContacts]);
+  const searchScopedNoPurchase = useMemo(
+    () => (debouncedSearch ? noPurchaseContacts.filter((contact) => matchesSearch(contact, debouncedSearch)) : noPurchaseContacts),
+    [noPurchaseContacts, debouncedSearch]
+  );
 
   const categorizedEntries = useMemo(() => {
     const buildEntry = (contact: Contact) => {
@@ -354,21 +393,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     const positiveComment = (contact: Contact) => contact.comment?.toLowerCase().includes('positive') || false;
 
     return {
-      active: noPurchaseContacts
+      active: searchScopedNoPurchase
         .filter((contact) => contact.status === CustomerStatus.ACTIVE)
         .map(buildEntry),
-      inactivePositive: noPurchaseContacts
+      inactivePositive: searchScopedNoPurchase
         .filter((contact) => contact.status === CustomerStatus.INACTIVE && positiveComment(contact))
         .map(buildEntry),
-      prospectivePositive: noPurchaseContacts
+      prospectivePositive: searchScopedNoPurchase
         .filter((contact) => contact.status === CustomerStatus.PROSPECTIVE && positiveComment(contact))
         .map(buildEntry)
     };
-  }, [noPurchaseContacts, lastContactMap, purchasesByContact]);
+  }, [searchScopedNoPurchase, lastContactMap, purchasesByContact]);
 
-  const activeVirtual = useVirtualizedList(categorizedEntries.active, { viewportHeight: 320, itemHeight: 120 });
-  const inactiveVirtual = useVirtualizedList(categorizedEntries.inactivePositive, { viewportHeight: 320, itemHeight: 120 });
-  const prospectiveVirtual = useVirtualizedList(categorizedEntries.prospectivePositive, { viewportHeight: 320, itemHeight: 120 });
+  const activeVirtual = useVirtualizedList(categorizedEntries.active, { viewportHeight: 300, itemHeight: 96 });
+  const inactiveVirtual = useVirtualizedList(categorizedEntries.inactivePositive, { viewportHeight: 300, itemHeight: 96 });
+  const prospectiveVirtual = useVirtualizedList(categorizedEntries.prospectivePositive, { viewportHeight: 300, itemHeight: 96 });
 
   const contactLookup = useMemo(() => {
     const map = new Map<string, Contact>();
@@ -376,8 +415,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return map;
   }, [contacts]);
 
-  const notificationBase = useMemo<NotificationItem[]>(() => {
-    const items: NotificationItem[] = [];
+  const activityBase = useMemo<ActivityItem[]>(() => {
+    const items: ActivityItem[] = [];
     teamMessages.forEach((message) => {
       items.push({
         id: `msg-${message.id}`,
@@ -404,30 +443,30 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return items.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
   }, [teamMessages, purchases, contactLookup]);
 
-  const notifications: NotificationWithRead[] = useMemo(
+  const activityItems: ActivityItemWithRead[] = useMemo(
     () =>
-      notificationBase.map((item) => ({
+      activityBase.map((item) => ({
         ...item,
-        read: readNotifications.has(item.id)
+        read: readActivityIds.has(item.id)
       })),
-    [notificationBase, readNotifications]
+    [activityBase, readActivityIds]
   );
 
-  const unreadNotificationCount = useMemo(
-    () => notifications.filter((notification) => !notification.read).length,
-    [notifications]
+  const unseenActivityCount = useMemo(
+    () => activityItems.filter((item) => !item.read).length,
+    [activityItems]
   );
 
-  const handleNotificationRead = (id: string) => {
-    setReadNotifications((prev) => {
+  const handleActivityRead = (id: string) => {
+    setReadActivityIds((prev) => {
       const updated = new Set(prev);
       updated.add(id);
       return updated;
     });
   };
 
-  const handleNotificationReadAll = () => {
-    setReadNotifications(new Set(notificationBase.map((item) => item.id)));
+  const handleActivityReadAll = () => {
+    setReadActivityIds(new Set(activityBase.map((item) => item.id)));
   };
 
   const availableReps = useMemo(() => {
@@ -470,15 +509,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     });
 
     const filtered = rows.filter((row) => {
-      if (repFilter !== 'All' && row.contact.salesman !== repFilter) return false;
-      if (provinceFilter !== 'All' && row.contact.province !== provinceFilter) return false;
-      if (noPurchaseOnly && !noPurchaseSet.has(row.contact.id)) return false;
-      if (statusFilters.length && !statusFilters.includes(row.contact.status)) return false;
-      if (debouncedSearch) {
-        const haystack = `${row.contact.company} ${row.contact.province} ${row.contact.city} ${row.contact.comment}`.toLowerCase();
-        if (!haystack.includes(debouncedSearch)) return false;
-      }
-      return true;
+      const matchesRep = repFilter === 'All' || row.contact.salesman === repFilter;
+      const matchesProvince = provinceFilter === 'All' || row.contact.province === provinceFilter;
+      const matchesStatus = !statusFilters.length || statusFilters.includes(row.contact.status);
+      const matchesPurchaseFilter = !noPurchaseOnly || noPurchaseSet.has(row.contact.id);
+      const matchesSearchQuery = matchesSearch(row.contact, debouncedSearch);
+      return matchesRep && matchesProvince && matchesStatus && matchesPurchaseFilter && matchesSearchQuery;
     });
 
     const direction = sortDirection === 'asc' ? 1 : -1;
@@ -516,6 +552,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     sortDirection
   ]);
 
+  useEffect(() => {
+    if (!masterRows.length) {
+      if (selectedClientId !== null) {
+        setSelectedClientId(null);
+      }
+      return;
+    }
+    if (!selectedClientId || !masterRows.some((row) => row.contact.id === selectedClientId)) {
+      setSelectedClientId(masterRows[0].contact.id);
+    }
+  }, [masterRows, selectedClientId]);
+
   const selectedTimeline = useMemo(() => {
     if (!selectedClientId) return [];
     const calls = (callLogsByContact.get(selectedClientId) || []).map((log) => ({
@@ -524,7 +572,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       title: log.channel === 'text' ? 'SMS Touch' : 'Call',
       occurred_at: log.occurred_at,
       detail: log.notes,
-      meta: `${log.direction === 'inbound' ? 'Inbound' : 'Outbound'} • ${log.outcome.replace('_', ' ')}`
+      meta: `${log.channel === 'text' ? 'SMS' : 'Voice'} • ${log.direction === 'inbound' ? 'Inbound' : 'Outbound'} • ${log.outcome ? log.outcome.replace('_', ' ') : 'Logged'}`
     }));
     const inquiryEvents = (inquiriesByContact.get(selectedClientId) || []).map((inquiry) => ({
       id: `inq-${inquiry.id}`,
@@ -535,60 +583,49 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       meta: `via ${inquiry.channel}`
     }));
 
-    return [...calls, ...inquiryEvents]
-      .sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))
-      .slice(0, 6);
+    return [...calls, ...inquiryEvents].sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at));
   }, [selectedClientId, callLogsByContact, inquiriesByContact]);
 
-  const weekdayStart = useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now;
-  }, []);
+  const visibleTimeline = useMemo(
+    () => (showFullTimeline ? selectedTimeline : selectedTimeline.slice(0, 5)),
+    [selectedTimeline, showFullTimeline]
+  );
+
+  useEffect(() => {
+    setShowFullTimeline(false);
+  }, [selectedClientId]);
+
+  const todayStart = useMemo(() => getStartOfToday(), []);
+  const monthStart = useMemo(() => getStartOfMonth(), []);
 
   const callsToday = useMemo(
-    () => callLogs.filter((log) => Date.parse(log.occurred_at) >= weekdayStart.getTime()).length,
-    [callLogs, weekdayStart]
+    () => countCallLogsInRange(callLogs, todayStart),
+    [callLogs, todayStart]
   );
 
   const smsToday = useMemo(
-    () =>
-      callLogs.filter(
-        (log) => Date.parse(log.occurred_at) >= weekdayStart.getTime() && log.channel === 'text'
-      ).length,
-    [callLogs, weekdayStart]
+    () => countCallLogsByChannelInRange(callLogs, 'text', todayStart),
+    [callLogs, todayStart]
   );
 
-  const clientsContactedToday = useMemo(() => {
-    const ids = new Set<string>();
-    callLogs.forEach((log) => {
-      if (Date.parse(log.occurred_at) >= weekdayStart.getTime()) {
-        ids.add(log.contact_id);
-      }
-    });
-    inquiries.forEach((inquiry) => {
-      if (Date.parse(inquiry.occurred_at) >= weekdayStart.getTime()) {
-        ids.add(inquiry.contact_id);
-      }
-    });
-    return ids.size;
-  }, [callLogs, inquiries, weekdayStart]);
+  const clientsContactedToday = useMemo(
+    () => countUniqueContactsInRange(callLogs, inquiries, todayStart),
+    [callLogs, inquiries, todayStart]
+  );
 
-  const callsThisMonth = useMemo(() => callLogs.filter((log) => isWithinCurrentMonth(log.occurred_at)).length, [callLogs]);
-  const contactsThisMonth = useMemo(() => {
-    const ids = new Set<string>();
-    callLogs.forEach((log) => {
-      if (isWithinCurrentMonth(log.occurred_at)) {
-        ids.add(log.contact_id);
-      }
-    });
-    inquiries.forEach((inquiry) => {
-      if (isWithinCurrentMonth(inquiry.occurred_at)) {
-        ids.add(inquiry.contact_id);
-      }
-    });
-    return ids.size;
-  }, [callLogs, inquiries]);
+  const callsThisMonth = useMemo(
+    () => countCallLogsInRange(callLogs, monthStart),
+    [callLogs, monthStart]
+  );
+
+  const contactsThisMonth = useMemo(
+    () => countUniqueContactsInRange(callLogs, inquiries, monthStart),
+    [callLogs, inquiries, monthStart]
+  );
+  const conversionRate = useMemo(
+    () => (contactsThisMonth ? Math.round((currentMonthPurchases.length / contactsThisMonth) * 100) : 0),
+    [contactsThisMonth, currentMonthPurchases]
+  );
 
   const followUpsDue = useMemo(
     () =>
@@ -602,23 +639,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   );
 
   const callOutcomeBreakdown = useMemo(() => {
-    const base = {
-      positive: 0,
-      follow_up: 0,
-      negative: 0,
-      other: 0
-    };
-    callLogs.forEach((log) => {
-      if (log.outcome === 'positive') base.positive += 1;
-      else if (log.outcome === 'follow_up') base.follow_up += 1;
-      else if (log.outcome === 'negative') base.negative += 1;
-      else base.other += 1;
-    });
+    const counts = countCallOutcomes(callLogs);
     return [
-      { name: 'Positive', value: base.positive },
-      { name: 'Follow-up', value: base.follow_up },
-      { name: 'Negative', value: base.negative },
-      { name: 'Other', value: base.other }
+      { name: 'Positive', value: counts.positive },
+      { name: 'Follow-up', value: counts.follow_up },
+      { name: 'Negative', value: counts.negative },
+      { name: 'Other', value: counts.other }
     ];
   }, [callLogs]);
 
@@ -650,14 +676,42 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     });
   };
 
-  if (!agentName) {
+  if (!currentUser) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
+          <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white">Sign in to continue</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Please sign in with your sales agent account to view daily call monitoring insights.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSalesAgent) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
+          <ShieldAlert className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white">Sales agent view</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            The Daily Call Monitoring workspace is tailored for sales agents. Switch to the live owner view to monitor the entire team.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!agentDataName) {
     return (
       <div className="flex items-center justify-center h-full p-6">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
           <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-3" />
           <h2 className="text-lg font-bold text-slate-800 dark:text-white">Profile Required</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Please make sure your profile includes a full name so we can load your assigned accounts.
+            Please make sure your profile includes your full name so we can match assigned accounts for {agentDisplayName}.
           </p>
         </div>
       </div>
@@ -681,7 +735,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Daily Call Monitoring</h1>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-            Tracking every touchpoint for <span className="font-semibold">{agentName}</span>
+            Tracking every touchpoint for <span className="font-semibold">{agentDisplayName}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -694,14 +748,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </button>
           <div className="relative">
             <button
-              onClick={handleNotificationReadAll}
+              onClick={handleActivityReadAll}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-blue text-white text-sm font-semibold shadow-sm"
             >
               <Bell className="w-4 h-4" />
-              Notifications
-              {unreadNotificationCount > 0 && (
+              Activity
+              {unseenActivityCount > 0 && (
                 <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-bold bg-white/20">
-                  {unreadNotificationCount}
+                  {unseenActivityCount}
                 </span>
               )}
             </button>
@@ -709,251 +763,30 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       </header>
 
-      {/* Master Call View - Main Focus */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-            <Filter className="w-4 h-4" />
-            <span className="text-sm font-semibold text-slate-800 dark:text-white">Master Call View</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-3 py-1.5 rounded-lg">
-              <Search className="w-4 h-4 text-slate-400" />
-              <input
-                className="bg-transparent text-sm outline-none text-slate-800 dark:text-slate-200 placeholder:text-slate-400 w-36"
-                placeholder="Search clients"
-                value={searchValue}
-                onChange={(event) => setSearchValue(event.target.value)}
-              />
-            </div>
-            <select
-              className="text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1.5"
-              value={repFilter}
-              onChange={(event) => setRepFilter(event.target.value)}
-            >
-              {availableReps.map((rep) => (
-                <option key={rep} value={rep}>
-                  {rep === 'All' ? 'All Reps' : rep}
-                </option>
-              ))}
-            </select>
-            <select
-              className="text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1.5"
-              value={provinceFilter}
-              onChange={(event) => setProvinceFilter(event.target.value)}
-            >
-              {availableProvinces.map((province) => (
-                <option key={province} value={province}>
-                  {province === 'All' ? 'All Areas' : province}
-                </option>
-              ))}
-            </select>
-            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 px-3 py-1.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={noPurchaseOnly}
-                onChange={(event) => setNoPurchaseOnly(event.target.checked)}
-              />
-              No purchase
-            </label>
-          </div>
-        </div>
-        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-2">
-          {statusOptions.map((status) => (
-            <button
-              key={status}
-              onClick={() => toggleStatusFilter(status)}
-              className={`text-xs font-semibold px-3 py-1 rounded-full border ${
-                statusFilters.includes(status)
-                  ? 'bg-brand-blue text-white border-brand-blue'
-                  : 'bg-slate-50 dark:bg-slate-900/60 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-300'
-              }`}
-            >
-              {status}
-            </button>
-          ))}
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400">
-              <tr>
-                {[
-                  { key: 'client', label: 'Client' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'rep', label: 'Rep' },
-                  { key: 'lastPurchase', label: 'Last Purchase', sortable: true },
-                  { key: 'lastContact', label: 'Last Contact', sortable: true },
-                  { key: 'history', label: 'History' },
-                  { key: 'notes', label: 'Notes' },
-                  { key: 'potential', label: 'Potential', sortable: true },
-                  { key: 'reason', label: 'Reason' },
-                  { key: 'actions', label: 'Actions' }
-                ].map((column) => (
-                  <th
-                    key={column.key}
-                    className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide"
-                  >
-                    {column.sortable ? (
-                      <button
-                        className="flex items-center gap-1"
-                        onClick={() => {
-                          const newField = column.key === 'lastPurchase' ? 'lastPurchase' : column.key === 'potential' ? 'salesValue' : 'lastContact';
-                          if (sortField === newField) {
-                            setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-                          } else {
-                            setSortField(newField as typeof sortField);
-                            setSortDirection('desc');
-                          }
-                        }}
-                      >
-                        {column.label}
-                        {((column.key === 'lastPurchase' && sortField === 'lastPurchase') ||
-                          (column.key === 'lastContact' && sortField === 'lastContact') ||
-                          (column.key === 'potential' && sortField === 'salesValue')) && (
-                          <ArrowUpRight
-                            className={`w-3 h-3 ${
-                              sortDirection === 'desc' ? 'rotate-180' : ''
-                            }`}
-                          />
-                        )}
-                      </button>
-                    ) : (
-                      column.label
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {masterRows.map((row) => (
-                <tr
-                  key={row.contact.id}
-                  className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer"
-                  onClick={() => setSelectedClientId(row.contact.id)}
-                >
-                  <td className="px-3 py-4">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-slate-800 dark:text-white">{row.contact.company}</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">{row.contact.province}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4">
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeClasses(row.contact.status)}`}>
-                      {row.contact.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-4 text-xs text-slate-500 dark:text-slate-400">{row.contact.salesman}</td>
-                  <td className="px-3 py-4 text-xs text-slate-600 dark:text-slate-300">{formatDate(row.lastPurchase)}</td>
-                  <td className="px-3 py-4 text-xs text-slate-600 dark:text-slate-300">{formatRelativeTime(row.lastContact)}</td>
-                  <td className="px-3 py-4 text-xs text-slate-600 dark:text-slate-300">
-                    {row.totalInteractions} touchpoints
-                  </td>
-                  <td className="px-3 py-4 text-xs text-slate-600 dark:text-slate-300 line-clamp-2 max-w-xs">
-                    {row.contact.comment || '—'}
-                  </td>
-                  <td className="px-3 py-4">
-                    <div className="flex flex-col text-xs text-slate-600 dark:text-slate-300">
-                      <span>{formatCurrency(row.totalSales)}</span>
-                      <span className={`mt-1 text-[11px] font-semibold px-2 py-0.5 rounded-full self-start ${priorityBadgeClasses(row.priority)}`}>
-                        Priority {Math.round(row.priority)}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 text-xs text-slate-600 dark:text-slate-300">
-                    {row.latestOutcome ? row.latestOutcome.replace('_', ' ') : 'No recent update'}
-                  </td>
-                  <td className="px-3 py-4">
-                    <div className="flex flex-wrap gap-2">
-                      <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-brand-blue/10 text-brand-blue">Call</button>
-                      <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-600">SMS</button>
-                      <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        Details
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {masterRows.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-                    No clients match the current filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Today's Call List */}
-      <section className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6">
-        <div className="xl:col-span-8">
-          <AgentCallActivity
-            callLogs={callLogs}
-            inquiries={inquiries}
-            contacts={contacts}
-            maxItems={15}
-            title="Today's Call List"
-          />
-        </div>
-        <div className="xl:col-span-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 xl:sticky xl:top-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-brand-blue" />
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Notifications</h3>
-              </div>
-              <button
-                onClick={handleNotificationReadAll}
-                className="text-xs font-semibold text-brand-blue hover:underline"
-              >
-                Mark all read
-              </button>
-            </div>
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-3 rounded-xl border ${
-                    notification.read
-                      ? 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60'
-                      : 'border-brand-blue/20 bg-blue-50/60 dark:bg-blue-900/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                      {notification.type === 'report' ? <ShieldAlert className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
-                      {notification.type === 'report' ? 'Owner' : 'Stock'}
-                    </span>
-                    {!notification.read && (
-                      <button
-                        onClick={() => handleNotificationRead(notification.id)}
-                        className="text-[11px] font-semibold text-brand-blue hover:underline"
-                      >
-                        Mark read
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{notification.title}</p>
-                  <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{notification.message}</p>
-                  <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-                    {formatRelativeTime(notification.timestamp)}
-                  </div>
-                </div>
-              ))}
-              {notifications.length === 0 && (
-                <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-6">No notifications</div>
-              )}
+      {loadError && (
+        <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-900 rounded-xl p-4 shadow-sm flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-rose-500 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-rose-600 dark:text-rose-300">Unable to load call activity</p>
+              <p className="text-sm text-rose-600/80 dark:text-rose-200/80">
+                {loadError}
+              </p>
             </div>
           </div>
+          <button
+            onClick={loadAgentData}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white dark:bg-slate-900 text-sm font-semibold text-rose-600 dark:text-rose-200 border border-rose-200 dark:border-rose-800 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Retry
+          </button>
         </div>
-      </section>
-
-
+      )}
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
               <PhilippinePeso className="w-4 h-4" />
@@ -965,7 +798,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Goal for the current month</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-500/70 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
               <TrendingUp className="w-4 h-4" />
@@ -973,33 +806,55 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
             <ArrowUpRight className="w-4 h-4 text-emerald-500" />
           </div>
-          <p className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(achievements)}</p>
-          <p className={`text-xs font-semibold mt-1 ${percentAchieved > 80 ? 'text-emerald-500' : 'text-slate-500 dark:text-slate-400'}`}>
-            {percentAchieved}% of target
+          <p className="text-2xl font-bold text-slate-800 dark:text-white">
+            {achievementsValue !== null ? formatCurrency(achievementsValue) : '—'}
+          </p>
+          <p
+            className={`text-xs font-semibold mt-1 ${
+              percentAchieved !== null && percentAchieved > 80
+                ? 'text-emerald-500'
+                : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            {percentAchieved !== null ? `${percentAchieved}% of target` : 'Data unavailable'}
           </p>
           <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-            <div
-              className={`h-full rounded-full ${percentAchieved > 80 ? 'bg-emerald-500' : 'bg-brand-blue'}`}
-              style={{ width: `${percentAchieved}%` }}
-            />
+            {percentAchieved !== null ? (
+              <div
+                className={`h-full rounded-full ${percentAchieved > 80 ? 'bg-emerald-500' : 'bg-brand-blue'}`}
+                style={{ width: `${percentAchieved}%` }}
+              />
+            ) : (
+              <div className="h-full rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
+            )}
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-rose-400/70 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
               <BarChart3 className="w-4 h-4" />
               <span className="text-xs font-semibold uppercase tracking-wide">Remaining</span>
             </div>
-            <AlertCircle className={`w-4 h-4 ${remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-400 dark:text-slate-500'}`} />
+            <AlertCircle
+              className={`w-4 h-4 ${
+                remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-400 dark:text-slate-500'
+              }`}
+            />
           </div>
-          <p className={`text-2xl font-bold ${remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-800 dark:text-white'}`}>
-            {formatCurrency(remainingQuota)}
+          <p
+            className={`text-2xl font-bold ${
+              remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-800 dark:text-white'
+            }`}
+          >
+            {remainingQuota !== null ? formatCurrency(remainingQuota) : '—'}
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Needed to hit target</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {remainingQuota !== null ? 'Needed to hit target' : 'Data unavailable'}
+          </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-amber-400/70 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
               <Calendar className="w-4 h-4" />
@@ -1007,145 +862,324 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
             <ClipboardList className="w-4 h-4 text-amber-500" />
           </div>
-          <p className="text-2xl font-bold text-slate-800 dark:text-white">{followUpsDue}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Need action today</p>
+          <p className="text-2xl font-bold text-slate-800 dark:text-white">
+            {hasLoadedData ? followUpsDue : '—'}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {hasLoadedData ? 'Need action today' : 'Data unavailable'}
+          </p>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {[
-          { title: 'Active • No Purchase', icon: UserCheck, data: categorizedEntries.active, virtual: activeVirtual },
-          { title: 'Inactive Positives', icon: UserPlus, data: categorizedEntries.inactivePositive, virtual: inactiveVirtual },
-          { title: 'Prospective Positives', icon: UserX, data: categorizedEntries.prospectivePositive, virtual: prospectiveVirtual }
-        ].map((list) => (
-          <div key={list.title} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <list.icon className="w-5 h-5 text-brand-blue" />
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">{list.title}</h3>
-              </div>
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{list.data.length} clients</span>
+      {/* Master Call View - Main Focus */}
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl shadow-sm">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+              <Filter className="w-4 h-4" />
+              <span className="text-sm font-semibold text-slate-800 dark:text-white">Master Call View</span>
             </div>
-            <div
-              className="relative overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent"
-              style={{ maxHeight: list.virtual.viewportHeight }}
-              onScroll={list.virtual.handleScroll}
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Full pipeline coverage across territories</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-3 py-1.5 rounded-lg flex-1 min-w-[200px]">
+              <Search className="w-4 h-4 text-slate-400" />
+              <input
+                className="bg-transparent text-sm outline-none text-slate-800 dark:text-slate-200 placeholder:text-slate-400 flex-1"
+                placeholder="Search clients"
+                value={searchValue}
+                onChange={(event) => setSearchValue(event.target.value)}
+              />
+            </div>
+            <select
+              className="text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1.5"
+              value={repFilter}
+              onChange={(event) => setRepFilter(event.target.value)}
             >
-              <div style={{ height: `${list.virtual.totalHeight}px` }}>
-                <div style={{ transform: `translateY(${list.virtual.offsetTop}px)` }} className="space-y-3">
-                  {list.virtual.visibleItems.map((entry) => (
-                    <button
-                      key={entry.contact.id}
-                      onClick={() => setSelectedClientId(entry.contact.id)}
-                      className="w-full text-left bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg p-3 hover:border-brand-blue transition-colors"
+              {availableReps.map((rep) => (
+                <option key={rep} value={rep}>
+                  {rep === 'All' ? 'All Reps' : rep}
+                </option>
+              ))}
+            </select>
+            <select
+              className="text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1.5"
+              value={provinceFilter}
+              onChange={(event) => setProvinceFilter(event.target.value)}
+            >
+              {availableProvinces.map((province) => (
+                <option key={province} value={province}>
+                  {province === 'All' ? 'All Areas' : province}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 px-3 py-1.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="form-checkbox"
+                checked={noPurchaseOnly}
+                onChange={(event) => setNoPurchaseOnly(event.target.checked)}
+              />
+              No purchase
+            </label>
+          </div>
+        </div>
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex flex-wrap gap-2">
+            {statusOptions.map((status) => (
+              <button
+                key={status}
+                onClick={() => toggleStatusFilter(status)}
+                className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${
+                  statusFilters.includes(status)
+                    ? 'bg-brand-blue text-white border-brand-blue'
+                    : 'bg-slate-50 dark:bg-slate-900/60 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-300'
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <div className="max-h-[420px] overflow-y-auto">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400">
+                  <tr>
+                    {[
+                      { key: 'client', label: 'Client' },
+                      { key: 'status', label: 'Status' },
+                      { key: 'lastContact', label: 'Last Contact', sortable: true, sortKey: 'lastContact' },
+                      { key: 'potential', label: 'Potential', sortable: true, sortKey: 'salesValue' },
+                      { key: 'actions', label: 'Actions' }
+                    ].map((column) => (
+                      <th
+                        key={column.key}
+                        className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                      >
+                        {column.sortable ? (
+                          <button
+                            className="flex items-center gap-1"
+                            onClick={() => {
+                              const newField = column.sortKey || 'lastContact';
+                              if (sortField === newField) {
+                                setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                              } else {
+                                setSortField(newField as typeof sortField);
+                                setSortDirection('desc');
+                              }
+                            }}
+                          >
+                            {column.label}
+                            {(sortField === column.sortKey) && (
+                              <ArrowUpRight
+                                className={`w-3 h-3 ${sortDirection === 'desc' ? 'rotate-180' : ''}`}
+                              />
+                            )}
+                          </button>
+                        ) : (
+                          column.label
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {masterRows.map((row) => (
+                    <tr
+                      key={row.contact.id}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer"
+                      onClick={() => setSelectedClientId(row.contact.id)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800 dark:text-white">{entry.contact.company}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{entry.contact.province}</p>
+                      <td className="px-3 py-4 min-w-[220px]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-slate-800 dark:text-white">{row.contact.company}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{row.contact.province}</p>
+                          </div>
                         </div>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeClasses(entry.contact.status)}`}>
-                          {entry.contact.status}
+                        <div className="mt-2 flex items-center gap-3 text-slate-400 dark:text-slate-500">
+                          <button
+                            type="button"
+                            title={`Rep: ${row.contact.salesman}`}
+                            className="p-1 rounded-full bg-slate-100 dark:bg-slate-900/60"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            title={`${row.totalInteractions} touchpoints`}
+                            className="p-1 rounded-full bg-slate-100 dark:bg-slate-900/60"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            title={row.contact.comment ? row.contact.comment : 'No notes provided'}
+                            className="p-1 rounded-full bg-slate-100 dark:bg-slate-900/60"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-3 py-4">
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeClasses(row.contact.status)}`}>
+                          {row.contact.status}
                         </span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          <p>Last touch: {formatRelativeTime(entry.lastContact)}</p>
-                          <p>Last purchase: {formatDate(entry.lastPurchase)}</p>
-                          <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
-                            Notes: {formatComment(entry.contact.comment)}
-                          </p>
+                      </td>
+                      <td className="px-3 py-4">
+                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                          {formatRelativeTime(row.lastContact)}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Last purchase {formatDate(row.lastPurchase)}
+                        </p>
+                      </td>
+                      <td className="px-3 py-4">
+                        <p className="text-sm font-bold text-slate-800 dark:text-white">{formatCurrency(row.totalSales)}</p>
+                        <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${priorityBadgeClasses(row.priority)}`}>
+                          Priority {Math.round(row.priority)}
+                        </p>
+                      </td>
+                      <td className="px-3 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-brand-blue/10 text-brand-blue">Call</button>
+                          <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-600">SMS</button>
+                          <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            Details
+                          </button>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${priorityBadgeClasses(entry.priority)}`}>
-                            Priority {Math.round(entry.priority)}
-                          </span>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400">{entry.contact.salesman}</span>
-                        </div>
-                      </div>
-                    </button>
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              </div>
+                  {masterRows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                        {dataUnavailable ? 'Client data is unavailable. Retry loading the dashboard.' : 'No clients match the current filters.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        ))}
+        </div>
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <div className="xl:col-span-8 space-y-6">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-7 space-y-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-400/70 rounded-xl shadow-sm">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-2">
+                <PhoneCall className="w-5 h-5 text-brand-blue" />
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white">Today's Call List</h2>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Prioritized outreach for the day</p>
+            </div>
+            <div className="p-4">
+              {hasLoadedData ? (
+                <AgentCallActivity
+                  callLogs={callLogs}
+                  inquiries={inquiries}
+                  contacts={contacts}
+                  maxItems={15}
+                  title="Today's Call List"
+                />
+              ) : (
+                <div className="text-sm text-rose-500 text-center py-6">Call activity unavailable</div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-sky-400/70 rounded-xl shadow-sm p-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-2">
                 <PhoneCall className="w-5 h-5 text-brand-blue" />
                 <h2 className="text-lg font-bold text-slate-800 dark:text-white">Call Activity Tracker</h2>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <Clock className="w-4 h-4" />
                 Updated live from Supabase
               </div>
             </div>
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
                   <PhoneForwarded className="w-3.5 h-3.5 text-brand-blue" />
                   Calls Today
                 </p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{callsToday}</p>
+                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
+                  {hasLoadedData ? callsToday : '—'}
+                </p>
+                {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
               </div>
               <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
                   <MessageSquare className="w-3.5 h-3.5 text-purple-500" />
                   SMS Today
                 </p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{smsToday}</p>
+                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
+                  {hasLoadedData ? smsToday : '—'}
+                </p>
+                {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
               </div>
               <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
                   <Users className="w-3.5 h-3.5 text-emerald-500" />
                   Contacts Today
                 </p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{clientsContactedToday}</p>
+                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
+                  {hasLoadedData ? clientsContactedToday : '—'}
+                </p>
+                {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
               </div>
               <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                   Calls this Month
                 </p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{callsThisMonth}</p>
+                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
+                  {hasLoadedData ? callsThisMonth : '—'}
+                </p>
+                {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
               </div>
             </div>
             <div className="mt-6 grid grid-cols-1 lg:grid-cols-5 gap-4">
-              <div className="lg:col-span-3">
-                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Monthly Summary</h3>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {contactsThisMonth} clients
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500 dark:text-slate-400">Unique Clients</span>
-                      <span className="font-semibold text-slate-800 dark:text-white">{contactsThisMonth}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500 dark:text-slate-400">Follow-ups Pending</span>
-                      <span className="font-semibold text-amber-500">{followUpsDue}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500 dark:text-slate-400">Conversion Ratio</span>
-                      <span className="font-semibold text-emerald-500">
-                        {contactsThisMonth ? Math.round((currentMonthPurchases.length / contactsThisMonth) * 100) : 0}%
-                      </span>
-                    </div>
+              <div className="lg:col-span-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Monthly Summary</h3>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {contactsThisMonth} clients
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500 dark:text-slate-400">Unique Clients</span>
+                    <span className="font-semibold text-slate-800 dark:text-white">
+                      {hasLoadedData ? contactsThisMonth : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500 dark:text-slate-400">Follow-ups Pending</span>
+                    <span className="font-semibold text-amber-500">{hasLoadedData ? followUpsDue : '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500 dark:text-slate-400">Conversion Ratio</span>
+                    <span className="font-semibold text-emerald-500">
+                      {hasLoadedData ? `${conversionRate}%` : '—'}
+                    </span>
+                  </div>
+                  {dataUnavailable && (
+                    <p className="text-[11px] text-rose-500 mt-1">Monthly summary unavailable</p>
+                  )}
+                </div>
               </div>
-              <div className="lg:col-span-2">
-                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
-                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Outcome Mix</h3>
+              <div className="lg:col-span-2 bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Outcome Mix</h3>
+                {hasLoadedData ? (
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -1159,76 +1193,232 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {perClientHistory.map((item) => (
-                <div
-                  key={item.contact.id}
-                  className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col gap-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-white">{item.contact.company}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{item.contact.province}</p>
-                    </div>
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {item.total} interactions
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                    <span>Positive: {item.positive}</span>
-                    <span>Follow-ups: {item.followUps}</span>
-                    <span>{formatRelativeTime(item.lastInteraction)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
-
-        <div className="xl:col-span-4 space-y-6">
-          {selectedClient && (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                  <Phone className="w-5 h-5 text-brand-blue" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-800 dark:text-white">{selectedClient.company}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{selectedClient.province}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                <span className={`px-2 py-0.5 rounded-full font-semibold ${statusBadgeClasses(selectedClient.status)}`}>
-                  {selectedClient.status}
-                </span>
-                <span>Assigned: {selectedClient.salesman}</span>
-              </div>
-              <div className="mt-4 space-y-3">
-                {selectedTimeline.map((event) => (
-                  <div
-                    key={event.id}
-                    className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800"
-                  >
-                    <div className="flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
-                      <span>{event.title}</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        {formatDate(event.occurred_at)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{event.detail || 'No notes added.'}</p>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{event.meta}</p>
-                  </div>
-                ))}
-                {selectedTimeline.length === 0 && (
-                  <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No activity logged yet</div>
+                ) : (
+                  <div className="h-48 flex items-center justify-center text-sm text-rose-500">Outcome data unavailable</div>
                 )}
               </div>
             </div>
-          )}
+            <div className="mt-6 overflow-x-auto pb-2">
+              <div className="flex gap-4 min-w-max">
+                {perClientHistory.map((item) => (
+                  <div
+                    key={item.contact.id}
+                    className="min-w-[220px] p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col gap-2 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-white">{item.contact.company}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{item.contact.province}</p>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {item.total} interactions
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                      <span>Positive: {item.positive}</span>
+                      <span>Follow-ups: {item.followUps}</span>
+                      <span>{formatRelativeTime(item.lastInteraction)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-5 space-y-6">
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-purple-400/70 rounded-xl shadow-sm p-4 lg:sticky xl:top-24 z-10 flex flex-col lg:max-h-[calc(100vh-150px)]">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-brand-blue" />
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">Activity Highlights</h3>
+                </div>
+                <button
+                  onClick={handleActivityReadAll}
+                  className="text-xs font-semibold text-brand-blue hover:underline"
+                >
+                  Mark all seen
+                </button>
+              </div>
+              <div className="space-y-3 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent flex-1">
+                {activityItems.map((activity) => (
+                  <div
+                    key={activity.id}
+                    className={`p-3 rounded-xl border ${activity.read ? 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60' : 'border-brand-blue/20 bg-blue-50/60 dark:bg-blue-900/30'}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                        {activity.type === 'report' ? <ShieldAlert className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
+                        {activity.type === 'report' ? 'Owner' : 'Stock'}
+                      </span>
+                      {!activity.read && (
+                        <button
+                          onClick={() => handleActivityRead(activity.id)}
+                          className="text-[11px] font-semibold text-brand-blue hover:underline"
+                        >
+                          Mark seen
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{activity.title}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{activity.message}</p>
+                    <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                      {formatRelativeTime(activity.timestamp)}
+                    </div>
+                  </div>
+                ))}
+                {activityItems.length === 0 && (
+                  <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-6">No recent activity</div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-400/70 rounded-xl shadow-sm p-4 lg:sticky xl:top-24 z-10">
+              {selectedClient ? (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                        <Phone className="w-5 h-5 text-brand-blue" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-slate-800 dark:text-white">{selectedClient.company}</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{selectedClient.province}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedClientId(null)}
+                      className="p-1 rounded-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
+                      aria-label="Close client panel"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                    <span className={`px-2 py-0.5 rounded-full font-semibold ${statusBadgeClasses(selectedClient.status)}`}>
+                      {selectedClient.status}
+                    </span>
+                    <span>Assigned: {selectedClient.salesman}</span>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {[{ label: 'Call', icon: Phone }, { label: 'SMS', icon: MessageSquare }, { label: 'Email', icon: Mail }].map((action) => (
+                      <button
+                        key={action.label}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300"
+                      >
+                        <action.icon className="w-3.5 h-3.5" />
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">Recent activity</span>
+                    {selectedTimeline.length > 5 && (
+                      <button
+                        onClick={() => setShowFullTimeline((prev) => !prev)}
+                        className="text-xs font-semibold text-brand-blue hover:underline"
+                      >
+                        {showFullTimeline ? 'View less' : 'View all'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    {visibleTimeline.map((event) => (
+                      <div
+                        key={event.id}
+                        className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800"
+                      >
+                        <div className="flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+                          <span>{event.title}</span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">{formatDate(event.occurred_at)}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{event.detail || 'No notes added.'}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">{event.meta}</p>
+                      </div>
+                    ))}
+                    {visibleTimeline.length === 0 && (
+                      <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No activity logged yet</div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center text-sm text-slate-500 dark:text-slate-400 py-10">
+                  {masterRows.length ? 'Select a client to view their timeline.' : 'No clients available for the current filters.'}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-indigo-400/70 rounded-xl shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-5 h-5 text-brand-blue" />
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Client Segments</h3>
+            </div>
+            <div className="space-y-3">
+              {([
+                { key: 'active', title: 'Active • No Purchase', icon: UserCheck, data: categorizedEntries.active, virtual: activeVirtual },
+                { key: 'inactivePositive', title: 'Inactive Positives', icon: UserPlus, data: categorizedEntries.inactivePositive, virtual: inactiveVirtual },
+                { key: 'prospectivePositive', title: 'Prospective Positives', icon: UserX, data: categorizedEntries.prospectivePositive, virtual: prospectiveVirtual }
+              ] as const).map(({ key, title, icon: Icon, data, virtual }) => {
+                const isOpen = openClientLists[key];
+                const { visibleItems, offsetTop, totalHeight, viewportHeight, handleScroll } = virtual;
+                return (
+                  <div key={title} className="border border-slate-100 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/40">
+                    <button
+                      onClick={() => toggleClientList(key)}
+                      className="w-full flex items-center justify-between px-3 py-3 text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon className="w-5 h-5 text-brand-blue" />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-white">{title}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{data.length} clients</p>
+                        </div>
+                      </div>
+                      <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${isOpen ? '-rotate-180' : ''}`} />
+                    </button>
+                    {isOpen && (
+                      <div className="border-t border-slate-100 dark:border-slate-800 px-3 pb-3">
+                        <div
+                          className="relative pr-1 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent"
+                          style={{ height: `${viewportHeight}px` }}
+                          onScroll={handleScroll}
+                        >
+                          <div style={{ height: `${totalHeight}px` }}>
+                            <div style={{ transform: `translateY(${offsetTop}px)` }} className="space-y-3">
+                              {visibleItems.map((entry) => (
+                                <button
+                                  key={entry.contact.id}
+                                  onClick={() => setSelectedClientId(entry.contact.id)}
+                                  className="w-full text-left bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg p-3 hover:border-brand-blue transition-colors"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-800 dark:text-white">{entry.contact.company}</p>
+                                      <p className="text-xs text-slate-500 dark:text-slate-400">{entry.contact.province}</p>
+                                    </div>
+                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeClasses(entry.contact.status)}`}>
+                                      {entry.contact.status}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                                    <span>Last touch: {formatRelativeTime(entry.lastContact)}</span>
+                                    <span>Priority {Math.round(entry.priority)}</span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{formatComment(entry.contact.comment)}</p>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </section>
     </div>

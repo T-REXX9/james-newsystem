@@ -447,7 +447,7 @@ export const fetchCallLogs = async (): Promise<CallLogEntry[]> => {
     return (data as CallLogEntry[]) || [];
   } catch (err) {
     console.error('Error fetching call logs:', err);
-    return [];
+    throw err;
   }
 };
 
@@ -458,7 +458,7 @@ export const fetchInquiries = async (): Promise<Inquiry[]> => {
     return (data as Inquiry[]) || [];
   } catch (err) {
     console.error('Error fetching inquiries:', err);
-    return [];
+    throw err;
   }
 };
 
@@ -469,7 +469,7 @@ export const fetchPurchases = async (): Promise<Purchase[]> => {
     return (data as Purchase[]) || [];
   } catch (err) {
     console.error('Error fetching purchases:', err);
-    return [];
+    throw err;
   }
 };
 

@@ -12,6 +12,7 @@ import { Contact, CustomerStatus, CallLogEntry, Inquiry, Purchase } from '../typ
 import CompanyName from './CompanyName';
 import AgentCallActivity from './AgentCallActivity';
 import { useToast } from './ToastProvider';
+import { countCallOutcomes } from './callMetricsUtils';
 
 // Mock Chat Data
 interface ChatMessage {
@@ -106,28 +107,32 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
   const { addToast } = useToast();
 
   const loadData = useCallback(async () => {
-      const [contactData, callLogData, inquiryData, purchaseData] = await Promise.all([
-          fetchContacts(),
-          fetchCallLogs(),
-          fetchInquiries(),
-          fetchPurchases()
-      ]);
+      try {
+          const [contactData, callLogData, inquiryData, purchaseData] = await Promise.all([
+              fetchContacts(),
+              fetchCallLogs(),
+              fetchInquiries(),
+              fetchPurchases()
+          ]);
 
-      setContacts(contactData);
-      setCallLogs(callLogData.length ? callLogData : []);
-      setInquiries(inquiryData);
-      setPurchases(purchaseData);
+          setContacts(contactData);
+          setCallLogs(callLogData.length ? callLogData : []);
+          setInquiries(inquiryData);
+          setPurchases(purchaseData);
 
-      setSelectedContactId((prev) => {
-          if (prev) return prev;
-          return contactData.length ? contactData[0].id : null;
-      });
+          setSelectedContactId((prev) => {
+              if (prev) return prev;
+              return contactData.length ? contactData[0].id : null;
+          });
 
-      setCustomerStats({
-          active: contactData.filter(c => c.status === CustomerStatus.ACTIVE).length,
-          inactive: contactData.filter(c => c.status === CustomerStatus.INACTIVE).length,
-          prospective: contactData.filter(c => c.status === CustomerStatus.PROSPECTIVE).length,
-      });
+          setCustomerStats({
+              active: contactData.filter(c => c.status === CustomerStatus.ACTIVE).length,
+              inactive: contactData.filter(c => c.status === CustomerStatus.INACTIVE).length,
+              prospective: contactData.filter(c => c.status === CustomerStatus.PROSPECTIVE).length,
+          });
+      } catch (error) {
+          console.error('Error loading live call monitoring data:', error);
+      }
   }, []);
 
   useEffect(() => {
@@ -302,11 +307,12 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
   const missedCalls = 0; // No explicit status in new schema; keep placeholder for metric slot
   const inProgressCalls = 0;
   
+  const outcomeCounts = useMemo(() => countCallOutcomes(effectiveLogs), [effectiveLogs]);
   const outcomeData = [
-    { name: 'Positive', value: effectiveLogs.filter(c => c.outcome === 'positive').length, color: '#10b981' },
-    { name: 'Follow-up', value: effectiveLogs.filter(c => c.outcome === 'follow_up').length, color: '#f59e0b' },
-    { name: 'Negative', value: effectiveLogs.filter(c => c.outcome === 'negative').length, color: '#ef4444' },
-    { name: 'Others', value: effectiveLogs.filter(c => c.outcome === 'other').length, color: '#6366f1' },
+    { name: 'Positive', value: outcomeCounts.positive, color: '#10b981' },
+    { name: 'Follow-up', value: outcomeCounts.follow_up, color: '#f59e0b' },
+    { name: 'Negative', value: outcomeCounts.negative, color: '#ef4444' },
+    { name: 'Others', value: outcomeCounts.other, color: '#6366f1' },
   ];
 
   // --- Agent Chart Data ---
@@ -668,6 +674,83 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4 space-y-4">
          {/* 3. Main Dashboard Grid (Flex-1 to prevent scroll) */}
          <div className="grid grid-cols-12 gap-4">
+          {/* [NEW] Priority Dashboard Row */}
+          <div className="col-span-12 grid grid-cols-1 md:grid-cols-12 gap-4">
+             {/* 1. Agent Call Volume (5 cols) */}
+             <div className="col-span-12 md:col-span-5 h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col">
+                 <div className="flex justify-between items-center mb-2 shrink-0">
+                    <h3 className="font-bold text-sm text-slate-800 dark:text-white">Agent Call Volume</h3>
+                    <div className="flex gap-4 text-xs">
+                       <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Calls</div>
+                       <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Success</div>
+                    </div>
+                 </div>
+                 <div className="flex-1 w-full min-h-0">
+                     <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={agentChartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }} barSize={20}>
+                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
+                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} dy={5} />
+                             <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                             <Tooltip 
+                               cursor={{fill: 'rgba(255,255,255,0.05)'}}
+                               contentStyle={{ backgroundColor: '#1e293b', borderRadius: '4px', border: 'none', color: '#f8fafc', fontSize: '12px' }}
+                             />
+                             <Bar dataKey="calls" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                             <Bar dataKey="successful" fill="#10b981" radius={[2, 2, 0, 0]} />
+                         </BarChart>
+                     </ResponsiveContainer>
+                 </div>
+             </div>
+
+             {/* 2. Outcomes (3 cols) */}
+             <div className="col-span-12 md:col-span-3 h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col items-center justify-center relative">
+                  <h3 className="absolute top-4 left-4 text-xs font-bold text-slate-500 uppercase">Outcomes</h3>
+                  <div className="flex-1 w-full h-full min-h-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie data={outcomeData} cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={2} dataKey="value">
+                                {outcomeData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />)}
+                            </Pie>
+                            <Tooltip contentStyle={{borderRadius: '4px', border:'none', backgroundColor: '#1e293b', color: '#fff', fontSize: '10px', padding: '4px'}} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="w-full flex justify-center gap-3 mt-0">
+                     {outcomeData.slice(0,2).map((item) => (
+                         <div key={item.name} className="flex items-center gap-1.5 text-[10px]">
+                             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }}></div>
+                             <span className="text-slate-500 dark:text-slate-400">{item.name}</span>
+                             <span className="font-bold text-slate-700 dark:text-slate-300">{item.value}</span>
+                         </div>
+                     ))}
+                  </div>
+                  <div className="w-full flex justify-center gap-3 mt-1">
+                     {outcomeData.slice(2).map((item) => (
+                         <div key={item.name} className="flex items-center gap-1.5 text-[10px]">
+                             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }}></div>
+                             <span className="text-slate-500 dark:text-slate-400">{item.name}</span>
+                             <span className="font-bold text-slate-700 dark:text-slate-300">{item.value}</span>
+                         </div>
+                     ))}
+                  </div>
+             </div>
+
+             {/* 3. Recent Activity (4 cols) */}
+             <div className="col-span-12 md:col-span-4 h-64">
+                <AgentCallActivity
+                  callLogs={filteredLogs}
+                  inquiries={filteredInquiries}
+                  contacts={contacts}
+                  maxItems={8}
+                  title="Recent Activity"
+                  className="h-full"
+                />
+             </div>
+          </div>
+
+          <div className="col-span-12 h-px bg-slate-200 dark:bg-slate-800"></div>
+
+          {/* Customer Lists & Details */}
             {/* Customer Lists */}
             <div className="col-span-12 lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 space-y-3">
                <div className="flex items-center justify-between">
@@ -943,31 +1026,7 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
               {/* LEFT COLUMN: Activity & List (Span 9) */}
               <div className="col-span-12 lg:col-span-9 flex flex-col gap-4 min-h-0">
                   
-                  {/* Row 1: Agent Activity Chart (Fixed Height) */}
-                  <div className="h-64 shrink-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col">
-                      <div className="flex justify-between items-center mb-2 shrink-0">
-                         <h3 className="font-bold text-sm text-slate-800 dark:text-white">Agent Call Volume</h3>
-                         <div className="flex gap-4 text-xs">
-                            <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Calls</div>
-                            <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Success</div>
-                         </div>
-                      </div>
-                      <div className="flex-1 w-full min-h-0">
-                          <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={agentChartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }} barSize={20}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
-                                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} dy={5} />
-                                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
-                                  <Tooltip 
-                                    cursor={{fill: 'rgba(255,255,255,0.05)'}}
-                                    contentStyle={{ backgroundColor: '#1e293b', borderRadius: '4px', border: 'none', color: '#f8fafc', fontSize: '12px' }}
-                                  />
-                                  <Bar dataKey="calls" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                                  <Bar dataKey="successful" fill="#10b981" radius={[2, 2, 0, 0]} />
-                              </BarChart>
-                          </ResponsiveContainer>
-                      </div>
-                  </div>
+
 
                   {/* Row 2: Call Log Table (Flex-1 Scrollable) */}
                   <div className="flex-1 min-h-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden">
@@ -1056,39 +1115,8 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
 
               {/* RIGHT COLUMN: Insights & Chat (Span 3) */}
               <div className="col-span-12 lg:col-span-3 flex flex-col gap-4 h-full min-h-0 lg:self-start">
-                  <AgentCallActivity
-                    callLogs={filteredLogs}
-                    inquiries={filteredInquiries}
-                    contacts={contacts}
-                    maxItems={8}
-                    title="Recent Activity"
-                  />
-                  
-                  {/* Outcome Chart (Fixed Height) */}
-                  <div className="h-48 shrink-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-row items-center">
-                       <div className="flex-1 h-full relative">
-                          <h3 className="absolute top-0 left-0 text-xs font-bold text-slate-500 uppercase">Outcomes</h3>
-                          <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                  <Pie data={outcomeData} cx="50%" cy="50%" innerRadius={35} outerRadius={50} paddingAngle={2} dataKey="value">
-                                      {outcomeData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />)}
-                                  </Pie>
-                                  <Tooltip contentStyle={{borderRadius: '4px', border:'none', backgroundColor: '#1e293b', color: '#fff', fontSize: '10px', padding: '4px'}} />
-                              </PieChart>
-                          </ResponsiveContainer>
-                       </div>
-                       <div className="w-28 flex flex-col justify-center gap-2">
-                          {outcomeData.map((item) => (
-                              <div key={item.name} className="flex items-center justify-between text-[10px]">
-                                  <div className="flex items-center gap-1.5">
-                                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.color }}></div>
-                                      <span className="text-slate-500 dark:text-slate-400">{item.name}</span>
-                                  </div>
-                                  <span className="font-bold text-slate-700 dark:text-slate-300">{item.value}</span>
-                              </div>
-                          ))}
-                       </div>
-                  </div>
+
+
 
                   {/* Chat (Flex-1) */}
                   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-[420px]">
