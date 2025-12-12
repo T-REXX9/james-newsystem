@@ -810,11 +810,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             {achievementsValue !== null ? formatCurrency(achievementsValue) : '—'}
           </p>
           <p
-            className={`text-xs font-semibold mt-1 ${
-              percentAchieved !== null && percentAchieved > 80
+            className={`text-xs font-semibold mt-1 ${percentAchieved !== null && percentAchieved > 80
                 ? 'text-emerald-500'
                 : 'text-slate-500 dark:text-slate-400'
-            }`}
+              }`}
           >
             {percentAchieved !== null ? `${percentAchieved}% of target` : 'Data unavailable'}
           </p>
@@ -837,15 +836,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <span className="text-xs font-semibold uppercase tracking-wide">Remaining</span>
             </div>
             <AlertCircle
-              className={`w-4 h-4 ${
-                remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-400 dark:text-slate-500'
-              }`}
+              className={`w-4 h-4 ${remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-400 dark:text-slate-500'
+                }`}
             />
           </div>
           <p
-            className={`text-2xl font-bold ${
-              remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-800 dark:text-white'
-            }`}
+            className={`text-2xl font-bold ${remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-800 dark:text-white'
+              }`}
           >
             {remainingQuota !== null ? formatCurrency(remainingQuota) : '—'}
           </p>
@@ -930,11 +927,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <button
                 key={status}
                 onClick={() => toggleStatusFilter(status)}
-                className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${
-                  statusFilters.includes(status)
+                className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${statusFilters.includes(status)
                     ? 'bg-brand-blue text-white border-brand-blue'
                     : 'bg-slate-50 dark:bg-slate-900/60 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-300'
-                }`}
+                  }`}
               >
                 {status}
               </button>
@@ -1228,7 +1224,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
         <div className="lg:col-span-5 space-y-6">
           <div className="space-y-6">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-purple-400/70 rounded-xl shadow-sm p-4 lg:sticky xl:top-24 z-10 flex flex-col lg:max-h-[calc(100vh-150px)]">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-purple-400/70 rounded-xl shadow-sm p-4 lg:sticky xl:top-24 z-10 flex flex-col max-h-[850px]">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Bell className="w-5 h-5 text-brand-blue" />
