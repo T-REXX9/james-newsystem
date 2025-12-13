@@ -811,8 +811,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </p>
           <p
             className={`text-xs font-semibold mt-1 ${percentAchieved !== null && percentAchieved > 80
-                ? 'text-emerald-500'
-                : 'text-slate-500 dark:text-slate-400'
+              ? 'text-emerald-500'
+              : 'text-slate-500 dark:text-slate-400'
               }`}
           >
             {percentAchieved !== null ? `${percentAchieved}% of target` : 'Data unavailable'}
@@ -928,8 +928,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 key={status}
                 onClick={() => toggleStatusFilter(status)}
                 className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${statusFilters.includes(status)
-                    ? 'bg-brand-blue text-white border-brand-blue'
-                    : 'bg-slate-50 dark:bg-slate-900/60 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-300'
+                  ? 'bg-brand-blue text-white border-brand-blue'
+                  : 'bg-slate-50 dark:bg-slate-900/60 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-300'
                   }`}
               >
                 {status}
@@ -1224,8 +1224,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
         <div className="lg:col-span-5 space-y-6">
           <div className="space-y-6">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-purple-400/70 rounded-xl shadow-sm p-4 lg:sticky xl:top-24 z-10 flex flex-col max-h-[850px]">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-purple-400/70 rounded-xl shadow-sm p-4 flex flex-col max-h-[500px] min-h-0">
+              <div className="flex items-center justify-between mb-4 shrink-0">
                 <div className="flex items-center gap-2">
                   <Bell className="w-5 h-5 text-brand-blue" />
                   <h3 className="text-lg font-bold text-slate-800 dark:text-white">Activity Highlights</h3>
@@ -1237,36 +1237,38 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   Mark all seen
                 </button>
               </div>
-              <div className="space-y-3 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent flex-1">
-                {activityItems.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className={`p-3 rounded-xl border ${activity.read ? 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60' : 'border-brand-blue/20 bg-blue-50/60 dark:bg-blue-900/30'}`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                        {activity.type === 'report' ? <ShieldAlert className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
-                        {activity.type === 'report' ? 'Owner' : 'Stock'}
-                      </span>
-                      {!activity.read && (
-                        <button
-                          onClick={() => handleActivityRead(activity.id)}
-                          className="text-[11px] font-semibold text-brand-blue hover:underline"
-                        >
-                          Mark seen
-                        </button>
-                      )}
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                <div className="space-y-3">
+                  {activityItems.map((activity) => (
+                    <div
+                      key={activity.id}
+                      className={`p-3 rounded-xl border ${activity.read ? 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60' : 'border-brand-blue/20 bg-blue-50/60 dark:bg-blue-900/30'}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                          {activity.type === 'report' ? <ShieldAlert className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
+                          {activity.type === 'report' ? 'Owner' : 'Stock'}
+                        </span>
+                        {!activity.read && (
+                          <button
+                            onClick={() => handleActivityRead(activity.id)}
+                            className="text-[11px] font-semibold text-brand-blue hover:underline"
+                          >
+                            Mark seen
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{activity.title}</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{activity.message}</p>
+                      <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                        {formatRelativeTime(activity.timestamp)}
+                      </div>
                     </div>
-                    <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{activity.title}</p>
-                    <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{activity.message}</p>
-                    <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-                      {formatRelativeTime(activity.timestamp)}
-                    </div>
-                  </div>
-                ))}
-                {activityItems.length === 0 && (
-                  <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-6">No recent activity</div>
-                )}
+                  ))}
+                  {activityItems.length === 0 && (
+                    <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-6">No recent activity</div>
+                  )}
+                </div>
               </div>
             </div>
 

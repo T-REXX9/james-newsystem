@@ -250,7 +250,8 @@ import { NotificationProvider } from './components/NotificationProvider';const A
           </div>
         </NotificationProvider>
       )}
-      {appLoading && !session && (
+      {/* Show loading spinner when app is loading OR when session exists but profile is still being fetched */}
+      {(appLoading || (session && !userProfile)) && (
         <div className="h-screen w-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
             <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
         </div>
