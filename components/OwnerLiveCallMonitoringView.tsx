@@ -7,12 +7,14 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { MOCK_AGENTS } from '../constants';
-import { fetchContacts, fetchCallLogs, fetchInquiries, fetchPurchases, subscribeToCallMonitoringUpdates, updateContact, createInquiry } from '../services/supabaseService';
-import { Contact, CustomerStatus, CallLogEntry, Inquiry, Purchase } from '../types';
+import { fetchContacts, fetchCallLogs, fetchInquiries, fetchPurchases, subscribeToCallMonitoringUpdates, updateContact, createInquiry, fetchAgentPerformanceLeaderboard, fetchAgentPerformanceSummary } from '../services/supabaseService';
+import { Contact, CustomerStatus, CallLogEntry, Inquiry, Purchase, AgentSalesData, AgentPerformanceSummary } from '../types';
 import CompanyName from './CompanyName';
 import AgentCallActivity from './AgentCallActivity';
 import { useToast } from './ToastProvider';
 import { countCallOutcomes } from './callMetricsUtils';
+import SalesPerformanceCard from './SalesPerformanceCard';
+import AgentSummaryModal from './AgentSummaryModal';
 
 // Mock Chat Data
 interface ChatMessage {
@@ -93,6 +95,14 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
     // Customer Stats State
     const [customerStats, setCustomerStats] = useState({ active: 0, inactive: 0, prospective: 0 });
 
+    // Sales Performance Leaderboard State
+    const [agentLeaderboard, setAgentLeaderboard] = useState<AgentSalesData[]>([]);
+    const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+    const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+    const [showAgentModal, setShowAgentModal] = useState(false);
+    const [agentSummary, setAgentSummary] = useState<AgentPerformanceSummary | null>(null);
+    const [agentSummaryLoading, setAgentSummaryLoading] = useState(false);
+
     // Chat State
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
     const [newMessage, setNewMessage] = useState('');
@@ -130,8 +140,38 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                 inactive: contactData.filter(c => c.status === CustomerStatus.INACTIVE).length,
                 prospective: contactData.filter(c => c.status === CustomerStatus.PROSPECTIVE).length,
             });
+
+            // Load sales performance leaderboard for current month
+            const today = new Date();
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+            const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+
+            setLeaderboardLoading(true);
+            const leaderboardData = await fetchAgentPerformanceLeaderboard(startOfMonth, endOfMonth);
+            setAgentLeaderboard(leaderboardData);
+            setLeaderboardLoading(false);
         } catch (error) {
             console.error('Error loading live call monitoring data:', error);
+            setLeaderboardLoading(false);
+        }
+    }, []);
+
+    const loadAgentSummary = useCallback(async (agentId: string) => {
+        try {
+            setSelectedAgentId(agentId);
+            setShowAgentModal(true);
+            setAgentSummaryLoading(true);
+
+            const today = new Date();
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+            const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+
+            const summary = await fetchAgentPerformanceSummary(agentId, startOfMonth, endOfMonth);
+            setAgentSummary(summary);
+            setAgentSummaryLoading(false);
+        } catch (error) {
+            console.error('Error loading agent summary:', error);
+            setAgentSummaryLoading(false);
         }
     }, []);
 
@@ -750,6 +790,17 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
 
                     <div className="col-span-12 h-px bg-slate-200 dark:bg-slate-800"></div>
 
+                    {/* Sales Performance Leaderboard Row */}
+                    <div className="col-span-12 grid grid-cols-1 md:grid-cols-12 gap-4">
+                        <SalesPerformanceCard
+                            agents={agentLeaderboard}
+                            onAgentClick={loadAgentSummary}
+                            loading={leaderboardLoading}
+                        />
+                    </div>
+
+                    <div className="col-span-12 h-px bg-slate-200 dark:bg-slate-800"></div>
+
                     {/* Customer Lists & Details */}
                     {/* Customer Lists */}
                     <div className="col-span-12 lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 space-y-3">
@@ -1251,6 +1302,14 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                 >
                     <textarea value={replyMessage} onChange={(e) => setReplyMessage(e.target.value)} className="w-full text-sm px-3 py-2 rounded-md border border-slate-200 focus:border-brand-blue focus:outline-none min-h-[120px]" placeholder="Type your response for the field team..."></textarea>
                 </ActionModal>
+
+                {/* Agent Summary Modal */}
+                <AgentSummaryModal
+                    isOpen={showAgentModal}
+                    onClose={() => setShowAgentModal(false)}
+                    agentSummary={agentSummary}
+                    loading={agentSummaryLoading}
+                />
             </div>
         </div>
     );

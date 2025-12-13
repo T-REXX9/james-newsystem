@@ -31,26 +31,26 @@ export const createContact = async (contact: Omit<Contact, 'id'>): Promise<void>
 };
 
 export const updateContact = async (id: string, updates: Partial<Contact>): Promise<void> => {
-    try {
-      const { error } = await supabase.from('contacts').update(updates).eq('id', id);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error updating contact:", err);
-      throw err;
-    }
-  };
+  try {
+    const { error } = await supabase.from('contacts').update(updates).eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.error("Error updating contact:", err);
+    throw err;
+  }
+};
 
 export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact>): Promise<void> => {
-    try {
-        // Mock query builder update isn't sophisticated for "IN" clauses in this demo
-        // so we loop. In real Supabase: .in('id', ids).update(updates)
-        for (const id of ids) {
-            await updateContact(id, updates);
-        }
-    } catch (err) {
-        console.error("Error bulk updating contacts:", err);
-        throw err;
+  try {
+    // Mock query builder update isn't sophisticated for "IN" clauses in this demo
+    // so we loop. In real Supabase: .in('id', ids).update(updates)
+    for (const id of ids) {
+      await updateContact(id, updates);
     }
+  } catch (err) {
+    console.error("Error bulk updating contacts:", err);
+    throw err;
+  }
 }
 
 export const fetchDeals = async (): Promise<PipelineDeal[]> => {
@@ -354,45 +354,45 @@ export const updateStaffRole = async (userId: string, role: string) => {
 // --- TASKS SERVICE ---
 
 export const fetchTasks = async (): Promise<Task[]> => {
-    try {
-      const { data, error } = await supabase.from('tasks').select('*');
-      if (error) throw error;
-      return (data as Task[]) || [];
-    } catch (err) {
-      console.error("Error fetching tasks:", err);
-      return [];
-    }
-  };
-  
-  export const createTask = async (task: Omit<Task, 'id'>): Promise<void> => {
-    try {
-      const { error } = await supabase.from('tasks').insert(task);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error creating task:", err);
-      throw err;
-    }
-  };
-  
-  export const updateTask = async (id: string, updates: Partial<Task>): Promise<void> => {
-    try {
-      const { error } = await supabase.from('tasks').update(updates).eq('id', id);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error updating task:", err);
-      throw err;
-    }
-  };
-  
+  try {
+    const { data, error } = await supabase.from('tasks').select('*');
+    if (error) throw error;
+    return (data as Task[]) || [];
+  } catch (err) {
+    console.error("Error fetching tasks:", err);
+    return [];
+  }
+};
+
+export const createTask = async (task: Omit<Task, 'id'>): Promise<void> => {
+  try {
+    const { error } = await supabase.from('tasks').insert(task);
+    if (error) throw error;
+  } catch (err) {
+    console.error("Error creating task:", err);
+    throw err;
+  }
+};
+
+export const updateTask = async (id: string, updates: Partial<Task>): Promise<void> => {
+  try {
+    const { error } = await supabase.from('tasks').update(updates).eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.error("Error updating task:", err);
+    throw err;
+  }
+};
+
 export const deleteTask = async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase.from('tasks').delete().eq('id', id);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Error deleting task:", err);
-      throw err;
-    }
-  };
+  try {
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.error("Error deleting task:", err);
+    throw err;
+  }
+};
 
 // --- TEAM MESSAGES SERVICE ---
 
@@ -891,7 +891,7 @@ export const updateCustomerMetrics = async (contactId: string, metrics: any) => 
       .select('id')
       .eq('contact_id', contactId)
       .single();
-    
+
     if (existing) {
       const { error } = await supabase
         .from('customer_metrics')
@@ -922,7 +922,7 @@ export const fetchInactiveCustomers = async (inactiveDays: number = 30): Promise
       .select('*, customer_metrics(*)')
       .eq('status', 'Inactive')
       .lte('customer_metrics.last_purchase_date', cutoffDateStr);
-    
+
     if (error) throw error;
     return data || [];
   } catch (err) {
@@ -943,7 +943,7 @@ export const fetchInactiveCriticalCustomers = async (inactiveDays: number = 30):
       .eq('status', 'Inactive')
       .lte('customer_metrics.last_purchase_date', cutoffDateStr)
       .gt('customer_metrics.outstanding_balance', 0);
-    
+
     if (error) throw error;
     return data || [];
   } catch (err) {
@@ -957,7 +957,7 @@ export const fetchInquiryOnlyCustomers = async (minRatio: number = 2): Promise<a
     const { data: contacts, error } = await supabase
       .from('contacts')
       .select('*');
-    
+
     if (error) throw error;
 
     // Fetch inquiry and purchase data for each contact
@@ -967,7 +967,7 @@ export const fetchInquiryOnlyCustomers = async (minRatio: number = 2): Promise<a
         .from('inquiry_history')
         .select('*')
         .eq('contact_id', contact.id);
-      
+
       const { data: purchases } = await supabase
         .from('purchase_history')
         .select('*')
@@ -975,7 +975,7 @@ export const fetchInquiryOnlyCustomers = async (minRatio: number = 2): Promise<a
 
       const inquiryCount = inquiries?.length || 0;
       const purchaseCount = purchases?.length || 0;
-      
+
       if (purchaseCount > 0 && inquiryCount / purchaseCount >= minRatio) {
         inquiryOnlyCustomers.push({
           ...contact,
@@ -1010,15 +1010,15 @@ export const fetchMonthlySalesPerformanceBySalesperson = async (year: number, mo
     if (error) throw error;
 
     const performanceMap = new Map();
-    
+
     for (const contact of contacts || []) {
       const salesman = contact.salesman || 'Unassigned';
       const purchases = contact.purchase_history || [];
-      
+
       // Filter purchases for the specific month/year
       let monthSales = 0;
       let prevMonthSales = 0;
-      
+
       for (const purchase of purchases) {
         const purchaseDate = new Date(purchase.purchase_date);
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
@@ -1038,7 +1038,7 @@ export const fetchMonthlySalesPerformanceBySalesperson = async (year: number, mo
             customerCount: 0
           });
         }
-        
+
         const perf = performanceMap.get(salesman);
         perf.currentMonthSales += monthSales;
         perf.previousMonthSales += prevMonthSales;
@@ -1050,7 +1050,7 @@ export const fetchMonthlySalesPerformanceBySalesperson = async (year: number, mo
     const results = Array.from(performanceMap.values()).map((perf: any) => ({
       ...perf,
       salesChange: perf.currentMonthSales - perf.previousMonthSales,
-      percentageChange: perf.previousMonthSales > 0 
+      percentageChange: perf.previousMonthSales > 0
         ? ((perf.currentMonthSales - perf.previousMonthSales) / perf.previousMonthSales * 100)
         : 0
     }));
@@ -1072,14 +1072,14 @@ export const fetchMonthlySalesPerformanceByCity = async (year: number, month: nu
     if (error) throw error;
 
     const performanceMap = new Map();
-    
+
     for (const contact of contacts || []) {
       const city = contact.city || 'Unknown';
       const purchases = contact.purchase_history || [];
-      
+
       let monthSales = 0;
       let prevMonthSales = 0;
-      
+
       for (const purchase of purchases) {
         const purchaseDate = new Date(purchase.purchase_date);
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
@@ -1099,7 +1099,7 @@ export const fetchMonthlySalesPerformanceByCity = async (year: number, month: nu
             customerCount: 0
           });
         }
-        
+
         const perf = performanceMap.get(city);
         perf.currentMonthSales += monthSales;
         perf.previousMonthSales += prevMonthSales;
@@ -1110,7 +1110,7 @@ export const fetchMonthlySalesPerformanceByCity = async (year: number, month: nu
     const results = Array.from(performanceMap.values()).map((perf: any) => ({
       ...perf,
       salesChange: perf.currentMonthSales - perf.previousMonthSales,
-      percentageChange: perf.previousMonthSales > 0 
+      percentageChange: perf.previousMonthSales > 0
         ? ((perf.currentMonthSales - perf.previousMonthSales) / perf.previousMonthSales * 100)
         : 0
     }));
@@ -1136,10 +1136,10 @@ export const fetchSalesPerformanceByCustomerStatus = async (year: number, month:
     for (const contact of contacts || []) {
       const status = contact.status || 'Unknown';
       const purchases = contact.purchase_history || [];
-      
+
       let monthSales = 0;
       let prevMonthSales = 0;
-      
+
       for (const purchase of purchases) {
         const purchaseDate = new Date(purchase.purchase_date);
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
@@ -1159,7 +1159,7 @@ export const fetchSalesPerformanceByCustomerStatus = async (year: number, month:
             customerCount: 0
           });
         }
-        
+
         const perf = performanceMap.get(status);
         perf.currentMonthSales += monthSales;
         perf.previousMonthSales += prevMonthSales;
@@ -1174,7 +1174,7 @@ export const fetchSalesPerformanceByCustomerStatus = async (year: number, month:
         return {
           ...perf,
           salesChange: perf.currentMonthSales - perf.previousMonthSales,
-          percentageChange: perf.previousMonthSales > 0 
+          percentageChange: perf.previousMonthSales > 0
             ? ((perf.currentMonthSales - perf.previousMonthSales) / perf.previousMonthSales * 100)
             : 0
         };
@@ -1205,7 +1205,7 @@ export const fetchSalesPerformanceByPaymentType = async (year: number, month: nu
     for (const term of paymentTerms || []) {
       const termType = term.terms_type || 'cash';
       const purchases = term.purchase_history || [];
-      
+
       for (const purchase of purchases) {
         const purchaseDate = new Date(purchase.purchase_date);
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
@@ -1224,7 +1224,7 @@ export const fetchSalesPerformanceByPaymentType = async (year: number, month: nu
       previousMonthSales: perf.previousMonthSales,
       customerCount: perf.customerCount.size,
       salesChange: perf.currentMonthSales - perf.previousMonthSales,
-      percentageChange: perf.previousMonthSales > 0 
+      percentageChange: perf.previousMonthSales > 0
         ? ((perf.currentMonthSales - perf.previousMonthSales) / perf.previousMonthSales * 100)
         : 0
     }));
@@ -1415,9 +1415,9 @@ export const notifyRole = async (
       .from('profiles')
       .select('id')
       .eq('role', role);
-    
+
     if (profileError) throw profileError;
-    
+
     const inputs: CreateNotificationInput[] = (profiles || []).map((profile: any) => ({
       recipient_id: profile.id,
       title,
@@ -1445,9 +1445,9 @@ export const notifyAll = async (
     const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select('id');
-    
+
     if (profileError) throw profileError;
-    
+
     const inputs: CreateNotificationInput[] = (profiles || []).map((profile: any) => ({
       recipient_id: profile.id,
       title,
@@ -1461,5 +1461,177 @@ export const notifyAll = async (
   } catch (err) {
     console.error('Error notifying all:', err);
     return [];
+  }
+};
+
+// --- Sales Performance Leaderboard Services ---
+
+export const fetchAgentPerformanceLeaderboard = async (startDate: string, endDate: string): Promise<AgentSalesData[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('agent_sales_summary')
+      .select(`
+        agent_id,
+        total_sales,
+        profiles:agent_id (
+          full_name,
+          avatar_url
+        )
+      `)
+      .gte('date', startDate)
+      .lte('date', endDate);
+
+    if (error) throw error;
+
+    // Aggregate by agent and sort
+    const agentMap = new Map<string, { total_sales: number; profile: any }>();
+    (data || []).forEach((row: any) => {
+      const existing = agentMap.get(row.agent_id);
+      if (existing) {
+        existing.total_sales += row.total_sales;
+      } else {
+        agentMap.set(row.agent_id, {
+          total_sales: row.total_sales,
+          profile: Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+        });
+      }
+    });
+
+    // Convert to array and sort
+    const leaderboard: AgentSalesData[] = Array.from(agentMap.entries())
+      .map(([agent_id, { total_sales, profile }], idx) => ({
+        agent_id,
+        agent_name: profile?.full_name || 'Unknown',
+        avatar_url: profile?.avatar_url,
+        total_sales,
+        rank: idx + 1
+      }))
+      .sort((a, b) => b.total_sales - a.total_sales)
+      .map((agent, idx) => ({ ...agent, rank: idx + 1 }));
+
+    return leaderboard;
+  } catch (err) {
+    console.error('Error fetching agent performance leaderboard:', err);
+    return [];
+  }
+};
+
+export const fetchAgentPerformanceSummary = async (agentId: string, startDate: string, endDate: string): Promise<AgentPerformanceSummary | null> => {
+  try {
+    // Fetch agent profile
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', agentId)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+    if (!profileData) return null;
+
+    // Fetch aggregated sales from purchases
+    const { data: purchaseData, error: purchaseError } = await supabase
+      .from('purchases')
+      .select(`
+        amount,
+        purchased_at,
+        contacts:contact_id (
+          id,
+          company,
+          status,
+          salesman
+        )
+      `)
+      .gte('purchased_at', startDate)
+      .lte('purchased_at', endDate);
+
+    if (purchaseError) throw purchaseError;
+
+    // Filter purchases by agent (salesman field)
+    const agentPurchases = (purchaseData || []).filter((p: any) => {
+      const contact = Array.isArray(p.contacts) ? p.contacts[0] : p.contacts;
+      return contact?.salesman === profileData.full_name || contact?.salesman === agentId;
+    });
+
+    const totalSales = agentPurchases.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    // Calculate sales breakdown by customer status
+    let activeSales = 0;
+    let prospectiveSales = 0;
+    let inactiveSales = 0;
+
+    agentPurchases.forEach((p: any) => {
+      const contact = Array.isArray(p.contacts) ? p.contacts[0] : p.contacts;
+      const status = (contact?.status || 'Unknown').toLowerCase();
+      const amount = Number(p.amount) || 0;
+
+      if (status === 'active') {
+        activeSales += amount;
+      } else if (status === 'prospective') {
+        prospectiveSales += amount;
+      } else if (status === 'inactive') {
+        inactiveSales += amount;
+      }
+    });
+
+    // Fetch customer breakdown from agent_customer_breakdown table
+    const { data: breakdownData, error: breakdownError } = await supabase
+      .from('agent_customer_breakdown')
+      .select('*')
+      .eq('agent_id', agentId)
+      .gte('date', startDate)
+      .lte('date', endDate);
+
+    if (breakdownError) throw breakdownError;
+
+    const prospectiveCount = (breakdownData || []).reduce((sum, b) => sum + b.prospective_count, 0);
+    const activeCount = (breakdownData || []).reduce((sum, b) => sum + b.active_count, 0);
+    const inactiveCount = (breakdownData || []).reduce((sum, b) => sum + b.inactive_count, 0);
+
+    // Fetch top 5 customers
+    const { data: topCustomersData, error: topCustomersError } = await supabase
+      .from('agent_top_customers')
+      .select(`
+        *,
+        contacts:contact_id (
+          id,
+          company
+        )
+      `)
+      .eq('agent_id', agentId)
+      .order('rank', { ascending: true })
+      .limit(5);
+
+    if (topCustomersError) throw topCustomersError;
+
+    const topCustomers: TopCustomer[] = (topCustomersData || []).map((tc: any) => ({
+      id: tc.contact_id,
+      company: (Array.isArray(tc.contacts) ? tc.contacts[0] : tc.contacts)?.company || 'Unknown',
+      total_sales: tc.total_sales,
+      last_purchase_date: tc.last_purchase_date
+    }));
+
+    const monthlyQuota = profileData.monthly_quota || 0;
+    const remainingQuota = Math.max(0, monthlyQuota - totalSales);
+    const achievementPercentage = monthlyQuota > 0 ? (totalSales / monthlyQuota) * 100 : 0;
+
+    return {
+      agent_id: agentId,
+      agent_name: profileData.full_name || 'Unknown',
+      avatar_url: profileData.avatar_url,
+      monthly_quota: monthlyQuota,
+      current_achievement: totalSales,
+      remaining_quota: remainingQuota,
+      achievement_percentage: achievementPercentage,
+      prospective_count: prospectiveCount,
+      active_count: activeCount,
+      inactive_count: inactiveCount,
+      active_sales: activeSales,
+      prospective_sales: prospectiveSales,
+      inactive_sales: inactiveSales,
+      top_customers: topCustomers
+    };
+  } catch (err) {
+    console.error('Error fetching agent performance summary:', err);
+    return null;
   }
 };

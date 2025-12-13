@@ -157,7 +157,7 @@ export interface Contact {
   transactionType: string;
   vatType: string;
   vatPercentage: string;
-  
+
   // Dealership Specifics
   dealershipTerms: string;
   dealershipSince: string;
@@ -179,8 +179,8 @@ export interface Contact {
   email: string;
   phone: string;
   mobile?: string;
-  avatar: string; 
-  dealValue: number; 
+  avatar: string;
+  dealValue: number;
   stage: DealStage;
   lastContactDate: string;
   interactions: Interaction[];
@@ -188,13 +188,13 @@ export interface Contact {
   salesHistory: SalesRecord[];
   topProducts: string[];
   assignedAgent?: string; // Sync with 'salesman'
-  
+
   // AI Enriched Fields
-  aiScore?: number; 
+  aiScore?: number;
   aiReasoning?: string;
-  winProbability?: number; 
+  winProbability?: number;
   nextBestAction?: string;
-  
+
   // Legacy address fields mapping
   officeAddress?: string;
   shippingAddress?: string;
@@ -590,4 +590,39 @@ export interface MonthlyTeamPerformance {
   activeSalesCount: number;
   totalCustomers: number;
   averageOrderValue: number;
+}
+
+// --- Sales Performance Leaderboard Types ---
+
+export interface AgentSalesData {
+  agent_id: string;
+  agent_name: string;
+  avatar_url?: string;
+  total_sales: number;
+  rank: number;
+}
+
+export interface TopCustomer {
+  id: string;
+  company: string;
+  total_sales: number;
+  last_purchase_date?: string;
+}
+
+export interface AgentPerformanceSummary {
+  agent_id: string;
+  agent_name: string;
+  avatar_url?: string;
+  monthly_quota: number;
+  current_achievement: number;
+  remaining_quota: number;
+  achievement_percentage: number;
+  prospective_count: number;
+  active_count: number;
+  inactive_count: number;
+  // new fields for sales breakdown
+  active_sales: number;
+  prospective_sales: number;
+  inactive_sales: number;
+  top_customers: TopCustomer[];
 }
