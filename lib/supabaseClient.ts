@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, MOCK_CONTACTS, MOCK_PIPELINE_DEALS, MOCK_PRODUCTS, MOCK_REORDER_REPORT, MOCK_TASKS, MOCK_TEAM_MESSAGES, MOCK_NOTIFICATIONS, generateAvatarUrl, generateCallMonitoringSeed, STAFF_ROLES } from '../constants';
 
-type TableName = 'contacts' | 'deals' | 'users' | 'profiles' | 'products' | 'tasks' | 'reorder-report' | 'call_logs' | 'inquiries' | 'purchases' | 'team_messages' | 'notifications';
+type TableName = 'contacts' | 'deals' | 'users' | 'profiles' | 'products' | 'tasks' | 'reorder-report' | 'call_logs' | 'inquiries' | 'purchases' | 'team_messages' | 'notifications' | 'sales_inquiries' | 'sales_inquiry_items';
 
 interface MockUser {
   id: string;

@@ -17,6 +17,34 @@ export enum CustomerStatus {
   BLACKLISTED = 'Blacklisted'
 }
 
+export enum SalesInquiryStatus {
+  DRAFT = 'draft',
+  APPROVED = 'approved',
+  CONVERTED_TO_ORDER = 'converted_to_order',
+  CANCELLED = 'cancelled',
+}
+
+export enum SalesOrderStatus {
+  PENDING = 'pending',
+  CONFIRMED = 'confirmed',
+  CONVERTED_TO_DOCUMENT = 'converted_to_document',
+  CANCELLED = 'cancelled',
+}
+
+export enum OrderSlipStatus {
+  DRAFT = 'draft',
+  FINALIZED = 'finalized',
+  CANCELLED = 'cancelled',
+}
+
+export enum InvoiceStatus {
+  DRAFT = 'draft',
+  SENT = 'sent',
+  PAID = 'paid',
+  OVERDUE = 'overdue',
+  CANCELLED = 'cancelled',
+}
+
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
 
 export interface Notification {
@@ -625,4 +653,277 @@ export interface AgentPerformanceSummary {
   prospective_sales: number;
   inactive_sales: number;
   top_customers: TopCustomer[];
+}
+
+// --- Sales Inquiry Types ---
+
+export interface SalesInquiryItem {
+  id: string;
+  inquiry_id: string;
+  qty: number;
+  part_no: string;
+  item_code: string;
+  location: string;
+  description: string;
+  unit_price: number;
+  amount: number;
+  remark?: string;
+  approval_status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface SalesInquiry {
+  id: string;
+  inquiry_no: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person: string;
+  delivery_address: string;
+  reference_no: string;
+  customer_reference: string;
+  send_by: string;
+  price_group: string;
+  credit_limit: number;
+  terms: string;
+  promise_to_pay: string;
+  po_number: string;
+  remarks?: string;
+  inquiry_type: string;
+  urgency: string;
+  urgency_date?: string;
+  grand_total: number;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+  status: SalesInquiryStatus;
+  items?: SalesInquiryItem[];
+}
+
+export interface SalesInquiryDTO {
+  contact_id: string;
+  sales_date: string;
+  sales_person: string;
+  delivery_address: string;
+  reference_no: string;
+  customer_reference: string;
+  send_by: string;
+  price_group: string;
+  credit_limit: number;
+  terms: string;
+  promise_to_pay: string;
+  po_number: string;
+  remarks?: string;
+  inquiry_type: string;
+  urgency: string;
+  urgency_date?: string;
+  status?: SalesInquiryStatus;
+  items: Omit<SalesInquiryItem, 'id' | 'inquiry_id'>[];
+}
+
+export interface SalesOrderItem {
+  id: string;
+  order_id: string;
+  qty: number;
+  part_no: string;
+  item_code: string;
+  location: string;
+  description: string;
+  unit_price: number;
+  amount: number;
+  remark?: string;
+  approval_status?: 'pending' | 'approved' | 'rejected';
+}
+
+export interface SalesOrder {
+  id: string;
+  order_no: string;
+  inquiry_id?: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person: string;
+  delivery_address: string;
+  reference_no: string;
+  customer_reference: string;
+  send_by: string;
+  price_group: string;
+  credit_limit: number;
+  terms: string;
+  promise_to_pay: string;
+  po_number: string;
+  remarks?: string;
+  inquiry_type: string;
+  urgency: string;
+  urgency_date?: string;
+  grand_total: number;
+  status: SalesOrderStatus;
+  approved_by?: string;
+  approved_at?: string;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+  items: SalesOrderItem[];
+}
+
+export interface SalesOrderDTO {
+  inquiry_id?: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person: string;
+  delivery_address: string;
+  reference_no: string;
+  customer_reference: string;
+  send_by: string;
+  price_group: string;
+  credit_limit: number;
+  terms: string;
+  promise_to_pay: string;
+  po_number: string;
+  remarks?: string;
+  inquiry_type: string;
+  urgency: string;
+  urgency_date?: string;
+  status?: SalesOrderStatus;
+  approved_by?: string;
+  approved_at?: string;
+  items: Omit<SalesOrderItem, 'id' | 'order_id'>[];
+}
+
+export interface OrderSlipItem {
+  id: string;
+  order_slip_id: string;
+  qty: number;
+  part_no: string;
+  item_code: string;
+  location: string;
+  description: string;
+  unit_price: number;
+  amount: number;
+  remark?: string;
+}
+
+export interface OrderSlip {
+  id: string;
+  slip_no: string;
+  order_id: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person: string;
+  delivery_address: string;
+  reference_no: string;
+  customer_reference: string;
+  send_by: string;
+  price_group: string;
+  credit_limit: number;
+  terms: string;
+  promise_to_pay: string;
+  po_number: string;
+  remarks?: string;
+  inquiry_type: string;
+  urgency: string;
+  urgency_date?: string;
+  grand_total: number;
+  status: OrderSlipStatus;
+  printed_at?: string;
+  printed_by?: string;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+  items: OrderSlipItem[];
+}
+
+export interface OrderSlipDTO {
+  order_id: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person: string;
+  delivery_address: string;
+  reference_no: string;
+  customer_reference: string;
+  send_by: string;
+  price_group: string;
+  credit_limit: number;
+  terms: string;
+  promise_to_pay: string;
+  po_number: string;
+  remarks?: string;
+  inquiry_type: string;
+  urgency: string;
+  urgency_date?: string;
+  status?: OrderSlipStatus;
+  printed_at?: string;
+  printed_by?: string;
+  items: Omit<OrderSlipItem, 'id' | 'order_slip_id'>[];
+}
+
+export interface InvoiceItem {
+  id: string;
+  invoice_id: string;
+  qty: number;
+  part_no: string;
+  item_code: string;
+  description: string;
+  unit_price: number;
+  amount: number;
+  // Optional per-line VAT rate; manual invoices may populate this
+  // but it is not derived when converting sales orders, which use a global VAT rule.
+  vat_rate?: number;
+}
+
+export interface Invoice {
+  id: string;
+  invoice_no: string;
+  order_id: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person: string;
+  delivery_address: string;
+  reference_no: string;
+  customer_reference: string;
+  send_by: string;
+  price_group: string;
+  credit_limit: number;
+  terms: string;
+  promise_to_pay: string;
+  po_number: string;
+  remarks?: string;
+  inquiry_type: string;
+  urgency: string;
+  urgency_date?: string;
+  grand_total: number;
+  status: InvoiceStatus;
+  due_date?: string;
+  payment_date?: string;
+  payment_method?: string;
+  printed_at?: string;
+  sent_at?: string;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+  items: InvoiceItem[];
+}
+
+export interface InvoiceDTO {
+  order_id: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person: string;
+  delivery_address: string;
+  reference_no: string;
+  customer_reference: string;
+  send_by: string;
+  price_group: string;
+  credit_limit: number;
+  terms: string;
+  promise_to_pay: string;
+  po_number: string;
+  remarks?: string;
+  inquiry_type: string;
+  urgency: string;
+  urgency_date?: string;
+  status?: InvoiceStatus;
+  due_date?: string;
+  payment_date?: string;
+  payment_method?: string;
+  printed_at?: string;
+  sent_at?: string;
+  items: Omit<InvoiceItem, 'id' | 'invoice_id'>[];
 }
