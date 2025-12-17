@@ -10,21 +10,45 @@ import {
 import { fetchContacts, createNotification } from '../services/supabaseService';
 import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderService';
 import { supabase } from '../lib/supabaseClient';
-import { Contact, NotificationType, OrderSlip, OrderSlipStatus } from '../types';
+import { Contact, NotificationType, OrderSlip, OrderSlipItem, OrderSlipStatus } from '../types';
+import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
+import { useRealtimeList } from '../hooks/useRealtimeList';
+import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface OrderSlipViewProps {
   initialSlipId?: string;
 }
 
 const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
-  const [orderSlips, setOrderSlips] = useState<OrderSlip[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedSlip, setSelectedSlip] = useState<OrderSlip | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | OrderSlipStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [printing, setPrinting] = useState(false);
+
+  // Use real-time list for contacts
+  const { data: contacts } = useRealtimeList<Contact>({
+    tableName: 'contacts',
+    initialFetchFn: fetchContacts,
+  });
+
+  // Use real-time nested list for order slips with items
+  const sortByCreatedAt = (a: OrderSlip, b: OrderSlip) => {
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  };
+
+  const {
+    data: orderSlips,
+    isLoading: loading,
+    setData: setOrderSlips,
+  } = useRealtimeNestedList<OrderSlip, OrderSlipItem>({
+    parentTableName: 'order_slips',
+    childTableName: 'order_slip_items',
+    parentFetchFn: getAllOrderSlips,
+    childParentIdField: 'order_slip_id',
+    childrenField: 'items',
+    sortParentFn: sortByCreatedAt,
+  });
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
@@ -43,29 +67,12 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
   }, []);
 
-  const refreshData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [slipData, contactData] = await Promise.all([getAllOrderSlips(), fetchContacts()]);
-      setOrderSlips(slipData);
-      if (contactData.length) setContacts(contactData);
-      setSelectedSlip(prev => {
-        if (prev) {
-          const updated = slipData.find(slip => slip.id === prev.id);
-          return updated || slipData[0] || null;
-        }
-        return slipData[0] || null;
-      });
-    } catch (err) {
-      console.error('Error loading order slips:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Auto-select first slip when slips change
   useEffect(() => {
-    refreshData();
-  }, [refreshData]);
+    if (orderSlips.length > 0 && !selectedSlip) {
+      setSelectedSlip(orderSlips[0]);
+    }
+  }, [orderSlips, selectedSlip]);
 
   useEffect(() => {
     if (!initialSlipId || !orderSlips.length) return;
@@ -95,13 +102,18 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
   const handleFinalize = async () => {
     if (!selectedSlip || !canProcessOrderSlip) return;
     setFinalizing(true);
+
+    // Optimistic update
+    setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { status: OrderSlipStatus.FINALIZED } as Partial<OrderSlip>));
+    setSelectedSlip(prev => prev ? { ...prev, status: OrderSlipStatus.FINALIZED } : null);
+
     try {
       await finalizeOrderSlip(selectedSlip.id);
-      await refreshData();
       await notifyUser('Order Slip Finalized', `Order Slip ${selectedSlip.slip_no} marked as finalized.`);
     } catch (err) {
       console.error('Error finalizing order slip:', err);
       alert('Failed to finalize order slip');
+      // Real-time subscription will correct the state
     } finally {
       setFinalizing(false);
     }
@@ -110,14 +122,20 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
   const handlePrint = async () => {
     if (!selectedSlip || !canProcessOrderSlip) return;
     setPrinting(true);
+
+    // Optimistic update
+    const printedAt = new Date().toISOString();
+    setOrderSlips(prev => applyOptimisticUpdate(prev, selectedSlip.id, { printed_at: printedAt } as Partial<OrderSlip>));
+    setSelectedSlip(prev => prev ? { ...prev, printed_at: printedAt } : null);
+
     try {
       await printOrderSlip(selectedSlip.id);
-      await refreshData();
       await notifyUser('Order Slip Printed', `Order Slip ${selectedSlip.slip_no} was printed.`);
       window.print();
     } catch (err) {
       console.error('Error printing order slip:', err);
       alert('Failed to mark order slip as printed');
+      // Real-time subscription will correct the state
     } finally {
       setPrinting(false);
     }
@@ -131,10 +149,7 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
           <h1 className="text-lg font-semibold">Order Slips</h1>
           <p className="text-xs text-slate-300">Track document issuance and print status</p>
         </div>
-        <div className="flex-1" />
-        <button onClick={refreshData} className="px-3 py-1 bg-white/10 rounded text-xs flex items-center gap-2">
-          <RefreshCw className="w-3 h-3" /> Refresh
-        </button>
+
       </div>
       <div className="flex-1 flex overflow-hidden">
         <aside className="w-72 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">

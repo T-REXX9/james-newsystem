@@ -14,6 +14,7 @@ import {
   NotificationType,
   OrderSlip,
   SalesOrder,
+  SalesOrderItem,
   SalesOrderStatus,
 } from '../types';
 import {
@@ -26,6 +27,9 @@ import { fetchContacts, createNotification } from '../services/supabaseService';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import { supabase } from '../lib/supabaseClient';
+import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
+import { useRealtimeList } from '../hooks/useRealtimeList';
+import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface SalesOrderViewProps {
   initialOrderId?: string;
@@ -34,19 +38,40 @@ interface SalesOrderViewProps {
 const pageSize = 8;
 
 const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
-  const [orders, setOrders] = useState<SalesOrder[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | SalesOrderStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
-  const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [conversionModalOpen, setConversionModalOpen] = useState(false);
   const [conversionLoading, setConversionLoading] = useState(false);
   const [documentMessage, setDocumentMessage] = useState('');
   const [documentLink, setDocumentLink] = useState<{ type: 'orderslip' | 'invoice'; id: string; label: string } | null>(null);
   const [page, setPage] = useState(0);
+
+  // Use real-time list for contacts
+  const { data: contacts } = useRealtimeList<Contact>({
+    tableName: 'contacts',
+    initialFetchFn: fetchContacts,
+  });
+
+  // Use real-time nested list for sales orders with items
+  const sortByCreatedAt = (a: SalesOrder, b: SalesOrder) => {
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  };
+
+  const {
+    data: orders,
+    isLoading: loading,
+    setData: setOrders,
+  } = useRealtimeNestedList<SalesOrder, SalesOrderItem>({
+    parentTableName: 'sales_orders',
+    childTableName: 'sales_order_items',
+    parentFetchFn: getAllSalesOrders,
+    childParentIdField: 'order_id',
+    childrenField: 'items',
+    sortParentFn: sortByCreatedAt,
+  });
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
@@ -65,31 +90,12 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
   }, []);
 
-  const refreshData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [ordersData, contactsData] = await Promise.all([getAllSalesOrders(), fetchContacts()]);
-      setOrders(ordersData);
-      if (contactsData.length) {
-        setContacts(contactsData);
-      }
-      setSelectedOrder(prev => {
-        if (prev) {
-          const updated = ordersData.find(order => order.id === prev.id);
-          return updated || ordersData[0] || null;
-        }
-        return ordersData[0] || null;
-      });
-    } catch (err) {
-      console.error('Error loading sales orders:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Auto-select first order when orders change
   useEffect(() => {
-    refreshData();
-  }, [refreshData]);
+    if (orders.length > 0 && !selectedOrder) {
+      setSelectedOrder(orders[0]);
+    }
+  }, [orders, selectedOrder]);
 
   useEffect(() => {
     if (!initialOrderId || !orders.length) return;
@@ -132,13 +138,18 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const handleConfirmOrder = async () => {
     if (!selectedOrder) return;
     setConfirming(true);
+
+    // Optimistic update
+    setOrders(prev => applyOptimisticUpdate(prev, selectedOrder.id, { status: SalesOrderStatus.CONFIRMED } as Partial<SalesOrder>));
+    setSelectedOrder(prev => prev ? { ...prev, status: SalesOrderStatus.CONFIRMED } : null);
+
     try {
       await confirmSalesOrder(selectedOrder.id);
-      await refreshData();
       await notifyUser('Sales Order Confirmed', `Order ${selectedOrder.order_no} has been approved.`);
     } catch (err) {
       console.error('Error confirming sales order:', err);
       alert('Failed to confirm order');
+      // Real-time subscription will correct the state
     } finally {
       setConfirming(false);
     }
@@ -147,6 +158,13 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
   const handleConversion = async () => {
     if (!selectedOrder) return;
     setConversionLoading(true);
+
+    // Optimistic update
+    setOrders(prev => applyOptimisticUpdate(prev, selectedOrder.id, {
+      status: SalesOrderStatus.CONVERTED_TO_DOCUMENT
+    } as Partial<SalesOrder>));
+    setSelectedOrder(prev => prev ? { ...prev, status: SalesOrderStatus.CONVERTED_TO_DOCUMENT } : null);
+
     try {
       const document = await convertToDocument(selectedOrder.id);
       const isOrderSlip = (document as OrderSlip).slip_no !== undefined;
@@ -162,10 +180,11 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         await notifyUser('Invoice Created', `Order ${selectedOrder.order_no} converted to ${invoice.invoice_no}.`);
       }
       setConversionModalOpen(false);
-      await refreshData();
+      // Real-time subscription will update the state
     } catch (err) {
       console.error('Error converting sales order:', err);
       alert('Failed to convert order to document');
+      // Real-time subscription will correct the state
     } finally {
       setConversionLoading(false);
     }
@@ -185,13 +204,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
             <p className="text-xs text-slate-300">Track conversions from inquiries through document generation</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={refreshData}
-          className="px-3 py-1 rounded bg-white/10 text-white text-xs flex items-center gap-2"
-        >
-          <RefreshCw className="w-3 h-3" /> Refresh
-        </button>
+
       </div>
       <div className="flex-1 flex overflow-hidden">
         <aside className="w-80 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">

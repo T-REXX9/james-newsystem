@@ -8,8 +8,8 @@ import {
   ChevronUp,
   ListFilter,
   Search,
-  RefreshCw,
   Eye,
+  Loader2,
 } from 'lucide-react';
 import {
   Contact,
@@ -30,12 +30,14 @@ import {
   updateInquiryStatus,
 } from '../services/salesInquiryService';
 import { getSalesOrderByInquiry } from '../services/salesOrderService';
-import { MOCK_CUSTOMER_DATA } from './mockData';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
 import { createNotification } from '../services/supabaseService';
 import { supabase } from '../lib/supabaseClient';
 import { useToast } from './ToastProvider';
+import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
+import { useRealtimeList } from '../hooks/useRealtimeList';
+import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id'> {
   tempId?: string;
@@ -46,10 +48,7 @@ type SectionKey = 'metrics' | 'customer' | 'references' | 'pricing' | 'details' 
 const SalesInquiryView: React.FC = () => {
   const { addToast } = useToast();
   // Data
-  const [customers, setCustomers] = useState<Contact[]>(MOCK_CUSTOMER_DATA);
   const [loading, setLoading] = useState(false);
-  const [inquiries, setInquiries] = useState<SalesInquiry[]>([]);
-  const [listLoading, setListLoading] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<SalesInquiry | null>(null);
   const [linkedOrder, setLinkedOrder] = useState<SalesOrder | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | SalesInquiryStatus>('all');
@@ -60,6 +59,30 @@ const SalesInquiryView: React.FC = () => {
   const [conversionMessage, setConversionMessage] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [approvingInquiry, setApprovingInquiry] = useState(false);
+
+  // Use real-time list for contacts
+  const { data: customers } = useRealtimeList<Contact>({
+    tableName: 'contacts',
+    initialFetchFn: fetchContacts,
+  });
+
+  // Use real-time nested list for inquiries with items
+  const sortByCreatedAt = (a: SalesInquiry, b: SalesInquiry) => {
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  };
+
+  const {
+    data: inquiries,
+    isLoading: listLoading,
+    setData: setInquiries
+  } = useRealtimeNestedList<SalesInquiry, SalesInquiryItem>({
+    parentTableName: 'sales_inquiries',
+    childTableName: 'sales_inquiry_items',
+    parentFetchFn: getAllSalesInquiries,
+    childParentIdField: 'inquiry_id',
+    childrenField: 'items',
+    sortParentFn: sortByCreatedAt,
+  });
 
   // Form State
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
@@ -120,37 +143,12 @@ const SalesInquiryView: React.FC = () => {
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
   }, []);
 
-  const fetchCustomerDirectory = useCallback(async () => {
-    try {
-      const list = await fetchContacts();
-      if (list.length) {
-        setCustomers(list);
-      }
-    } catch (err) {
-      console.error('Error loading contacts:', err);
+  // Auto-select first inquiry when inquiries change
+  useEffect(() => {
+    if (inquiries.length > 0 && !selectedInquiry) {
+      setSelectedInquiry(inquiries[0]);
     }
-  }, []);
-
-  const fetchInquiries = useCallback(async () => {
-    setListLoading(true);
-    setManageError(null);
-    try {
-      const data = await getAllSalesInquiries();
-      setInquiries(data);
-      setSelectedInquiry((current) => {
-        if (current) {
-          const stillExists = data.find((inq) => inq.id === current.id);
-          return stillExists || data[0] || null;
-        }
-        return data[0] || null;
-      });
-    } catch (err) {
-      console.error('Error loading inquiries:', err);
-      setManageError('Unable to load sales inquiries right now.');
-    } finally {
-      setListLoading(false);
-    }
-  }, []);
+  }, [inquiries, selectedInquiry]);
 
   const customerMap = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
 
@@ -194,9 +192,7 @@ const SalesInquiryView: React.FC = () => {
     const newInquiryNo = generateInquiryNumber();
     setInquiryNo(newInquiryNo);
     setReferenceNo(newInquiryNo);
-    fetchCustomerDirectory();
-    fetchInquiries();
-  }, [fetchCustomerDirectory, fetchInquiries]);
+  }, []);
 
   useEffect(() => {
     const loadLinkedOrder = async () => {
@@ -229,13 +225,18 @@ const SalesInquiryView: React.FC = () => {
   const handleStatusChange = async (newStatus: SalesInquiryStatus) => {
     if (!selectedInquiry) return;
     setStatusUpdating(true);
+
+    // Optimistic update
+    setInquiries(prev => applyOptimisticUpdate(prev, selectedInquiry.id, { status: newStatus } as Partial<SalesInquiry>));
+    setSelectedInquiry(prev => prev ? { ...prev, status: newStatus } : null);
+
     try {
       await updateInquiryStatus(selectedInquiry.id, newStatus);
-      await fetchInquiries();
       await notifyUser('Inquiry Status Updated', `Inquiry ${selectedInquiry.inquiry_no} marked as ${newStatus}.`, 'info');
     } catch (err) {
       console.error('Error updating inquiry status:', err);
       addToast({ type: 'error', message: 'Failed to update status' });
+      // Real-time subscription will correct the state
     } finally {
       setStatusUpdating(false);
     }
@@ -244,13 +245,18 @@ const SalesInquiryView: React.FC = () => {
   const handleApproveSelectedInquiry = async () => {
     if (!selectedInquiry) return;
     setApprovingInquiry(true);
+
+    // Optimistic update
+    setInquiries(prev => applyOptimisticUpdate(prev, selectedInquiry.id, { status: SalesInquiryStatus.APPROVED } as Partial<SalesInquiry>));
+    setSelectedInquiry(prev => prev ? { ...prev, status: SalesInquiryStatus.APPROVED } : null);
+
     try {
       await approveInquiry(selectedInquiry.id);
-      await fetchInquiries();
       await notifyUser('Inquiry Approved', `Inquiry ${selectedInquiry.inquiry_no} has been approved.`);
     } catch (err) {
       console.error('Error approving inquiry:', err);
       addToast({ type: 'error', message: 'Failed to approve inquiry' });
+      // Real-time subscription will correct the state
     } finally {
       setApprovingInquiry(false);
     }
@@ -259,12 +265,18 @@ const SalesInquiryView: React.FC = () => {
   const handleConvertSelectedInquiry = async () => {
     if (!selectedInquiry) return;
     setConversionLoading(true);
+
+    // Optimistic update
+    setInquiries(prev => applyOptimisticUpdate(prev, selectedInquiry.id, {
+      status: SalesInquiryStatus.CONVERTED_TO_ORDER
+    } as Partial<SalesInquiry>));
+    setSelectedInquiry(prev => prev ? { ...prev, status: SalesInquiryStatus.CONVERTED_TO_ORDER } : null);
+
     try {
       const order = await convertToOrder(selectedInquiry.id);
       setLinkedOrder(order);
       setConversionMessage(`Created Sales Order ${order.order_no}`);
       setShowConversionModal(false);
-      await fetchInquiries();
       await notifyUser(
         'Sales Order Created',
         `Inquiry ${selectedInquiry.inquiry_no} converted to Order ${order.order_no}.`
@@ -272,6 +284,7 @@ const SalesInquiryView: React.FC = () => {
     } catch (err) {
       console.error('Error converting inquiry:', err);
       addToast({ type: 'error', message: 'Failed to convert inquiry to sales order' });
+      // Real-time subscription will correct the state
     } finally {
       setConversionLoading(false);
     }
@@ -369,7 +382,7 @@ const SalesInquiryView: React.FC = () => {
       };
 
       await createSalesInquiry(inquiryData);
-      await fetchInquiries();
+      // Real-time subscription will add the new inquiry
 
       // Reset form
       setSelectedCustomer(null);
@@ -496,14 +509,6 @@ const SalesInquiryView: React.FC = () => {
               Manage
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => fetchInquiries()}
-            className="p-2 rounded-full bg-slate-900/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-            title="Refresh inquiries"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
           <button
             type="button"
             onClick={() => toggleSection('metrics')}
@@ -997,7 +1002,7 @@ const SalesInquiryView: React.FC = () => {
             <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
               {listLoading && (
                 <div className="flex items-center justify-center py-6 text-xs text-slate-500">
-                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   Loading inquiries...
                 </div>
               )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Trash2, RefreshCw, AlertTriangle, X, CheckCircle, Clock } from 'lucide-react';
 import {
   getAllRecycleBinItems,
@@ -7,43 +7,58 @@ import {
   permanentlyDeleteItem
 } from '../services/recycleBinService';
 import { RecycleBinItem, RecycleBinItemType } from '../types';
+import { useRealtimeList } from '../hooks/useRealtimeList';
+import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
 
 const RecycleBinView: React.FC = () => {
-  const [items, setItems] = useState<RecycleBinItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<{ total: number; by_type: Record<RecycleBinItemType, number> } | null>(null);
   const [filterType, setFilterType] = useState<RecycleBinItemType | 'all'>('all');
   const [selectedItem, setSelectedItem] = useState<RecycleBinItem | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [itemsData, statsData] = await Promise.all([
-        getAllRecycleBinItems(),
-        getRecycleBinStats()
-      ]);
-      setItems(itemsData);
-      setStats(statsData);
-    } catch (err: any) {
-      console.error('Error loading recycle bin data:', err);
-      setError(err.message || 'Failed to load recycle bin data. Make sure you have Owner or Developer role.');
-    } finally {
-      setLoading(false);
-    }
+  // Use real-time list hook for recycle bin items
+  const sortByDeletedAt = (a: RecycleBinItem, b: RecycleBinItem) => {
+    return new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime();
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const { data: items, isLoading: loading, setData: setItems, refetch } = useRealtimeList<RecycleBinItem>({
+    tableName: 'recycle_bin_items',
+    initialFetchFn: getAllRecycleBinItems,
+    sortFn: sortByDeletedAt,
+  });
 
-  const filteredItems = filterType === 'all' 
-    ? items 
-    : items.filter(item => item.item_type === filterType);
+  // Calculate stats from real-time data
+  const stats = useMemo(() => {
+    const by_type: Record<RecycleBinItemType, number> = {
+      [RecycleBinItemType.CONTACT]: 0,
+      [RecycleBinItemType.PRODUCT]: 0,
+      [RecycleBinItemType.TASK]: 0,
+      [RecycleBinItemType.DEAL]: 0,
+      [RecycleBinItemType.SALES_INQUIRY]: 0,
+      [RecycleBinItemType.SALES_ORDER]: 0,
+      [RecycleBinItemType.ORDER_SLIP]: 0,
+      [RecycleBinItemType.INVOICE]: 0,
+    };
+
+    items.forEach(item => {
+      if (item.item_type in by_type) {
+        by_type[item.item_type]++;
+      }
+    });
+
+    return {
+      total: items.length,
+      by_type,
+    };
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    return filterType === 'all'
+      ? items
+      : items.filter(item => item.item_type === filterType);
+  }, [items, filterType]);
 
   const handleRestore = async (item: RecycleBinItem) => {
     setSelectedItem(item);
@@ -58,13 +73,17 @@ const RecycleBinView: React.FC = () => {
   const confirmRestore = async () => {
     if (!selectedItem) return;
     setProcessing(`restore-${selectedItem.id}`);
+
+    // Optimistic update - mark as restored
+    setItems(prev => applyOptimisticUpdate(prev, selectedItem.id, { is_restored: true }));
+
     try {
       await restoreItem(selectedItem.item_type, selectedItem.item_id);
-      await loadData(); // Refresh data
       setShowRestoreConfirm(false);
     } catch (err: any) {
       console.error('Error restoring item:', err);
       setError(err.message || 'Failed to restore item');
+      // Real-time subscription will correct the state
     } finally {
       setProcessing(null);
       setSelectedItem(null);
@@ -74,13 +93,17 @@ const RecycleBinView: React.FC = () => {
   const confirmDelete = async () => {
     if (!selectedItem) return;
     setProcessing(`delete-${selectedItem.id}`);
+
+    // Optimistic delete
+    setItems(prev => applyOptimisticDelete(prev, selectedItem.id));
+
     try {
       await permanentlyDeleteItem(selectedItem.item_type, selectedItem.item_id);
-      await loadData(); // Refresh data
       setShowDeleteConfirm(false);
     } catch (err: any) {
       console.error('Error permanently deleting item:', err);
       setError(err.message || 'Failed to permanently delete item');
+      // Real-time subscription will correct the state
     } finally {
       setProcessing(null);
       setSelectedItem(null);
@@ -189,7 +212,7 @@ const RecycleBinView: React.FC = () => {
               </p>
             </div>
             <button
-              onClick={loadData}
+              onClick={refetch}
               disabled={loading}
               className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-white rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
             >

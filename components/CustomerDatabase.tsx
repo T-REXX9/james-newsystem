@@ -1,26 +1,26 @@
 
 import React, { useState, useMemo } from 'react';
-import { 
+import {
   Search, Plus, Filter, Users, Eye, EyeOff, Tag, CheckSquare, Square, MoreHorizontal, UserCheck, Smartphone, Mail
 } from 'lucide-react';
 import { Contact, CustomerStatus } from '../types';
-import { MOCK_CUSTOMER_DATA } from './mockData';
 import AddContactModal from './AddContactModal';
 import ContactDetails from './ContactDetails';
 import CompanyName from './CompanyName';
+import { useRealtimeList } from '../hooks/useRealtimeList';
+import { fetchContacts, bulkUpdateContacts } from '../services/supabaseService';
+import { applyOptimisticBulkUpdate } from '../utils/optimisticUpdates';
 
 const CustomerDatabase: React.FC = () => {
-  // Directly initialize with mock data - No Loading State
-  const [customers, setCustomers] = useState<Contact[]>(MOCK_CUSTOMER_DATA);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Filtering
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [filterVisibility, setFilterVisibility] = useState<string>('All'); // All, Hidden, Unhidden
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  
+
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkAgentModalOpen, setIsBulkAgentModalOpen] = useState(false);
@@ -30,6 +30,17 @@ const CustomerDatabase: React.FC = () => {
   // Bulk Values
   const [selectedAgentForBulk, setSelectedAgentForBulk] = useState('James Quek');
   const [selectedPriceGroupForBulk, setSelectedPriceGroupForBulk] = useState('AA');
+
+  // Use real-time list hook for contacts
+  const sortByCompany = (a: Contact, b: Contact) => {
+    return (a.company || '').localeCompare(b.company || '');
+  };
+
+  const { data: customers, isLoading, setData: setCustomers } = useRealtimeList<Contact>({
+    tableName: 'contacts',
+    initialFetchFn: fetchContacts,
+    sortFn: sortByCompany,
+  });
 
   const filteredCustomers = useMemo(() => {
     if (!customers || !Array.isArray(customers)) return [];
@@ -80,27 +91,68 @@ const CustomerDatabase: React.FC = () => {
     }
   };
 
-  // Bulk Handlers (UI Only)
-  const handleBulkVisibility = (isHidden: boolean) => {
+  // Bulk Handlers with optimistic updates
+  const handleBulkVisibility = async (isHidden: boolean) => {
     if (selectedIds.size === 0) return;
     if (!window.confirm(`Set ${selectedIds.size} customers to ${isHidden ? 'Hidden' : 'Unhidden'}?`)) return;
-    
-    setCustomers(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, isHidden } : c));
+
+    const ids = Array.from(selectedIds);
+    const updates = ids.map(id => ({ id, updates: { isHidden } }));
+
+    // Optimistic update
+    setCustomers(prev => applyOptimisticBulkUpdate(prev, updates));
     setSelectedIds(new Set());
+
+    try {
+      await bulkUpdateContacts(ids, { isHidden });
+    } catch (error) {
+      console.error('Error updating visibility:', error);
+      // Real-time subscription will correct the state
+    }
   };
 
-  const handleBulkAssignAgent = () => {
+  const handleBulkAssignAgent = async () => {
     if (selectedIds.size === 0) return;
-    setCustomers(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, salesman: selectedAgentForBulk, assignedAgent: selectedAgentForBulk } : c));
+
+    const ids = Array.from(selectedIds);
+    const updates = ids.map(id => ({
+      id,
+      updates: { salesman: selectedAgentForBulk, assignedAgent: selectedAgentForBulk }
+    }));
+
+    // Optimistic update
+    setCustomers(prev => applyOptimisticBulkUpdate(prev, updates));
     setIsBulkAgentModalOpen(false);
     setSelectedIds(new Set());
+
+    try {
+      await bulkUpdateContacts(ids, {
+        salesman: selectedAgentForBulk,
+        assignedAgent: selectedAgentForBulk
+      });
+    } catch (error) {
+      console.error('Error assigning agent:', error);
+      // Real-time subscription will correct the state
+    }
   };
 
-  const handleBulkAssignPriceGroup = () => {
+  const handleBulkAssignPriceGroup = async () => {
     if (selectedIds.size === 0) return;
-    setCustomers(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, priceGroup: selectedPriceGroupForBulk } : c));
+
+    const ids = Array.from(selectedIds);
+    const updates = ids.map(id => ({ id, updates: { priceGroup: selectedPriceGroupForBulk } }));
+
+    // Optimistic update
+    setCustomers(prev => applyOptimisticBulkUpdate(prev, updates));
     setIsBulkPriceModalOpen(false);
     setSelectedIds(new Set());
+
+    try {
+      await bulkUpdateContacts(ids, { priceGroup: selectedPriceGroupForBulk });
+    } catch (error) {
+      console.error('Error assigning price group:', error);
+      // Real-time subscription will correct the state
+    }
   };
 
   // Single CRUD Handlers (UI Only)

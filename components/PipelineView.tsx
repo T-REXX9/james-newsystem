@@ -1,57 +1,76 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { 
-  Settings, 
+import React, { useMemo } from 'react';
+import {
+  Settings,
   ChevronDown, Plus, Search, ChevronRight, Loader2, Clock3, Activity, ShieldAlert, BarChart3, Target, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 import { fetchDeals } from '../services/supabaseService';
 import { PIPELINE_COLUMNS } from '../constants';
 import { PipelineDeal } from '../types';
 import CompanyName from './CompanyName';
+import { useRealtimeList } from '../hooks/useRealtimeList';
 
 const PipelineView: React.FC = () => {
-  const [deals, setDeals] = useState<PipelineDeal[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
   const stageMap = useMemo(() => {
     const map = new Map<string, typeof PIPELINE_COLUMNS[number]>();
     PIPELINE_COLUMNS.forEach(col => map.set(col.id, col));
     return map;
   }, []);
 
-  useEffect(() => {
-    const loadDeals = async () => {
-      setIsLoading(true);
-      const data = await fetchDeals();
-      setDeals(data);
-      setIsLoading(false);
-    };
-    loadDeals();
-  }, []);
+  // Use real-time list hook for deals
+  const sortByStage = (a: PipelineDeal, b: PipelineDeal) => {
+    const stageOrder = PIPELINE_COLUMNS.map(col => col.id);
+    const aIndex = stageOrder.indexOf(a.stageId);
+    const bIndex = stageOrder.indexOf(b.stageId);
+    if (aIndex !== bIndex) return aIndex - bIndex;
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  };
+
+  const { data: deals, isLoading } = useRealtimeList<PipelineDeal>({
+    tableName: 'deals',
+    initialFetchFn: fetchDeals,
+    sortFn: sortByStage,
+  });
 
   // Helper to get deals for a column
   const getDealsForStage = (stageId: string) => deals.filter(d => d.stageId === stageId);
 
-  // Calculate column stats
-  const getColumnStats = (stageId: string) => {
-    const stageDeals = getDealsForStage(stageId);
-    const totalValue = stageDeals.reduce((sum, d) => sum + d.value, 0);
-    const avgAge = stageDeals.length ? Math.round(stageDeals.reduce((sum, d) => sum + (d.daysInStage || 0), 0) / stageDeals.length) : 0;
-    return { count: stageDeals.length, value: totalValue, avgAge };
-  };
+  // Calculate column stats (memoized for performance)
+  const getColumnStats = useMemo(() => {
+    const statsMap = new Map<string, { count: number; value: number; avgAge: number }>();
 
-  // Calculate Total Pipeline Stats
-  const totalDeals = deals.length;
-  const totalValue = deals.reduce((sum, d) => sum + d.value, 0);
-  const weightedValue = deals.reduce((sum, d) => {
+    PIPELINE_COLUMNS.forEach(col => {
+      const stageDeals = deals.filter(d => d.stageId === col.id);
+      const totalValue = stageDeals.reduce((sum, d) => sum + d.value, 0);
+      const avgAge = stageDeals.length
+        ? Math.round(stageDeals.reduce((sum, d) => sum + (d.daysInStage || 0), 0) / stageDeals.length)
+        : 0;
+      statsMap.set(col.id, { count: stageDeals.length, value: totalValue, avgAge });
+    });
+
+    return (stageId: string) => statsMap.get(stageId) || { count: 0, value: 0, avgAge: 0 };
+  }, [deals]);
+
+  // Calculate Total Pipeline Stats (memoized)
+  const pipelineStats = useMemo(() => {
+    const totalDeals = deals.length;
+    const totalValue = deals.reduce((sum, d) => sum + d.value, 0);
+    const weightedValue = deals.reduce((sum, d) => {
       const prob = stageMap.get(d.stageId)?.probability ?? 0.2;
       return sum + d.value * prob;
-  }, 0);
-  const avgDays = deals.length ? Math.round(deals.reduce((sum, d) => sum + (d.daysInStage || 0), 0) / deals.length) : 0;
-  const stageDistribution = PIPELINE_COLUMNS.map(col => {
-      const items = getDealsForStage(col.id);
+    }, 0);
+    const avgDays = deals.length
+      ? Math.round(deals.reduce((sum, d) => sum + (d.daysInStage || 0), 0) / deals.length)
+      : 0;
+    const stageDistribution = PIPELINE_COLUMNS.map(col => {
+      const items = deals.filter(d => d.stageId === col.id);
       const value = items.reduce((sum, d) => sum + d.value, 0);
       return { id: col.id, title: col.title, count: items.length, value, probability: col.probability ?? 0 };
-  });
+    });
+
+    return { totalDeals, totalValue, weightedValue, avgDays, stageDistribution };
+  }, [deals, stageMap]);
+
+  const { totalDeals, totalValue, weightedValue, avgDays, stageDistribution } = pipelineStats;
 
   if (isLoading) {
     return (

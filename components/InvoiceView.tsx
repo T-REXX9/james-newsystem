@@ -12,7 +12,10 @@ import {
 import { fetchContacts, createNotification } from '../services/supabaseService';
 import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderService';
 import { supabase } from '../lib/supabaseClient';
-import { Contact, Invoice, InvoiceStatus, NotificationType } from '../types';
+import { Contact, Invoice, InvoiceItem, InvoiceStatus, NotificationType } from '../types';
+import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
+import { useRealtimeList } from '../hooks/useRealtimeList';
+import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface InvoiceViewProps {
   initialInvoiceId?: string;
@@ -31,12 +34,9 @@ const documentStatusMeta: Record<InvoiceStatus, { label: string; tone: 'neutral'
 };
 
 const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [markingOverdue, setMarkingOverdue] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -44,6 +44,30 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
   const [paymentDate, setPaymentDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paymentAmount, setPaymentAmount] = useState('');
+
+  // Use real-time list for contacts
+  const { data: contacts } = useRealtimeList<Contact>({
+    tableName: 'contacts',
+    initialFetchFn: fetchContacts,
+  });
+
+  // Use real-time nested list for invoices with items
+  const sortByCreatedAt = (a: Invoice, b: Invoice) => {
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  };
+
+  const {
+    data: invoices,
+    isLoading: loading,
+    setData: setInvoices,
+  } = useRealtimeNestedList<Invoice, InvoiceItem>({
+    parentTableName: 'invoices',
+    childTableName: 'invoice_items',
+    parentFetchFn: getAllInvoices,
+    childParentIdField: 'invoice_id',
+    childrenField: 'items',
+    sortParentFn: sortByCreatedAt,
+  });
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
@@ -58,29 +82,12 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
     }
   }, []);
 
-  const refreshData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [invoiceData, contactData] = await Promise.all([getAllInvoices(), fetchContacts()]);
-      setInvoices(invoiceData);
-      if (contactData.length) setContacts(contactData);
-      setSelectedInvoice(prev => {
-        if (prev) {
-          const updated = invoiceData.find(invoice => invoice.id === prev.id);
-          return updated || invoiceData[0] || null;
-        }
-        return invoiceData[0] || null;
-      });
-    } catch (err) {
-      console.error('Error loading invoices:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Auto-select first invoice when invoices change
   useEffect(() => {
-    refreshData();
-  }, [refreshData]);
+    if (invoices.length > 0 && !selectedInvoice) {
+      setSelectedInvoice(invoices[0]);
+    }
+  }, [invoices, selectedInvoice]);
 
   useEffect(() => {
     if (!initialInvoiceId || !invoices.length) return;
@@ -113,13 +120,22 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
   const handleSend = async () => {
     if (!selectedInvoice || !canProcessInvoice) return;
     setSending(true);
+
+    // Optimistic update
+    const sentAt = new Date().toISOString();
+    setInvoices(prev => applyOptimisticUpdate(prev, selectedInvoice.id, {
+      status: InvoiceStatus.SENT,
+      sent_at: sentAt
+    } as Partial<Invoice>));
+    setSelectedInvoice(prev => prev ? { ...prev, status: InvoiceStatus.SENT, sent_at: sentAt } : null);
+
     try {
       await sendInvoice(selectedInvoice.id);
-      await refreshData();
       await notifyUser('Invoice Sent', `Invoice ${selectedInvoice.invoice_no} sent to customer.`);
     } catch (err) {
       console.error('Error sending invoice:', err);
       alert('Failed to send invoice');
+      // Real-time subscription will correct the state
     } finally {
       setSending(false);
     }
@@ -128,13 +144,18 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
   const handleMarkOverdue = async () => {
     if (!selectedInvoice || !canProcessInvoice) return;
     setMarkingOverdue(true);
+
+    // Optimistic update
+    setInvoices(prev => applyOptimisticUpdate(prev, selectedInvoice.id, { status: InvoiceStatus.OVERDUE } as Partial<Invoice>));
+    setSelectedInvoice(prev => prev ? { ...prev, status: InvoiceStatus.OVERDUE } : null);
+
     try {
       await markOverdue(selectedInvoice.id);
-      await refreshData();
       await notifyUser('Invoice Overdue', `Invoice ${selectedInvoice.invoice_no} marked as overdue.`, 'warning');
     } catch (err) {
       console.error('Error marking overdue:', err);
       alert('Failed to mark invoice overdue');
+      // Real-time subscription will correct the state
     } finally {
       setMarkingOverdue(false);
     }
@@ -142,12 +163,25 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
 
   const handleRecordPayment = async () => {
     if (!selectedInvoice || !canProcessInvoice) return;
+
+    // Optimistic update
+    setInvoices(prev => applyOptimisticUpdate(prev, selectedInvoice.id, {
+      status: InvoiceStatus.PAID,
+      payment_date: paymentDate,
+      payment_method: paymentMethod
+    } as Partial<Invoice>));
+    setSelectedInvoice(prev => prev ? {
+      ...prev,
+      status: InvoiceStatus.PAID,
+      payment_date: paymentDate,
+      payment_method: paymentMethod
+    } : null);
+
     try {
       await recordPayment(selectedInvoice.id, {
         payment_date: paymentDate,
         payment_method: paymentMethod,
       });
-      await refreshData();
       await notifyUser('Payment Recorded', `Invoice ${selectedInvoice.invoice_no} marked as paid (${paymentAmount || 'Full amount'}).`);
       setPaymentModalOpen(false);
       setPaymentDate('');
@@ -156,20 +190,27 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
     } catch (err) {
       console.error('Error recording payment:', err);
       alert('Failed to record payment');
+      // Real-time subscription will correct the state
     }
   };
 
   const handlePrint = async () => {
     if (!selectedInvoice || !canProcessInvoice) return;
     setPrinting(true);
+
+    // Optimistic update
+    const printedAt = new Date().toISOString();
+    setInvoices(prev => applyOptimisticUpdate(prev, selectedInvoice.id, { printed_at: printedAt } as Partial<Invoice>));
+    setSelectedInvoice(prev => prev ? { ...prev, printed_at: printedAt } : null);
+
     try {
       await printInvoice(selectedInvoice.id);
-      await refreshData();
       await notifyUser('Invoice Printed', `Invoice ${selectedInvoice.invoice_no} printed.`);
       window.print();
     } catch (err) {
       console.error('Error printing invoice:', err);
       alert('Failed to print invoice');
+      // Real-time subscription will correct the state
     } finally {
       setPrinting(false);
     }
@@ -193,10 +234,7 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
           <h1 className="text-lg font-semibold">Invoices</h1>
           <p className="text-xs text-slate-300">Monitor billing, payments, and overdue accounts</p>
         </div>
-        <div className="flex-1" />
-        <button onClick={refreshData} className="px-3 py-1 bg-white/10 rounded text-xs flex items-center gap-2">
-          <RefreshCw className="w-3 h-3" /> Refresh
-        </button>
+
       </div>
       <div className="flex-1 flex overflow-hidden">
         <aside className="w-80 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">

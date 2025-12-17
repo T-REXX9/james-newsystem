@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
-import { 
-  Search, Filter, MoreHorizontal, Mail, Phone, MapPin, 
+import React, { useState, useMemo } from 'react';
+import {
+  Search, Filter, MoreHorizontal, Mail, Phone, MapPin,
   BarChart2, TrendingUp, Users, Calendar, Briefcase,
   ArrowUpRight, ArrowDownRight, Clock, CheckCircle, Award
 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { MOCK_AGENTS } from '../constants';
 import { fetchContacts } from '../services/supabaseService';
 import CompanyName from './CompanyName';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { useRealtimeList } from '../hooks/useRealtimeList';
 
 const ACTIVITY_DATA = [
   { name: 'Mon', calls: 12, meetings: 4, emails: 25 },
@@ -22,43 +23,42 @@ const ACTIVITY_DATA = [
 const StaffView: React.FC = () => {
   const [selectedAgentId, setSelectedAgentId] = useState<string>(MOCK_AGENTS[0].id);
   const [activeTab, setActiveTab] = useState<'clients' | 'calls' | 'performance'>('clients');
-  const [allContacts, setAllContacts] = useState<Contact[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Load contacts to link with agents
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      const contacts = await fetchContacts();
-      setAllContacts(contacts);
-      setIsLoading(false);
-    };
-    loadData();
-  }, []);
+  // Use real-time list hook for contacts
+  const { data: allContacts, isLoading } = useRealtimeList<Contact>({
+    tableName: 'contacts',
+    initialFetchFn: fetchContacts,
+  });
 
   const selectedAgent = MOCK_AGENTS.find(a => a.id === selectedAgentId) || MOCK_AGENTS[0];
-  
-  // Filter data for the selected agent
-  const assignedClients = allContacts.filter(c => c.assignedAgent === selectedAgent.name);
-  
-  // Aggregate Call History from assigned clients
-  const callHistory = assignedClients.flatMap(c => 
-    c.interactions
-      .filter(i => i.type === 'Call' || i.type === 'Meeting')
-      .map(i => ({
-        ...i,
-        clientName: c.name,
-        clientCompany: c.company,
-        clientPastName: c.pastName,
-        clientId: c.id
-      }))
-  ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // Calculate Actual Sales for this agent
-  const totalSalesValue = assignedClients.reduce((acc, client) => {
+  // Filter data for the selected agent (memoized)
+  const assignedClients = useMemo(() => {
+    return allContacts.filter(c => c.assignedAgent === selectedAgent.name);
+  }, [allContacts, selectedAgent.name]);
+
+  // Aggregate Call History from assigned clients (memoized)
+  const callHistory = useMemo(() => {
+    return assignedClients.flatMap(c =>
+      c.interactions
+        .filter(i => i.type === 'Call' || i.type === 'Meeting')
+        .map(i => ({
+          ...i,
+          clientName: c.name,
+          clientCompany: c.company,
+          clientPastName: c.pastName,
+          clientId: c.id
+        }))
+    ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [assignedClients]);
+
+  // Calculate Actual Sales for this agent (memoized)
+  const totalSalesValue = useMemo(() => {
+    return assignedClients.reduce((acc, client) => {
       const clientTotal = client.salesHistory.reduce((sum, sale) => sum + sale.amount, 0);
       return acc + clientTotal;
-  }, 0);
+    }, 0);
+  }, [assignedClients]);
 
   return (
     <div className="flex h-full bg-slate-50 dark:bg-slate-950 animate-fadeIn overflow-hidden">

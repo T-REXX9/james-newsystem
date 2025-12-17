@@ -2223,3 +2223,79 @@ export const restoreContact = async (id: string): Promise<void> => {
     throw err;
   }
 };
+
+// --- REAL-TIME SUBSCRIPTION FUNCTIONS ---
+
+export interface TableSubscriptionCallbacks<T = any> {
+  onInsert?: (payload: T) => void;
+  onUpdate?: (payload: T) => void;
+  onDelete?: (payload: { id: string }) => void;
+  onError?: (error: Error) => void;
+}
+
+export function subscribeToTable<T = any>(
+  tableName: string,
+  callbacks: TableSubscriptionCallbacks<T>
+): () => void {
+  const channelName = `${tableName}-realtime-${Date.now()}`;
+  const channel = supabase.channel(channelName);
+
+  channel
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: tableName,
+      },
+      (payload) => {
+        try {
+          switch (payload.eventType) {
+            case 'INSERT':
+              callbacks.onInsert?.(payload.new as T);
+              break;
+            case 'UPDATE':
+              callbacks.onUpdate?.(payload.new as T);
+              break;
+            case 'DELETE':
+              callbacks.onDelete?.({ id: (payload.old as any).id });
+              break;
+          }
+        } catch (error) {
+          console.error(`Error handling ${tableName} event:`, error);
+          callbacks.onError?.(error as Error);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToContacts(callbacks: TableSubscriptionCallbacks<Contact>): () => void {
+  return subscribeToTable<Contact>('contacts', callbacks);
+}
+
+export function subscribeToProducts(callbacks: TableSubscriptionCallbacks<Product>): () => void {
+  return subscribeToTable<Product>('products', callbacks);
+}
+
+export function subscribeToTasks(callbacks: TableSubscriptionCallbacks<Task>): () => void {
+  return subscribeToTable<Task>('tasks', callbacks);
+}
+
+export function subscribeToNotificationsRealtime(callbacks: TableSubscriptionCallbacks<Notification>): () => void {
+  return subscribeToTable<Notification>('notifications', callbacks);
+}
+
+export function subscribeToTeamMessages(callbacks: TableSubscriptionCallbacks<TeamMessage>): () => void {
+  return subscribeToTable<TeamMessage>('team_messages', callbacks);
+}
+
+export function subscribeToDeals(callbacks: TableSubscriptionCallbacks<PipelineDeal>): () => void {
+  return subscribeToTable<PipelineDeal>('deals', callbacks);
+}
+
+export { supabase };

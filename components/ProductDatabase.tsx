@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Search, Plus, Edit2, Trash2, Filter, Package, AlertCircle, X, Check, Loader2, Save, Eye, EyeOff, Archive 
+import React, { useState, useMemo } from 'react';
+import {
+  Search, Plus, Edit2, Trash2, Filter, Package, AlertCircle, X, Check, Loader2, Save, Eye, EyeOff, Archive
 } from 'lucide-react';
 import { Product } from '../types';
 import { fetchProducts, createProduct, updateProduct, deleteProduct } from '../services/supabaseService';
+import { useRealtimeList } from '../hooks/useRealtimeList';
+import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
 
 const ProductDatabase: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -34,7 +34,7 @@ const ProductDatabase: React.FC = () => {
     original_pn_no: '',
     application: '',
     no_of_cylinder: '',
-    
+
     // Prices
     price_aa: 0,
     price_bb: 0,
@@ -42,7 +42,7 @@ const ProductDatabase: React.FC = () => {
     price_dd: 0,
     price_vip1: 0,
     price_vip2: 0,
-    
+
     // Warehouse Stocks
     stock_wh1: 0,
     stock_wh2: 0,
@@ -54,20 +54,20 @@ const ProductDatabase: React.FC = () => {
 
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(initialFormState);
 
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const loadProducts = async () => {
-    setIsLoading(true);
-    const data = await fetchProducts();
-    setProducts(data);
-    setIsLoading(false);
+  // Use real-time list hook for products
+  const sortByPartNo = (a: Product, b: Product) => {
+    return a.part_no.localeCompare(b.part_no);
   };
+
+  const { data: products, isLoading, setData: setProducts } = useRealtimeList<Product>({
+    tableName: 'products',
+    initialFetchFn: fetchProducts,
+    sortFn: sortByPartNo,
+  });
 
   const filteredProducts = useMemo(() => {
     const lowerQuery = searchQuery.toLowerCase();
-    return products.filter(p => 
+    return products.filter(p =>
       p.part_no.toLowerCase().includes(lowerQuery) ||
       p.description.toLowerCase().includes(lowerQuery) ||
       p.brand.toLowerCase().includes(lowerQuery) ||
@@ -89,8 +89,15 @@ const ProductDatabase: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this product?')) {
-      await deleteProduct(id);
-      loadProducts();
+      // Optimistic delete
+      setProducts(prev => applyOptimisticDelete(prev, id));
+
+      try {
+        await deleteProduct(id);
+      } catch (error) {
+        console.error('Error deleting product:', error);
+        // Real-time subscription will correct the state
+      }
     }
   };
 
@@ -99,15 +106,17 @@ const ProductDatabase: React.FC = () => {
     setIsSaving(true);
     try {
       if (editingProduct) {
+        // Optimistic update
+        setProducts(prev => applyOptimisticUpdate(prev, editingProduct.id, formData));
         await updateProduct(editingProduct.id, formData);
       } else {
         await createProduct(formData);
       }
-      await loadProducts();
       setIsModalOpen(false);
     } catch (error) {
       console.error(error);
       alert('Failed to save product');
+      // Real-time subscription will correct the state
     } finally {
       setIsSaving(false);
     }

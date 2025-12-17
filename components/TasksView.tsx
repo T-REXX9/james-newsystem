@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, Plus, CheckCircle, Trash2, X } from 'lucide-react';
 import AgentTasksList from './AgentTasksList';
 import { fetchTasks, createTask, updateTask, deleteTask, fetchProfiles } from '../services/supabaseService';
 import { Task, UserProfile } from '../types';
+import { useRealtimeList } from '../hooks/useRealtimeList';
+import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
 
 interface TasksViewProps {
   currentUser: UserProfile | null;
@@ -12,9 +14,7 @@ interface TasksViewProps {
 }
 
 const TasksView: React.FC<TasksViewProps> = ({ currentUser, variant = 'full', maxVisibleTasks, onTasksLoaded }) => {
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'my' | 'all'>('my');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Todo' | 'In Progress' | 'Done'>('All');
 
@@ -29,8 +29,23 @@ const TasksView: React.FC<TasksViewProps> = ({ currentUser, variant = 'full', ma
     status: 'Todo'
   });
 
+  // Use real-time list hook for tasks
+  const sortByCreatedAt = (a: Task, b: Task) => {
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  };
+
+  const { data: tasks, isLoading, setData: setTasks } = useRealtimeList<Task>({
+    tableName: 'tasks',
+    initialFetchFn: fetchTasks,
+    sortFn: sortByCreatedAt,
+  });
+
   useEffect(() => {
-    loadData();
+    const loadUsers = async () => {
+      const usersData = await fetchProfiles();
+      setUsers(usersData);
+    };
+    loadUsers();
   }, []);
 
   useEffect(() => {
@@ -38,29 +53,23 @@ const TasksView: React.FC<TasksViewProps> = ({ currentUser, variant = 'full', ma
     onTasksLoaded?.(agentTasks);
   }, [tasks, currentUser?.full_name, onTasksLoaded]);
 
-  const loadData = async () => {
-    setIsLoading(true);
-    const [tasksData, usersData] = await Promise.all([fetchTasks(), fetchProfiles()]);
-    setTasks(tasksData);
-    setUsers(usersData);
-    setIsLoading(false);
-  };
-
   const isOwner = currentUser?.role === 'Owner';
   const isEmbedded = variant === 'embedded';
 
-  const filteredTasks = tasks.filter(task => {
-    const matchesUser = filter === 'all' ? true : task.assignedTo === currentUser?.full_name;
-    const matchesStatus = statusFilter === 'All' ? true : task.status === statusFilter;
-    return matchesUser && matchesStatus;
-  });
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      const matchesUser = filter === 'all' ? true : task.assignedTo === currentUser?.full_name;
+      const matchesStatus = statusFilter === 'All' ? true : task.status === statusFilter;
+      return matchesUser && matchesStatus;
+    });
+  }, [tasks, filter, statusFilter, currentUser?.full_name]);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title || !newTask.assignedTo) return;
 
     const assigneeProfile = users.find(u => u.full_name === newTask.assignedTo);
-    
+
     const taskToCreate = {
       ...newTask,
       createdBy: currentUser?.full_name || 'Unknown',
@@ -78,18 +87,32 @@ const TasksView: React.FC<TasksViewProps> = ({ currentUser, variant = 'full', ma
         dueDate: new Date().toISOString().split('T')[0],
         status: 'Todo'
     });
-    loadData();
+    // No need to reload - real-time subscription will update
   };
 
   const handleStatusChange = async (task: Task, newStatus: Task['status']) => {
-    await updateTask(task.id, { status: newStatus });
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
+    // Optimistic update
+    setTasks(prev => applyOptimisticUpdate(prev, task.id, { status: newStatus }));
+
+    try {
+      await updateTask(task.id, { status: newStatus });
+    } catch (error) {
+      console.error('Error updating task status:', error);
+      // Real-time subscription will correct the state
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Delete this task?')) {
+      // Optimistic delete
+      setTasks(prev => applyOptimisticDelete(prev, id));
+
+      try {
         await deleteTask(id);
-        setTasks(prev => prev.filter(t => t.id !== id));
+      } catch (error) {
+        console.error('Error deleting task:', error);
+        // Real-time subscription will correct the state
+      }
     }
   };
 
