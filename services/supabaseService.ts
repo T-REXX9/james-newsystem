@@ -4,14 +4,17 @@
 
 import { supabase } from '../lib/supabaseClient';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STAFF_ROLES } from '../constants';
-import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType } from '../types';
+import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType } from '../types';
 
 // With our local mock DB, we can just query directly.
 // The Mock DB handles the seeding from constants, so we trust it returns data.
 
 export const fetchContacts = async (): Promise<Contact[]> => {
   try {
-    const { data, error } = await supabase.from('contacts').select('*');
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('is_deleted', false);
     if (error) throw error;
     return (data as Contact[]) || [];
   } catch (err) {
@@ -68,7 +71,10 @@ export const fetchDeals = async (): Promise<PipelineDeal[]> => {
 
 export const fetchProducts = async (): Promise<Product[]> => {
   try {
-    const { data, error } = await supabase.from('products').select('*');
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_deleted', false);
     if (error) throw error;
     return (data as Product[]) || [];
   } catch (err) {
@@ -112,10 +118,90 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
 
 export const deleteProduct = async (id: string): Promise<void> => {
   try {
-    const { error } = await supabase.from('products').delete().eq('id', id);
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get the product data before deletion
+    const { data: product } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!product) throw new Error('Product not found');
+
+    // Insert into recycle bin
+    const { error: recycleError } = await supabase
+      .from('recycle_bin_items')
+      .insert({
+        item_type: RecycleBinItemType.PRODUCT,
+        item_id: id,
+        original_data: product,
+        deleted_by: user.id,
+        deleted_at: new Date().toISOString(),
+      });
+
+    if (recycleError) throw recycleError;
+
+    // Soft delete the product
+    const { error } = await supabase
+      .from('products')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
     if (error) throw error;
   } catch (err) {
     console.error("Error deleting product:", err);
+    throw err;
+  }
+};
+
+export const restoreProduct = async (id: string): Promise<void> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check user role (Owner/Developer only)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
+      throw new Error('Only Owner or Developer can restore items');
+    }
+
+    // Update recycle bin item as restored
+    await supabase
+      .from('recycle_bin_items')
+      .update({
+        is_restored: true,
+        restored_at: new Date().toISOString(),
+        restored_by: user.id,
+      })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.PRODUCT);
+
+    // Restore the product
+    const { error } = await supabase
+      .from('products')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error restoring product:', err);
     throw err;
   }
 };
@@ -355,7 +441,10 @@ export const updateStaffRole = async (userId: string, role: string) => {
 
 export const fetchTasks = async (): Promise<Task[]> => {
   try {
-    const { data, error } = await supabase.from('tasks').select('*');
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('is_deleted', false);
     if (error) throw error;
     return (data as Task[]) || [];
   } catch (err) {
@@ -386,10 +475,90 @@ export const updateTask = async (id: string, updates: Partial<Task>): Promise<vo
 
 export const deleteTask = async (id: string): Promise<void> => {
   try {
-    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get the task data before deletion
+    const { data: task } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!task) throw new Error('Task not found');
+
+    // Insert into recycle bin
+    const { error: recycleError } = await supabase
+      .from('recycle_bin_items')
+      .insert({
+        item_type: RecycleBinItemType.TASK,
+        item_id: id,
+        original_data: task,
+        deleted_by: user.id,
+        deleted_at: new Date().toISOString(),
+      });
+
+    if (recycleError) throw recycleError;
+
+    // Soft delete the task
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
     if (error) throw error;
   } catch (err) {
     console.error("Error deleting task:", err);
+    throw err;
+  }
+};
+
+export const restoreTask = async (id: string): Promise<void> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check user role (Owner/Developer only)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
+      throw new Error('Only Owner or Developer can restore items');
+    }
+
+    // Update recycle bin item as restored
+    await supabase
+      .from('recycle_bin_items')
+      .update({
+        is_restored: true,
+        restored_at: new Date().toISOString(),
+        restored_by: user.id,
+      })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.TASK);
+
+    // Restore the task
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error restoring task:', err);
     throw err;
   }
 };
@@ -398,7 +567,11 @@ export const deleteTask = async (id: string): Promise<void> => {
 
 export const fetchTeamMessages = async (): Promise<TeamMessage[]> => {
   try {
-    const { data, error } = await supabase.from('team_messages').select('*').order('created_at', { ascending: true });
+    const { data, error } = await supabase
+      .from('team_messages')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true });
     if (error) throw error;
     return (data as TeamMessage[]) || [];
   } catch (err) {
@@ -430,10 +603,90 @@ export const updateTeamMessage = async (id: string, updates: Partial<TeamMessage
 
 export const deleteTeamMessage = async (id: string): Promise<void> => {
   try {
-    const { error } = await supabase.from('team_messages').delete().eq('id', id);
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get the team message data before deletion
+    const { data: teamMessage } = await supabase
+      .from('team_messages')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!teamMessage) throw new Error('Team message not found');
+
+    // Insert into recycle bin
+    const { error: recycleError } = await supabase
+      .from('recycle_bin_items')
+      .insert({
+        item_type: RecycleBinItemType.TEAM_MESSAGE,
+        item_id: id,
+        original_data: teamMessage,
+        deleted_by: user.id,
+        deleted_at: new Date().toISOString(),
+      });
+
+    if (recycleError) throw recycleError;
+
+    // Soft delete the team message
+    const { error } = await supabase
+      .from('team_messages')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
     if (error) throw error;
   } catch (err) {
     console.error('Error deleting team message:', err);
+    throw err;
+  }
+};
+
+export const restoreTeamMessage = async (id: string): Promise<void> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check user role (Owner/Developer only)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
+      throw new Error('Only Owner or Developer can restore items');
+    }
+
+    // Update recycle bin item as restored
+    await supabase
+      .from('recycle_bin_items')
+      .update({
+        is_restored: true,
+        restored_at: new Date().toISOString(),
+        restored_by: user.id,
+      })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.TEAM_MESSAGE);
+
+    // Restore the team message
+    const { error } = await supabase
+      .from('team_messages')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error restoring team message:', err);
     throw err;
   }
 };
@@ -1244,6 +1497,7 @@ export const fetchNotifications = async (userId: string, limit: number = 50): Pr
       .from('notifications')
       .select('*')
       .eq('recipient_id', userId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
@@ -1260,6 +1514,7 @@ export const fetchUnreadNotifications = async (userId: string): Promise<Notifica
       .from('notifications')
       .select('*')
       .eq('recipient_id', userId)
+      .eq('is_deleted', false)
       .eq('is_read', false)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -1276,6 +1531,7 @@ export const getUnreadCount = async (userId: string): Promise<number> => {
       .from('notifications')
       .select('id', { count: 'exact' })
       .eq('recipient_id', userId)
+      .eq('is_deleted', false)
       .eq('is_read', false);
     if (error) throw error;
     return data?.length || 0;
@@ -1345,14 +1601,92 @@ export const markAllAsRead = async (userId: string): Promise<boolean> => {
 
 export const deleteNotification = async (notificationId: string): Promise<boolean> => {
   try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get the notification data before deletion
+    const { data: notification } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('id', notificationId)
+      .single();
+
+    if (!notification) throw new Error('Notification not found');
+
+    // Insert into recycle bin
+    const { error: recycleError } = await supabase
+      .from('recycle_bin_items')
+      .insert({
+        item_type: RecycleBinItemType.NOTIFICATION,
+        item_id: notificationId,
+        original_data: notification,
+        deleted_by: user.id,
+        deleted_at: new Date().toISOString(),
+      });
+
+    if (recycleError) throw recycleError;
+
+    // Soft delete the notification
     const { error } = await supabase
       .from('notifications')
-      .delete()
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', notificationId);
+
     if (error) throw error;
     return true;
   } catch (err) {
     console.error('Error deleting notification:', err);
+    return false;
+  }
+};
+
+export const restoreNotification = async (id: string): Promise<boolean> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check user role (Owner/Developer only)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
+      throw new Error('Only Owner or Developer can restore items');
+    }
+
+    // Update recycle bin item as restored
+    await supabase
+      .from('recycle_bin_items')
+      .update({
+        is_restored: true,
+        restored_at: new Date().toISOString(),
+        restored_by: user.id,
+      })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.NOTIFICATION);
+
+    // Restore the notification
+    const { error } = await supabase
+      .from('notifications')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error restoring notification:', err);
     return false;
   }
 };
@@ -1633,5 +1967,97 @@ export const fetchAgentPerformanceSummary = async (agentId: string, startDate: s
   } catch (err) {
     console.error('Error fetching agent performance summary:', err);
     return null;
+  }
+};
+
+// --- CONTACT SOFT DELETE FUNCTIONS ---
+
+export const deleteContact = async (id: string): Promise<void> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get the contact data before deletion
+    const { data: contact } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!contact) throw new Error('Contact not found');
+
+    // Insert into recycle bin
+    const { error: recycleError } = await supabase
+      .from('recycle_bin_items')
+      .insert({
+        item_type: RecycleBinItemType.CONTACT,
+        item_id: id,
+        original_data: contact,
+        deleted_by: user.id,
+        deleted_at: new Date().toISOString(),
+      });
+
+    if (recycleError) throw recycleError;
+
+    // Soft delete the contact
+    const { error } = await supabase
+      .from('contacts')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+  } catch (err) {
+    console.error("Error deleting contact:", err);
+    throw err;
+  }
+};
+
+export const restoreContact = async (id: string): Promise<void> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check user role (Owner/Developer only)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
+      throw new Error('Only Owner or Developer can restore items');
+    }
+
+    // Update recycle bin item as restored
+    await supabase
+      .from('recycle_bin_items')
+      .update({
+        is_restored: true,
+        restored_at: new Date().toISOString(),
+        restored_by: user.id,
+      })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.CONTACT);
+
+    // Restore the contact
+    const { error } = await supabase
+      .from('contacts')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error restoring contact:', err);
+    throw err;
   }
 };

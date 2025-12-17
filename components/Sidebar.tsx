@@ -1,7 +1,7 @@
 
 
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Mail, Calendar, Phone, CheckSquare, Users, Settings, HelpCircle, Columns, UserCog, Package, ClipboardList, BarChart3, FileText, FileCheck, FileOutput, Receipt } from 'lucide-react';
+import { LayoutDashboard, Mail, Calendar, Phone, CheckSquare, Users, Settings, HelpCircle, Columns, UserCog, Package, ClipboardList, BarChart3, FileText, FileCheck, FileOutput, Receipt, Trash2 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { DOCUMENT_POLICY_STORAGE_KEY, isInvoiceAllowedForTransactionType, isOrderSlipAllowedForTransactionType, readDocumentPolicyFromStorage } from '../services/salesOrderService';
 
@@ -28,6 +28,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user }) => {
     { id: 'calendar', icon: Calendar, label: 'Calendar' },
     { id: 'calls', icon: Phone, label: 'Daily Call Monitoring' },
     { id: 'tasks', icon: CheckSquare, label: 'Tasks' },
+    { id: 'recyclebin', icon: Trash2, label: 'Recycle Bin' },
   ];
 
   // Logic to determine if an item is allowed
@@ -36,6 +37,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user }) => {
     // Owner always sees everything (handled by '*' or explicit list in seed).
     // We check if access_rights includes the ID or '*'
     if (!user) return false;
+    
+    // Special case: Recycle Bin only for Owner or Developer
+    if (itemId === 'recyclebin') {
+      return user.role === 'Owner' || user.role === 'Developer';
+    }
+    
     if (user.role === 'Owner') return true;
     if (!user.access_rights) return true; // Fallback: if undefined, show all (or hide all depending on security model)
 

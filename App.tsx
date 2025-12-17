@@ -27,6 +27,7 @@ import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
 import SalesAgentDashboard from './components/SalesAgentDashboard';
 import ManagementView from './components/ManagementView';
+import RecycleBinView from './components/RecycleBinView';
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
@@ -164,6 +165,12 @@ const App: React.FC = () => {
   // Permission Check Logic
   const checkPermission = (moduleId: string) => {
     if (!userProfile) return false;
+    
+    // Special case: Recycle Bin only for Owner or Developer
+    if (moduleId === 'recyclebin') {
+      return userProfile.role === 'Owner' || userProfile.role === 'Developer';
+    }
+    
     if (userProfile.role === 'Owner') return true;
 
     // Sales Agents should always reach their dashboard even if access_rights is misconfigured.
@@ -262,6 +269,11 @@ const App: React.FC = () => {
       case 'management': return (
         <div className="h-full overflow-y-auto">
           <ManagementView currentUser={userProfile} />
+        </div>
+      );
+      case 'recyclebin': return (
+        <div className="h-full overflow-y-auto">
+          <RecycleBinView />
         </div>
       );
       case 'mail': return renderComingSoon('Inbox');

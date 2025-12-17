@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
-import { OrderSlip, OrderSlipDTO, OrderSlipItem, OrderSlipStatus, SalesOrderStatus } from '../types';
+import { OrderSlip, OrderSlipDTO, OrderSlipItem, OrderSlipStatus, RecycleBinItemType, SalesOrderStatus } from '../types';
 
 const generateSequence = () => String(Math.floor(Math.random() * 100000)).padStart(5, '0');
 
@@ -160,6 +160,7 @@ export const getOrderSlip = async (id: string): Promise<OrderSlip | null> => {
       .from('order_slips')
       .select('*')
       .eq('id', id)
+      .eq('is_deleted', false)
       .single();
 
     if (error || !data) return null;
@@ -176,6 +177,7 @@ export const getOrderSlipsByCustomer = async (customerId: string): Promise<Order
       .from('order_slips')
       .select('*')
       .eq('contact_id', customerId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
 
     if (error || !data) return [];
@@ -283,16 +285,88 @@ export const printOrderSlip = async (id: string): Promise<OrderSlip | null> => {
 
 export const deleteOrderSlip = async (id: string): Promise<boolean> => {
   try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get the slip data before deletion
+    const slip = await getOrderSlip(id);
+    if (!slip) throw new Error('Order slip not found');
+
+    // Insert into recycle bin
+    const { error: recycleError } = await supabase
+      .from('recycle_bin_items')
+      .insert({
+        item_type: RecycleBinItemType.ORDERSLIP,
+        item_id: id,
+        original_data: slip,
+        deleted_by: user.id,
+        deleted_at: new Date().toISOString(),
+      });
+
+    if (recycleError) throw recycleError;
+
+    // Soft delete the slip
     const { error } = await supabase
       .from('order_slips')
-      .update({ status: OrderSlipStatus.CANCELLED })
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id);
 
     if (error) throw error;
     return true;
   } catch (err) {
-    console.error('Error cancelling order slip:', err);
+    console.error('Error deleting order slip:', err);
     return false;
+  }
+};
+
+export const restoreOrderSlip = async (id: string): Promise<OrderSlip | null> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check user role (Owner/Developer only)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
+      throw new Error('Only Owner or Developer can restore items');
+    }
+
+    // Update recycle bin item as restored
+    await supabase
+      .from('recycle_bin_items')
+      .update({
+        is_restored: true,
+        restored_at: new Date().toISOString(),
+        restored_by: user.id,
+      })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.ORDERSLIP);
+
+    // Restore the slip
+    const { error } = await supabase
+      .from('order_slips')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+    return getOrderSlip(id);
+  } catch (err) {
+    console.error('Error restoring order slip:', err);
+    return null;
   }
 };
 
@@ -303,6 +377,7 @@ export const getAllOrderSlips = async (
     let query = supabase
       .from('order_slips')
       .select('*')
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
 
     if (filters.status) {

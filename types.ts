@@ -58,6 +58,8 @@ export interface Notification {
   is_read: boolean;
   created_at: string;
   read_at?: string;
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 export interface CreateNotificationInput {
@@ -122,6 +124,9 @@ export interface Task {
   dueDate: string;
   priority: 'High' | 'Medium' | 'Low';
   status: 'Todo' | 'In Progress' | 'Done';
+  is_deleted?: boolean;
+  deleted_at?: string;
+  updated_at?: string;
 }
 
 export interface Interaction {
@@ -229,6 +234,11 @@ export interface Contact {
   totalSales?: number;
   balance?: number;
   salesByYear?: Record<string, number>;
+
+  // Soft delete fields
+  is_deleted?: boolean;
+  deleted_at?: string;
+  updated_at?: string;
 }
 
 export interface LeadScoreResult {
@@ -315,6 +325,11 @@ export interface Product {
   stock_wh4: number;
   stock_wh5: number;
   stock_wh6: number;
+
+  // Soft delete fields
+  is_deleted?: boolean;
+  deleted_at?: string;
+  updated_at?: string;
 }
 
 export type ReorderStatus = 'critical' | 'low' | 'healthy';
@@ -695,6 +710,8 @@ export interface SalesInquiry {
   created_at: string;
   updated_at?: string;
   status: SalesInquiryStatus;
+  is_deleted: boolean;
+  deleted_at?: string;
   items?: SalesInquiryItem[];
 }
 
@@ -761,6 +778,8 @@ export interface SalesOrder {
   created_at: string;
   updated_at?: string;
   items: SalesOrderItem[];
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 export interface SalesOrderDTO {
@@ -828,6 +847,8 @@ export interface OrderSlip {
   created_at: string;
   updated_at?: string;
   items: OrderSlipItem[];
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 export interface OrderSlipDTO {
@@ -899,6 +920,8 @@ export interface Invoice {
   created_at: string;
   updated_at?: string;
   items: InvoiceItem[];
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 export interface InvoiceDTO {
@@ -926,4 +949,113 @@ export interface InvoiceDTO {
   printed_at?: string;
   sent_at?: string;
   items: Omit<InvoiceItem, 'id' | 'invoice_id'>[];
+}
+
+// --- Developer Cockpit Types ---
+
+export enum LogType {
+  SYSTEM = 'system',
+  SECURITY = 'security',
+  PERFORMANCE = 'performance',
+  ERROR = 'error',
+  WARNING = 'warning',
+  INFO = 'info'
+}
+
+export enum LogLevel {
+  DEBUG = 'debug',
+  INFO = 'info',
+  WARN = 'warn',
+  ERROR = 'error',
+  FATAL = 'fatal'
+}
+
+export interface SystemLog {
+  id: string;
+  log_type: LogType;
+  log_level: LogLevel;
+  message: string;
+  details: Record<string, any>;
+  user_id: string;
+  ip_address: string;
+  user_agent: string;
+  created_at: string;
+  is_deleted: boolean;
+  deleted_at: string | null;
+}
+
+export interface SystemMetric {
+  id: string;
+  metric_name: string;
+  metric_value: Record<string, any>;
+  timestamp: string;
+  is_deleted: boolean;
+  deleted_at: string | null;
+}
+
+export enum DeploymentType {
+  API = 'api',
+  FRONTEND = 'frontend',
+  DATABASE = 'database',
+  INFRASTRUCTURE = 'infrastructure'
+}
+
+export enum DeploymentStatus {
+  PENDING = 'pending',
+  IN_PROGRESS = 'in_progress',
+  SUCCESS = 'success',
+  FAILED = 'failed',
+  ROLLBACK = 'rollback'
+}
+
+export interface DeploymentRecord {
+  id: string;
+  deployment_type: DeploymentType;
+  deployment_version: string;
+  deployment_description: string;
+  deployment_status: DeploymentStatus;
+  deployment_start: string;
+  deployment_end: string | null;
+  deployment_log: string;
+  is_deleted: boolean;
+  deleted_at: string | null;
+}
+
+export interface SystemSetting {
+  id: string;
+  setting_key: string;
+  setting_value: Record<string, any>;
+  description: string;
+  is_deleted: boolean;
+  deleted_at: string | null;
+}
+
+// --- Recycle Bin Types ---
+
+export enum RecycleBinItemType {
+  CONTACT = 'contact',
+  INQUIRY = 'inquiry',
+  ORDER = 'order',
+  ORDERSLIP = 'orderslip',
+  INVOICE = 'invoice',
+  TASK = 'task',
+  PRODUCT = 'product',
+  TEAM_MESSAGE = 'team_message',
+  COMMENT = 'comment',
+  NOTIFICATION = 'notification'
+}
+
+export interface RecycleBinItem {
+  id: string;
+  item_type: RecycleBinItemType;
+  item_id: string;
+  original_data: Record<string, any>;
+  deleted_by: string;
+  deleted_at: string;
+  restore_token: string;
+  expires_at: string;
+  is_restored: boolean;
+  restored_at: string | null;
+  restored_by: string | null;
+  permanent_delete_at: string;
 }

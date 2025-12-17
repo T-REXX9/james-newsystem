@@ -156,7 +156,7 @@ interface Product {
 ## Services Architecture
 
 ### Supabase Integration
-- **lib/supabaseClient.ts**: Local storage-backed Supabase mock
+- **lib/supabaseClient.ts**: Supabase client configuration
 - **services/supabaseService.ts**: Data access layer with CRUD operations
 - **services/geminiService.ts**: AI-powered lead scoring and insights
 

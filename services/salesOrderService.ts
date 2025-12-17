@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabaseClient';
 import {
   Invoice,
   OrderSlip,
+  RecycleBinItemType,
   SalesInquiryStatus,
   SalesOrder,
   SalesOrderDTO,
@@ -238,6 +239,7 @@ export const getSalesOrder = async (id: string): Promise<SalesOrder | null> => {
       .from('sales_orders')
       .select('*')
       .eq('id', id)
+      .eq('is_deleted', false)
       .single();
 
     if (error || !data) return null;
@@ -254,6 +256,7 @@ export const getSalesOrdersByCustomer = async (customerId: string): Promise<Sale
       .from('sales_orders')
       .select('*')
       .eq('contact_id', customerId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
 
     if (error || !data) return [];
@@ -271,6 +274,7 @@ export const getSalesOrderByInquiry = async (inquiryId: string): Promise<SalesOr
       .from('sales_orders')
       .select('*')
       .eq('inquiry_id', inquiryId)
+      .eq('is_deleted', false)
       .maybeSingle();
 
     if (error || !data) return null;
@@ -371,16 +375,88 @@ export const confirmSalesOrder = async (id: string): Promise<SalesOrder | null> 
 
 export const deleteSalesOrder = async (id: string): Promise<boolean> => {
   try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get the order data before deletion
+    const order = await getSalesOrder(id);
+    if (!order) throw new Error('Order not found');
+
+    // Insert into recycle bin
+    const { error: recycleError } = await supabase
+      .from('recycle_bin_items')
+      .insert({
+        item_type: RecycleBinItemType.ORDER,
+        item_id: id,
+        original_data: order,
+        deleted_by: user.id,
+        deleted_at: new Date().toISOString(),
+      });
+
+    if (recycleError) throw recycleError;
+
+    // Soft delete the order
     const { error } = await supabase
       .from('sales_orders')
-      .update({ status: SalesOrderStatus.CANCELLED })
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id);
 
     if (error) throw error;
     return true;
   } catch (err) {
-    console.error('Error cancelling sales order:', err);
+    console.error('Error deleting sales order:', err);
     return false;
+  }
+};
+
+export const restoreSalesOrder = async (id: string): Promise<SalesOrder | null> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check user role (Owner/Developer only)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
+      throw new Error('Only Owner or Developer can restore items');
+    }
+
+    // Update recycle bin item as restored
+    await supabase
+      .from('recycle_bin_items')
+      .update({
+        is_restored: true,
+        restored_at: new Date().toISOString(),
+        restored_by: user.id,
+      })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.ORDER);
+
+    // Restore the order
+    const { error } = await supabase
+      .from('sales_orders')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+    return getSalesOrder(id);
+  } catch (err) {
+    console.error('Error restoring sales order:', err);
+    return null;
   }
 };
 
@@ -391,6 +467,7 @@ export const getAllSalesOrders = async (
     let query = supabase
       .from('sales_orders')
       .select('*')
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
 
     if (filters.status) {

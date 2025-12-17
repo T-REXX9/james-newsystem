@@ -7,7 +7,7 @@ vi.mock('@supabase/supabase-js', () => ({
 const { createClient } = await import('@supabase/supabase-js');
 
 beforeEach(() => {
-  localStorage.clear();
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -27,14 +27,12 @@ describe('supabaseClient', () => {
     expect(module.supabase).toBeTruthy();
   });
 
-  it('falls back to mock client when env vars are missing', async () => {
+  it('throws error when env vars are missing', async () => {
     vi.stubEnv('VITE_SUPABASE_URL', '');
     vi.stubEnv('VITE_SUPABASE_ANON_KEY', '');
 
-    const module = await import('./supabaseClient');
-    expect(createClient).not.toHaveBeenCalled();
-
-    const { data } = await module.supabase.from('contacts').select('*');
-    expect(Array.isArray(data)).toBe(true);
+    await expect(async () => {
+      await import('./supabaseClient');
+    }).rejects.toThrow('Missing Supabase environment variables');
   });
 });

@@ -1,7 +1,7 @@
 # TND-OPC Login System: Full Authentication Flow Report
 
 ## Overview
-The TND-OPC CRM system implements a comprehensive authentication system using a mock Supabase client with local storage for demonstration purposes. The system handles user registration, login, session management, and role-based access control.
+The TND-OPC CRM system implements a comprehensive authentication system using Supabase. The system handles user registration, login, session management, and role-based access control.
 
 ## Architecture Components
 
@@ -40,10 +40,10 @@ The login component provides a dual-mode interface for both sign-in and sign-up 
    });
    ```
 
-### 2. Authentication Client (Mock Supabase)
+### 2. Authentication Client (Supabase)
 **File:** `lib/supabaseClient.ts`
 
-The system uses a sophisticated mock implementation that simulates Supabase's authentication and database operations using localStorage.
+The system uses Supabase for authentication and database operations.
 
 #### Core Authentication Functions:
 
@@ -361,11 +361,11 @@ Renders login component
 
 ## Development Considerations
 
-### Mock Implementation Notes:
-- Uses localStorage instead of real database
-- Passwords stored in plaintext (demo only)
-- Mock JWT tokens for session management
-- Simulated network delays and responses
+### Supabase Configuration:
+- Requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables
+- Uses Supabase Auth for secure authentication
+- JWT tokens managed by Supabase
+- Real-time database operations
 
 ### Production Readiness:
 - Replace mock client with real Supabase client

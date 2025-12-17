@@ -14,7 +14,7 @@
 - Import order: React → third-party → local components → services → types/constants
 - Tailwind classes inline, no CSS modules
 - Error handling with try/catch, console.error for debugging
-- Use services layer, avoid direct localStorage access
+- Use services layer for data access (Supabase)
 - Props from types.ts when possible
 
 ## Testing

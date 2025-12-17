@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabaseClient';
-import { Invoice, InvoiceDTO, InvoiceItem, InvoiceStatus, SalesOrderStatus } from '../types';
+import { Invoice, InvoiceDTO, InvoiceItem, InvoiceStatus, RecycleBinItemType, SalesOrderStatus } from '../types';
 
 const randomSequence = () => String(Math.floor(Math.random() * 100000)).padStart(5, '0');
 
@@ -160,6 +160,7 @@ export const getInvoice = async (id: string): Promise<Invoice | null> => {
       .from('invoices')
       .select('*')
       .eq('id', id)
+      .eq('is_deleted', false)
       .single();
 
     if (error || !data) return null;
@@ -176,6 +177,7 @@ export const getInvoicesByCustomer = async (customerId: string): Promise<Invoice
       .from('invoices')
       .select('*')
       .eq('contact_id', customerId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
 
     if (error || !data) return [];
@@ -317,16 +319,88 @@ export const printInvoice = async (id: string): Promise<Invoice | null> => {
 
 export const deleteInvoice = async (id: string): Promise<boolean> => {
   try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get the invoice data before deletion
+    const invoice = await getInvoice(id);
+    if (!invoice) throw new Error('Invoice not found');
+
+    // Insert into recycle bin
+    const { error: recycleError } = await supabase
+      .from('recycle_bin_items')
+      .insert({
+        item_type: RecycleBinItemType.INVOICE,
+        item_id: id,
+        original_data: invoice,
+        deleted_by: user.id,
+        deleted_at: new Date().toISOString(),
+      });
+
+    if (recycleError) throw recycleError;
+
+    // Soft delete the invoice
     const { error } = await supabase
       .from('invoices')
-      .update({ status: InvoiceStatus.CANCELLED })
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id);
 
     if (error) throw error;
     return true;
   } catch (err) {
-    console.error('Error cancelling invoice:', err);
+    console.error('Error deleting invoice:', err);
     return false;
+  }
+};
+
+export const restoreInvoice = async (id: string): Promise<Invoice | null> => {
+  try {
+    // Fetch the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check user role (Owner/Developer only)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile || !['Owner', 'Developer'].includes(profile.role)) {
+      throw new Error('Only Owner or Developer can restore items');
+    }
+
+    // Update recycle bin item as restored
+    await supabase
+      .from('recycle_bin_items')
+      .update({
+        is_restored: true,
+        restored_at: new Date().toISOString(),
+        restored_by: user.id,
+      })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.INVOICE);
+
+    // Restore the invoice
+    const { error } = await supabase
+      .from('invoices')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+    return getInvoice(id);
+  } catch (err) {
+    console.error('Error restoring invoice:', err);
+    return null;
   }
 };
 
@@ -337,6 +411,7 @@ export const getAllInvoices = async (
     let query = supabase
       .from('invoices')
       .select('*')
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false });
 
     if (filters.status) {
