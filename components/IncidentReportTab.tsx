@@ -1,34 +1,38 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Plus, FileText, Receipt, ShoppingCart, HelpCircle, Package } from 'lucide-react';
 import { fetchIncidentReports, approveIncidentReport } from '../services/supabaseService';
+import CreateIncidentReportModal from './CreateIncidentReportModal';
+import { UserProfile } from '../types';
 
 interface IncidentReportTabProps {
   contactId: string;
-  currentUserId?: string;
+  currentUser?: UserProfile | null;
 }
 
-const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, currentUserId }) => {
+const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, currentUser }) => {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const loadReports = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchIncidentReports(contactId);
+      setReports(data || []);
+    } catch (err) {
+      console.error('Error loading incident reports:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadReports = async () => {
-      try {
-        const data = await fetchIncidentReports(contactId);
-        setReports(data || []);
-      } catch (err) {
-        console.error('Error loading incident reports:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     loadReports();
   }, [contactId]);
 
   const handleApprove = async (reportId: string) => {
     try {
-      await approveIncidentReport(reportId, currentUserId || '');
+      await approveIncidentReport(reportId, currentUser?.id || '');
       setReports(prev => prev.map(r => r.id === reportId ? { ...r, approval_status: 'approved' } : r));
     } catch (err) {
       console.error('Error approving report:', err);
@@ -46,21 +50,65 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
     return <span className={`inline-block px-2 py-1 rounded text-xs font-bold ${style.bg} ${style.color}`}>{style.text}</span>;
   };
 
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case 'invoice':
+        return <FileText className="w-4 h-4 text-blue-500" />;
+      case 'order_slip':
+        return <Receipt className="w-4 h-4 text-purple-500" />;
+      case 'sales_order':
+        return <ShoppingCart className="w-4 h-4 text-green-500" />;
+      case 'sales_inquiry':
+        return <HelpCircle className="w-4 h-4 text-orange-500" />;
+      case 'purchase_history':
+        return <Package className="w-4 h-4 text-indigo-500" />;
+      default:
+        return <FileText className="w-4 h-4 text-gray-500" />;
+    }
+  };
+
   if (loading) {
     return <div className="p-6 text-center text-slate-500">Loading incident reports...</div>;
   }
 
   if (reports.length === 0) {
     return (
-      <div className="p-6 text-center text-slate-500">
-        <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-        <p>No incident reports yet</p>
+      <div className="p-6">
+        <div className="mb-4">
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Create Incident Report
+          </button>
+        </div>
+        <div className="text-center text-slate-500">
+          <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p>No incident reports yet. Create your first incident report.</p>
+        </div>
+        <CreateIncidentReportModal
+          contactId={contactId}
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          onSuccess={loadReports}
+          currentUser={currentUser}
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-4 p-6">
+      <div className="mb-4">
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Create Incident Report
+        </button>
+      </div>
       {reports.map(report => (
         <div key={report.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
           <div className="flex items-start justify-between mb-3">
@@ -101,9 +149,31 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
             </div>
           )}
 
+          {report.related_transactions && report.related_transactions.length > 0 && (
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Related Transactions:</p>
+              <div className="flex flex-wrap gap-2">
+                {report.related_transactions.map((transaction: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm"
+                  >
+                    {getTransactionIcon(transaction.transaction_type)}
+                    <span className="font-medium text-slate-700 dark:text-slate-300">
+                      {transaction.transaction_number}
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400 text-xs">
+                      {new Date(transaction.transaction_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {report.attachments && report.attachments.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Attachments:</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">File Attachments:</p>
               <div className="flex flex-wrap gap-2">
                 {report.attachments.map((attachment: string, idx: number) => (
                   <a
@@ -132,6 +202,13 @@ const IncidentReportTab: React.FC<IncidentReportTabProps> = ({ contactId, curren
           )}
         </div>
       ))}
+      <CreateIncidentReportModal
+        contactId={contactId}
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={loadReports}
+        currentUser={currentUser}
+      />
     </div>
   );
 };

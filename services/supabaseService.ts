@@ -4,7 +4,7 @@
 
 import { supabase } from '../lib/supabaseClient';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STAFF_ROLES } from '../constants';
-import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType } from '../types';
+import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput } from '../types';
 
 // With our local mock DB, we can just query directly.
 // The Mock DB handles the seeding from constants, so we trust it returns data.
@@ -973,13 +973,122 @@ export const fetchIncidentReports = async (contactId: string) => {
   }
 };
 
-export const createIncidentReport = async (report: any) => {
+export const createIncidentReport = async (report: CreateIncidentReportInput) => {
   try {
     const { error } = await supabase.from('incident_reports').insert(report);
     if (error) throw error;
   } catch (err) {
     console.error('Error creating incident report:', err);
     throw err;
+  }
+};
+
+// Fetch all transactions for a contact (for incident report attachment)
+export const fetchContactTransactions = async (contactId: string) => {
+  try {
+    const transactions: any[] = [];
+
+    // Fetch Sales Inquiries
+    const { data: inquiries } = await supabase
+      .from('sales_inquiries')
+      .select('id, inquiry_no, sales_date, grand_total')
+      .eq('contact_id', contactId)
+      .eq('is_deleted', false)
+      .order('sales_date', { ascending: false });
+
+    if (inquiries) {
+      transactions.push(...inquiries.map(inq => ({
+        id: inq.id,
+        type: 'sales_inquiry',
+        number: inq.inquiry_no,
+        date: inq.sales_date,
+        amount: inq.grand_total,
+        label: `Inquiry ${inq.inquiry_no}`
+      })));
+    }
+
+    // Fetch Sales Orders
+    const { data: orders } = await supabase
+      .from('sales_orders')
+      .select('id, order_no, sales_date, grand_total')
+      .eq('contact_id', contactId)
+      .eq('is_deleted', false)
+      .order('sales_date', { ascending: false });
+
+    if (orders) {
+      transactions.push(...orders.map(order => ({
+        id: order.id,
+        type: 'sales_order',
+        number: order.order_no,
+        date: order.sales_date,
+        amount: order.grand_total,
+        label: `Order ${order.order_no}`
+      })));
+    }
+
+    // Fetch Order Slips
+    const { data: slips } = await supabase
+      .from('order_slips')
+      .select('id, slip_no, sales_date, grand_total')
+      .eq('contact_id', contactId)
+      .eq('is_deleted', false)
+      .order('sales_date', { ascending: false });
+
+    if (slips) {
+      transactions.push(...slips.map(slip => ({
+        id: slip.id,
+        type: 'order_slip',
+        number: slip.slip_no,
+        date: slip.sales_date,
+        amount: slip.grand_total,
+        label: `Order Slip ${slip.slip_no}`
+      })));
+    }
+
+    // Fetch Invoices
+    const { data: invoices } = await supabase
+      .from('invoices')
+      .select('id, invoice_no, sales_date, grand_total')
+      .eq('contact_id', contactId)
+      .eq('is_deleted', false)
+      .order('sales_date', { ascending: false });
+
+    if (invoices) {
+      transactions.push(...invoices.map(inv => ({
+        id: inv.id,
+        type: 'invoice',
+        number: inv.invoice_no,
+        date: inv.sales_date,
+        amount: inv.grand_total,
+        label: `Invoice ${inv.invoice_no}`
+      })));
+    }
+
+    // Fetch Purchase History
+    const { data: purchases } = await supabase
+      .from('purchase_history')
+      .select('id, invoice_number, purchase_date, total_amount')
+      .eq('contact_id', contactId)
+      .order('purchase_date', { ascending: false });
+
+    if (purchases) {
+      transactions.push(...purchases.map(purchase => ({
+        id: purchase.id,
+        type: 'purchase_history',
+        number: purchase.invoice_number || `PH-${purchase.id.substring(0, 8)}`,
+        date: purchase.purchase_date,
+        amount: purchase.total_amount,
+        label: `Purchase ${purchase.invoice_number || purchase.id.substring(0, 8)}`
+      })));
+    }
+
+    // Sort all transactions by date (most recent first)
+    transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    return transactions;
+  } catch (err) {
+    console.error('Error fetching contact transactions:', err);
+    return [];
   }
 };
 
@@ -996,6 +1105,59 @@ export const approveIncidentReport = async (reportId: string, approvedBy: string
     if (error) throw error;
   } catch (err) {
     console.error('Error approving incident report:', err);
+    throw err;
+  }
+};
+
+export const rejectIncidentReport = async (reportId: string, rejectedBy: string, notes?: string) => {
+  try {
+    const updateData: any = {
+      approval_status: 'rejected',
+      approved_by: rejectedBy,
+      approval_date: new Date().toISOString()
+    };
+
+    if (notes) {
+      updateData.notes = notes;
+    }
+
+    const { error } = await supabase
+      .from('incident_reports')
+      .update(updateData)
+      .eq('id', reportId);
+    if (error) throw error;
+  } catch (err) {
+    console.error('Error rejecting incident report:', err);
+    throw err;
+  }
+};
+
+export const fetchAllPendingIncidentReports = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('incident_reports')
+      .select(`
+        *,
+        contacts (
+          company,
+          city,
+          salesman
+        )
+      `)
+      .eq('approval_status', 'pending')
+      .order('report_date', { ascending: false });
+
+    if (error) throw error;
+
+    // Transform the data to flatten the customer information
+    return data?.map(report => ({
+      ...report,
+      customer_company: report.contacts?.company || 'Unknown',
+      customer_city: report.contacts?.city || 'Unknown',
+      customer_salesman: report.contacts?.salesman || 'Unknown'
+    })) || [];
+  } catch (err) {
+    console.error('Error fetching pending incident reports:', err);
     throw err;
   }
 };

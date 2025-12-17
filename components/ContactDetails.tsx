@@ -451,7 +451,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
         {activeTab === 'InquiryHistory' && <InquiryHistoryTab contactId={contact.id} />}
 
         {/* Incident Reports Tab */}
-        {activeTab === 'IncidentReports' && <IncidentReportTab contactId={contact.id} currentUserId={currentUser?.id} />}
+        {activeTab === 'IncidentReports' && <IncidentReportTab contactId={contact.id} currentUser={currentUser} />}
 
         {/* Sales Returns Tab */}
         {activeTab === 'SalesReturns' && <SalesReturnTab contactId={contact.id} currentUserId={currentUser?.id} />}

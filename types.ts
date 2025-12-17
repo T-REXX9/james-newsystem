@@ -470,19 +470,59 @@ export interface SalesProgress {
   notes?: string;
 }
 
+export interface RelatedTransaction {
+  transaction_type: 'invoice' | 'order_slip' | 'sales_order' | 'sales_inquiry' | 'purchase_history';
+  transaction_id: string;
+  transaction_number: string;
+  transaction_date: string;
+}
+
 export interface IncidentReport {
   id: string;
   contact_id: string;
-  reportDate: string;
-  incidentDate: string;
-  issueType: 'product_quality' | 'service_quality' | 'delivery' | 'other';
+  report_date: string;
+  incident_date: string;
+  issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'other';
   description: string;
-  reportedBy: string;
+  reported_by: string;
   attachments?: string[];
-  approvalStatus: 'pending' | 'approved' | 'rejected';
-  approvedBy?: string;
-  approvalDate?: string;
+  related_transactions?: RelatedTransaction[];
+  approval_status: 'pending' | 'approved' | 'rejected';
+  approved_by?: string;
+  approval_date?: string;
   notes?: string;
+}
+
+export interface CreateIncidentReportInput {
+  contact_id: string;
+  report_date: string;
+  incident_date: string;
+  issue_type: 'product_quality' | 'service_quality' | 'delivery' | 'other';
+  description: string;
+  reported_by: string;
+  attachments?: string[];
+  related_transactions?: RelatedTransaction[];
+  notes?: string;
+}
+
+export interface ContactTransaction {
+  id: string;
+  type: 'invoice' | 'order_slip' | 'sales_order' | 'sales_inquiry' | 'purchase_history';
+  number: string;
+  date: string;
+  amount: number;
+  label: string;
+}
+
+export interface IncidentReportWithCustomer extends IncidentReport {
+  customer_company: string;
+  customer_city: string;
+  customer_salesman: string;
+  contacts?: {
+    company: string;
+    city: string;
+    salesman: string;
+  };
 }
 
 export interface SalesReturn {

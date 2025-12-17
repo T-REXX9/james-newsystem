@@ -3,12 +3,12 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import {
     Phone, PhoneIncoming, PhoneOutgoing, Search, Filter,
     Calendar, Target, ArrowUpRight, Send, MessageSquare,
-    PhilippinePeso, TrendingUp, Package, Users, UserCheck, UserX, UserPlus, BarChart3, ClipboardList, Clock, FileText, ShieldAlert, RefreshCw
+    PhilippinePeso, TrendingUp, Package, Users, UserCheck, UserX, UserPlus, BarChart3, ClipboardList, Clock, FileText, ShieldAlert, RefreshCw, AlertTriangle, CheckCircle, XCircle
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { MOCK_AGENTS } from '../constants';
-import { fetchContacts, fetchCallLogs, fetchInquiries, fetchPurchases, subscribeToCallMonitoringUpdates, updateContact, createInquiry, fetchAgentPerformanceLeaderboard, fetchAgentPerformanceSummary } from '../services/supabaseService';
-import { Contact, CustomerStatus, CallLogEntry, Inquiry, Purchase, AgentSalesData, AgentPerformanceSummary } from '../types';
+import { fetchContacts, fetchCallLogs, fetchInquiries, fetchPurchases, subscribeToCallMonitoringUpdates, updateContact, createInquiry, fetchAgentPerformanceLeaderboard, fetchAgentPerformanceSummary, fetchAllPendingIncidentReports, approveIncidentReport, rejectIncidentReport } from '../services/supabaseService';
+import { Contact, CustomerStatus, CallLogEntry, Inquiry, Purchase, AgentSalesData, AgentPerformanceSummary, IncidentReportWithCustomer, UserProfile } from '../types';
 import CompanyName from './CompanyName';
 import AgentCallActivity from './AgentCallActivity';
 import { useToast } from './ToastProvider';
@@ -69,7 +69,11 @@ const ActionModal: React.FC<ActionModalProps> = ({ open, title, confirmLabel, on
     );
 };
 
-const OwnerLiveCallMonitoringView: React.FC = () => {
+interface OwnerLiveCallMonitoringViewProps {
+    currentUser: UserProfile | null;
+}
+
+const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = ({ currentUser }) => {
     const [filterAgent, setFilterAgent] = useState('All');
     const [filterType, setFilterType] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
@@ -102,6 +106,10 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
     const [showAgentModal, setShowAgentModal] = useState(false);
     const [agentSummary, setAgentSummary] = useState<AgentPerformanceSummary | null>(null);
     const [agentSummaryLoading, setAgentSummaryLoading] = useState(false);
+
+    // Incident Reports State
+    const [pendingIncidentReports, setPendingIncidentReports] = useState<IncidentReportWithCustomer[]>([]);
+    const [incidentReportsLoading, setIncidentReportsLoading] = useState(false);
 
     // Chat State
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
@@ -175,9 +183,53 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
         }
     }, []);
 
+    const loadPendingIncidentReports = useCallback(async () => {
+        try {
+            setIncidentReportsLoading(true);
+            const reports = await fetchAllPendingIncidentReports();
+            setPendingIncidentReports(reports);
+            setIncidentReportsLoading(false);
+        } catch (error) {
+            console.error('Error loading pending incident reports:', error);
+            addToast('Failed to load pending incident reports', 'error');
+            setIncidentReportsLoading(false);
+        }
+    }, [addToast]);
+
+    const handleApproveIncidentReport = useCallback(async (reportId: string) => {
+        if (!currentUser) {
+            addToast('User not authenticated', 'error');
+            return;
+        }
+        try {
+            await approveIncidentReport(reportId, currentUser.id);
+            addToast('Incident report approved successfully', 'success');
+            await loadPendingIncidentReports();
+        } catch (error) {
+            console.error('Error approving incident report:', error);
+            addToast('Failed to approve incident report', 'error');
+        }
+    }, [currentUser, addToast, loadPendingIncidentReports]);
+
+    const handleRejectIncidentReport = useCallback(async (reportId: string, notes?: string) => {
+        if (!currentUser) {
+            addToast('User not authenticated', 'error');
+            return;
+        }
+        try {
+            await rejectIncidentReport(reportId, currentUser.id, notes);
+            addToast('Incident report rejected', 'success');
+            await loadPendingIncidentReports();
+        } catch (error) {
+            console.error('Error rejecting incident report:', error);
+            addToast('Failed to reject incident report', 'error');
+        }
+    }, [currentUser, addToast, loadPendingIncidentReports]);
+
     useEffect(() => {
         loadData();
-    }, [loadData]);
+        loadPendingIncidentReports();
+    }, [loadData, loadPendingIncidentReports]);
 
     useEffect(() => {
         const unsubscribe = subscribeToCallMonitoringUpdates(() => {
@@ -451,15 +503,15 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
     };
 
     const CompactMetric = ({ title, value, subtext, icon: Icon, colorClass, bgClass }: any) => (
-        <div className={`flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 ${bgClass || 'bg-white dark:bg-slate-900'} shadow-sm min-w-[140px]`}>
-            <div className={`p-2 rounded-lg ${colorClass}`}>
-                <Icon className="w-5 h-5" />
+        <div className={`flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 ${bgClass || 'bg-white dark:bg-slate-900'} shadow-sm`}>
+            <div className={`p-1.5 rounded-md ${colorClass}`}>
+                <Icon className="w-4 h-4" />
             </div>
-            <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider whitespace-nowrap">{title}</p>
-                <div className="flex items-baseline gap-2">
-                    <h4 className="text-xl font-bold text-slate-800 dark:text-white leading-none">{value}</h4>
-                    {subtext && <span className="text-[10px] text-slate-500 font-medium">{subtext}</span>}
+            <div className="min-w-0 flex-1">
+                <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wide whitespace-nowrap truncate">{title}</p>
+                <div className="flex items-baseline gap-1.5">
+                    <h4 className="text-lg font-bold text-slate-800 dark:text-white leading-none">{value}</h4>
+                    {subtext && <span className="text-[9px] text-slate-500 font-medium truncate">{subtext}</span>}
                 </div>
             </div>
         </div>
@@ -649,8 +701,8 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
             </div>
 
             {/* 2. High Density Stats Bar (Fixed Row) */}
-            <div className="px-6 py-4 shrink-0 bg-slate-50 dark:bg-slate-950 overflow-x-auto border-b border-slate-100 dark:border-slate-900">
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 min-w-[1200px] lg:min-w-0">
+            <div className="px-6 py-3 shrink-0 bg-slate-50 dark:bg-slate-950 overflow-x-auto border-b border-slate-100 dark:border-slate-900">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-9 gap-2">
                     {/* Customer Stats (Requested) */}
                     <CompactMetric
                         title="Active Clients"
@@ -689,6 +741,15 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                         colorClass="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20"
                     />
 
+                    {/* Pending Reports */}
+                    <CompactMetric
+                        title="Pending Reports"
+                        value={pendingIncidentReports.length}
+                        icon={AlertTriangle}
+                        bgClass="bg-amber-50/50 dark:bg-amber-900/10"
+                        colorClass="text-amber-600 dark:text-amber-400 bg-white dark:bg-amber-900/20"
+                    />
+
                     {/* Sales */}
                     <CompactMetric
                         title="Weekly Sales"
@@ -711,18 +772,18 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4 space-y-3">
                 {/* 3. Main Dashboard Grid (Flex-1 to prevent scroll) */}
-                <div className="grid grid-cols-12 gap-4">
+                <div className="grid grid-cols-12 gap-3">
                     {/* [NEW] Priority Dashboard Row */}
-                    <div className="col-span-12 grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div className="col-span-12 grid grid-cols-1 md:grid-cols-12 gap-3">
                         {/* 1. Agent Call Volume (5 cols) */}
-                        <div className="col-span-12 md:col-span-5 h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col">
+                        <div className="col-span-12 md:col-span-5 h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 shadow-sm flex flex-col">
                             <div className="flex justify-between items-center mb-2 shrink-0">
-                                <h3 className="font-bold text-sm text-slate-800 dark:text-white">Agent Call Volume</h3>
-                                <div className="flex gap-4 text-xs">
-                                    <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Calls</div>
-                                    <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Success</div>
+                                <h3 className="font-bold text-xs text-slate-800 dark:text-white">Agent Call Volume</h3>
+                                <div className="flex gap-3 text-[10px]">
+                                    <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Calls</div>
+                                    <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Success</div>
                                 </div>
                             </div>
                             <div className="flex-1 w-full min-h-0">
@@ -743,8 +804,8 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                         </div>
 
                         {/* 2. Outcomes (3 cols) */}
-                        <div className="col-span-12 md:col-span-3 h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col items-center justify-center relative">
-                            <h3 className="absolute top-4 left-4 text-xs font-bold text-slate-500 uppercase">Outcomes</h3>
+                        <div className="col-span-12 md:col-span-3 h-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 shadow-sm flex flex-col items-center justify-center relative">
+                            <h3 className="absolute top-3 left-3 text-[10px] font-bold text-slate-500 uppercase">Outcomes</h3>
                             <div className="flex-1 w-full h-full min-h-0">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
@@ -788,10 +849,8 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="col-span-12 h-px bg-slate-200 dark:bg-slate-800"></div>
-
                     {/* Sales Performance Leaderboard Row */}
-                    <div className="col-span-12 grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div className="col-span-12 grid grid-cols-1 md:grid-cols-12 gap-3">
                         <SalesPerformanceCard
                             agents={agentLeaderboard}
                             onAgentClick={loadAgentSummary}
@@ -799,21 +858,131 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                         />
                     </div>
 
-                    <div className="col-span-12 h-px bg-slate-200 dark:bg-slate-800"></div>
+                    {/* Pending Incident Reports Row */}
+                    <div className="col-span-12">
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm p-3">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4 text-amber-500" />
+                                    Pending Incident Reports
+                                    {pendingIncidentReports.length > 0 && (
+                                        <span className="ml-2 px-2 py-0.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full">
+                                            {pendingIncidentReports.length}
+                                        </span>
+                                    )}
+                                </h3>
+                                <button
+                                    onClick={loadPendingIncidentReports}
+                                    className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                    title="Refresh"
+                                >
+                                    <RefreshCw className="w-4 h-4 text-slate-500" />
+                                </button>
+                            </div>
+
+                            {incidentReportsLoading ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue"></div>
+                                </div>
+                            ) : pendingIncidentReports.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-center">
+                                    <CheckCircle className="w-12 h-12 text-emerald-500 mb-3" />
+                                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                                        No pending incident reports
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                                        All incident reports have been reviewed
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {pendingIncidentReports.map((report) => {
+                                        const getIssueTypeBadge = (type: string) => {
+                                            const badges = {
+                                                product_quality: { label: 'Product Quality', color: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' },
+                                                service_quality: { label: 'Service Quality', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' },
+                                                delivery: { label: 'Delivery', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
+                                                other: { label: 'Other', color: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400' }
+                                            };
+                                            return badges[type as keyof typeof badges] || badges.other;
+                                        };
+
+                                        const badge = getIssueTypeBadge(report.issue_type);
+                                        const incidentDate = new Date(report.incident_date).toLocaleDateString();
+                                        const reportDate = new Date(report.report_date).toLocaleDateString();
+
+                                        return (
+                                            <div
+                                                key={report.id}
+                                                className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-slate-50/40 dark:bg-slate-800/50 hover:border-amber-300 dark:hover:border-amber-700 transition-colors"
+                                            >
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <h4 className="text-sm font-bold text-slate-800 dark:text-white truncate">
+                                                                {report.customer_company}
+                                                            </h4>
+                                                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${badge.color}`}>
+                                                                {badge.label}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400 mb-2">
+                                                            <span className="flex items-center gap-1">
+                                                                <Users className="w-3 h-3" />
+                                                                {report.customer_city}
+                                                            </span>
+                                                            <span>•</span>
+                                                            <span>Salesman: {report.customer_salesman}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-500 mb-3">
+                                                            <span>Incident: {incidentDate}</span>
+                                                            <span>•</span>
+                                                            <span>Reported: {reportDate}</span>
+                                                            <span>•</span>
+                                                            <span>By: {report.reported_by}</span>
+                                                        </div>
+                                                        <p className="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">
+                                                            {report.description}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex flex-col gap-2 shrink-0">
+                                                        <button
+                                                            onClick={() => handleApproveIncidentReport(report.id)}
+                                                            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                                                        >
+                                                            <CheckCircle className="w-3.5 h-3.5" />
+                                                            Approve
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleRejectIncidentReport(report.id)}
+                                                            className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                                                        >
+                                                            <XCircle className="w-3.5 h-3.5" />
+                                                            Deny
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Customer Lists & Details */}
                     {/* Customer Lists */}
-                    <div className="col-span-12 lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 space-y-3">
+                    <div className="col-span-12 lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm p-3 space-y-2">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                <ClipboardList className="w-4 h-4 text-brand-blue" /> Daily Customer Lists
+                            <h3 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                <ClipboardList className="w-3.5 h-3.5 text-brand-blue" /> Daily Customer Lists
                             </h3>
-                            <span className="text-[10px] uppercase text-slate-400">Status grouped</span>
+                            <span className="text-[9px] uppercase text-slate-400">Status grouped</span>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-stretch">
                             {groupedCustomers.map(group => (
-                                <div key={group.key} className="border border-slate-200 dark:border-slate-800 rounded-lg p-3 bg-slate-50/40 dark:bg-slate-800/50 flex flex-col h-full">
-                                    <div className="flex items-center justify-between mb-2">
+                                <div key={group.key} className="border border-slate-200 dark:border-slate-800 rounded-md p-2.5 bg-slate-50/40 dark:bg-slate-800/50 flex flex-col h-full">
+                                    <div className="flex items-center justify-between mb-1.5">
                                         <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{group.label}</div>
                                         <span className="text-[10px] text-slate-400">{group.items.length} customers</span>
                                     </div>
@@ -861,12 +1030,12 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                     </div>
 
                     {/* Customer Detail + History */}
-                    <div className="col-span-12 lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 space-y-3">
+                    <div className="col-span-12 lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm p-3 space-y-2">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-brand-blue" /> Customer Summary
+                            <h3 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                <FileText className="w-3.5 h-3.5 text-brand-blue" /> Customer Summary
                             </h3>
-                            <span className="text-[10px] text-slate-400">Details, sales, chat</span>
+                            <span className="text-[9px] text-slate-400">Details, sales, chat</span>
                         </div>
                         <div className="relative">
                             <input
@@ -1072,17 +1241,17 @@ const OwnerLiveCallMonitoringView: React.FC = () => {
                 </div>
 
                 <div className="min-h-0">
-                    <div className="grid grid-cols-12 gap-4 min-h-0 items-start">
+                    <div className="grid grid-cols-12 gap-3 min-h-0 items-start">
 
                         {/* LEFT COLUMN: Activity & List (Span 9) */}
-                        <div className="col-span-12 lg:col-span-9 flex flex-col gap-4 min-h-0">
+                        <div className="col-span-12 lg:col-span-9 flex flex-col gap-3 min-h-0">
 
 
 
                             {/* Row 2: Call Log Table (Flex-1 Scrollable) */}
-                            <div className="h-[450px] min-h-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden">
-                                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 shrink-0 flex justify-between items-center">
-                                    <h3 className="font-bold text-sm text-slate-800 dark:text-white">Recent Logs</h3>
+                            <div className="h-[450px] min-h-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm flex flex-col overflow-hidden">
+                                <div className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 shrink-0 flex justify-between items-center">
+                                    <h3 className="font-bold text-xs text-slate-800 dark:text-white">Recent Logs</h3>
                                     <div className="text-xs text-slate-500">{filteredLogs.length} records found</div>
                                 </div>
 

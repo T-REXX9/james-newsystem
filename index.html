@@ -77,7 +77,22 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8;
       }
-      
+
+      /* Thin scrollbar for sidebar */
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 4px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+        border-radius: 2px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af;
+      }
+
       /* Dark Mode Overrides */
       .dark body {
         background-color: #000000; /* Pure Black */
@@ -91,6 +106,14 @@
       }
       .dark ::-webkit-scrollbar-thumb:hover {
         background: #404040;
+      }
+
+      /* Dark mode thin scrollbar for sidebar */
+      .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #374151;
+      }
+      .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: #4b5563;
       }
 
       /* Animation utilities */

@@ -727,7 +727,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-950 p-4 lg:p-6 space-y-6">
+    <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-950 p-4 lg:p-6 space-y-4">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -785,8 +785,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       )}
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl p-4 shadow-sm">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-lg p-3 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
               <PhilippinePeso className="w-4 h-4" />
@@ -798,7 +798,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Goal for the current month</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-500/70 rounded-xl p-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-500/70 rounded-lg p-3 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
               <TrendingUp className="w-4 h-4" />
@@ -829,7 +829,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-rose-400/70 rounded-xl p-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-rose-400/70 rounded-lg p-3 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
               <BarChart3 className="w-4 h-4" />
@@ -851,7 +851,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-amber-400/70 rounded-xl p-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-amber-400/70 rounded-lg p-3 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
               <Calendar className="w-4 h-4" />
@@ -1064,17 +1064,17 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       </section>
 
 
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7 space-y-6">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-400/70 rounded-xl shadow-sm">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-7 space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-400/70 rounded-lg shadow-sm">
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-2">
                 <PhoneCall className="w-5 h-5 text-brand-blue" />
                 <h2 className="text-lg font-bold text-slate-800 dark:text-white">Today's Call List</h2>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">Prioritized outreach for the day</p>
             </div>
-            <div className="p-4">
+            <div className="p-3">
               {hasLoadedData ? (
                 <AgentCallActivity
                   callLogs={callLogs}
@@ -1089,7 +1089,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-sky-400/70 rounded-xl shadow-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-sky-400/70 rounded-lg shadow-sm p-3">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-2">
                 <PhoneCall className="w-5 h-5 text-brand-blue" />
@@ -1100,8 +1100,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 Updated live from Supabase
               </div>
             </div>
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
                 <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
                   <PhoneForwarded className="w-3.5 h-3.5 text-brand-blue" />
                   Calls Today
@@ -1111,7 +1111,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </p>
                 {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
               </div>
-              <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
+              <div className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
                 <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
                   <MessageSquare className="w-3.5 h-3.5 text-purple-500" />
                   SMS Today
@@ -1121,7 +1121,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </p>
                 {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
               </div>
-              <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
+              <div className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
                 <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
                   <Users className="w-3.5 h-3.5 text-emerald-500" />
                   Contacts Today
@@ -1131,7 +1131,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </p>
                 {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
               </div>
-              <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
+              <div className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
                 <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                   Calls this Month
@@ -1142,8 +1142,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
               </div>
             </div>
-            <div className="mt-6 grid grid-cols-1 lg:grid-cols-5 gap-4">
-              <div className="lg:col-span-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-3">
+              <div className="lg:col-span-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Monthly Summary</h3>
                   <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
@@ -1173,7 +1173,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   )}
                 </div>
               </div>
-              <div className="lg:col-span-2 bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+              <div className="lg:col-span-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-100 dark:border-slate-800">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Outcome Mix</h3>
                 {hasLoadedData ? (
                   <div className="h-48">
@@ -1194,12 +1194,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 )}
               </div>
             </div>
-            <div className="mt-6 overflow-x-auto pb-2">
-              <div className="flex gap-4 min-w-max">
+            <div className="mt-4 overflow-x-auto pb-2">
+              <div className="flex gap-3 min-w-max">
                 {perClientHistory.map((item) => (
                   <div
                     key={item.contact.id}
-                    className="min-w-[220px] p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col gap-2 shadow-sm"
+                    className="min-w-[220px] p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col gap-2 shadow-sm"
                   >
                     <div className="flex items-center justify-between">
                       <div>

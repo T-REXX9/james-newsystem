@@ -19,12 +19,17 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'customers', label: 'Customer Database' },
   { id: 'products', label: 'Product Database' },
   { id: 'reorder', label: 'Reorder Report' },
+  { id: 'salesinquiry', label: 'Sales Inquiry' },
+  { id: 'salesorder', label: 'Sales Orders' },
+  { id: 'orderslip', label: 'Order Slips' },
+  { id: 'invoice', label: 'Invoices' },
   { id: 'staff', label: 'Staff & Agents' },
   { id: 'management', label: 'Management' },
   { id: 'mail', label: 'Inbox' },
   { id: 'calendar', label: 'Calendar' },
   { id: 'calls', label: 'Daily Call Monitoring' },
   { id: 'tasks', label: 'Tasks' },
+  { id: 'recyclebin', label: 'Recycle Bin' },
   { id: 'settings', label: 'Settings & Permissions' },
 ];
 

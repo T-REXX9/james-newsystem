@@ -80,13 +80,13 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
   const getContactName = (contactId: string) => contactsMap.get(contactId)?.company || 'Unknown contact';
 
   return (
-    <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col ${className}`}>
-      <div className="flex items-center justify-between mb-4">
+    <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-3 shadow-sm flex flex-col ${className}`}>
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Phone className="w-5 h-5 text-brand-blue" />
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white">{title}</h2>
+          <Phone className="w-4 h-4 text-brand-blue" />
+          <h2 className="text-base font-bold text-slate-800 dark:text-white">{title}</h2>
         </div>
-        <span className="text-xs text-slate-500 dark:text-slate-400">Latest {recentActivity.length} updates</span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-400">Latest {recentActivity.length} updates</span>
       </div>
 
       {recentActivity.length === 0 ? (
@@ -103,10 +103,10 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
             return (
               <div
                 key={`${item.type}-${item.id}`}
-                className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700"
+                className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700"
               >
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-9 h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center">
                     {isCall ? (
                       item.direction === 'inbound' ? (
                         <PhoneIncoming className="w-5 h-5 text-emerald-500" />

@@ -262,7 +262,7 @@ const App: React.FC = () => {
         return isSalesAgent ? (
           <DailyCallMonitoringView currentUser={userProfile} />
         ) : (
-          <OwnerLiveCallMonitoringView />
+          <OwnerLiveCallMonitoringView currentUser={userProfile} />
         );
       }
       case 'tasks': return <TasksView currentUser={userProfile} />;
