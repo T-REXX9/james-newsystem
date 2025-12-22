@@ -191,9 +191,9 @@ export const createFromInquiry = async (inquiryId: string): Promise<SalesOrder> 
   try {
     const { inquiry, items } = await fetchInquiry(inquiryId);
 
-if (inquiry.status !== SalesInquiryStatus.APPROVED) {
-  throw new Error('Inquiry must be approved before conversion');
-}
+    if (inquiry.status !== SalesInquiryStatus.APPROVED) {
+      throw new Error('Inquiry must be approved before conversion');
+    }
 
     const dto: SalesOrderDTO = {
       inquiry_id: inquiry.id,
@@ -389,9 +389,12 @@ export const deleteSalesOrder = async (id: string): Promise<boolean> => {
       .insert({
         item_type: RecycleBinItemType.ORDER,
         item_id: id,
-        original_data: order,
+        original_data: order as any,
         deleted_by: user.id,
         deleted_at: new Date().toISOString(),
+        restore_token: `restore_${id}_${Date.now()}`,
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        permanent_delete_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
     if (recycleError) throw recycleError;

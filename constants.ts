@@ -33,6 +33,20 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'settings', label: 'Settings & Permissions' },
 ];
 
+// Sidebar keyboard shortcuts
+export const SIDEBAR_KEYBOARD_SHORTCUTS = {
+  TOGGLE_SIDEBAR: { key: 'b', meta: true, description: 'Toggle sidebar' },
+  SEARCH: { key: 'k', meta: true, description: 'Search navigation' },
+  HELP: { key: '?', description: 'Show keyboard shortcuts' },
+};
+
+// Default sidebar preferences
+export const DEFAULT_SIDEBAR_PREFERENCES = {
+  isExpanded: false,
+  favorites: [],
+  recentlyUsed: [],
+};
+
 export const MOCK_TASKS: Task[] = [
   {
     id: 't1',

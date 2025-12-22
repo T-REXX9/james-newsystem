@@ -33,6 +33,7 @@ import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
+import { useSidebarState } from './hooks/useSidebarState';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -41,6 +42,9 @@ const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>({});
+
+  // Get sidebar state for dynamic layout
+  const { isExpanded } = useSidebarState();
 
   // 1. Auth Logic
   useEffect(() => {
@@ -297,7 +301,13 @@ const App: React.FC = () => {
             <div className="flex flex-1 overflow-hidden pt-14">
               <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={userProfile} />
 
-              <main className="flex-1 ml-16 print:ml-0 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950">
+              <main
+                className={`
+                  flex-1 print:ml-0 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950
+                  transition-all duration-300 ease-in-out
+                  ${isExpanded ? 'ml-64' : 'ml-16'}
+                `}
+              >
                 {renderContent()}
               </main>
             </div>

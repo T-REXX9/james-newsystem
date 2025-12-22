@@ -124,7 +124,66 @@
         from { opacity: 0; transform: translateY(5px); }
         to { opacity: 1; transform: translateY(0); }
       }
-      
+
+      /* Ripple effect for sidebar buttons */
+      @keyframes ripple {
+        0% {
+          transform: scale(0);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(2);
+          opacity: 0;
+        }
+      }
+      .ripple-effect {
+        animation: ripple 0.6s ease-out;
+      }
+
+      /* Pulse animation for notifications */
+      @keyframes pulse-subtle {
+        0%, 100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.8;
+          transform: scale(1.05);
+        }
+      }
+      .animate-pulse-subtle {
+        animation: pulse-subtle 2s ease-in-out infinite;
+      }
+
+      /* Slide in from left for sidebar expansion */
+      @keyframes slideInLeft {
+        from {
+          opacity: 0;
+          transform: translateX(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .animate-slideInLeft {
+        animation: slideInLeft 0.2s ease-out;
+      }
+
+      /* Smooth scale hover effect */
+      .hover-scale {
+        transition: transform 0.2s ease-in-out;
+      }
+      .hover-scale:hover {
+        transform: scale(1.05);
+      }
+
+      /* Glassmorphism effect */
+      .glass-effect {
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
       /* Clip path for pipeline headers */
       .clip-path-chevron {
         clip-path: polygon(0% 0%, 95% 0%, 100% 50%, 95% 100%, 0% 100%, 5% 50%);

@@ -96,6 +96,31 @@ export interface StaffAccountValidationError {
   accessRights?: string;
 }
 
+export interface SidebarPreferences {
+  isExpanded: boolean;
+  favorites: string[];
+  recentlyUsed: string[];
+}
+
+export interface KeyboardShortcut {
+  key: string;
+  ctrl?: boolean;
+  meta?: boolean;
+  shift?: boolean;
+  alt?: boolean;
+  handler: () => void;
+  description: string;
+}
+
+export interface SidebarMenuItem {
+  id: string;
+  icon: any;
+  label: string;
+  group: string;
+  badge?: number;
+  shortcut?: string;
+}
+
 export interface CreateStaffAccountInput {
   email: string;
   password: string;
