@@ -11,7 +11,7 @@ interface TopNavProps {
   onSignOut?: () => void;
 }
 
-const TopNav: React.FC<TopNavProps> = ({ activeTab = 'dashboard', onNavigate, user, onSignOut }) => {
+  const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, onSignOut }) => {
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
@@ -44,7 +44,7 @@ const TopNav: React.FC<TopNavProps> = ({ activeTab = 'dashboard', onNavigate, us
   return (
     <div className="h-14 bg-gradient-to-r from-brand-blue to-[#0a3d74] flex items-center justify-between px-6 fixed top-0 left-0 right-0 z-50 text-white shadow-md print:hidden">
       <div className="flex items-center space-x-8">
-        <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => onNavigate?.('dashboard')}>
+        <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => onNavigate?.('home')}>
            <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center font-bold border border-white/10 group-hover:bg-white/20 transition-colors">T</div>
            <div className="flex items-center">
              <span className="font-bold text-lg tracking-tight">TND-OPC</span>

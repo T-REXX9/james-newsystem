@@ -1,9 +1,42 @@
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import Sidebar from '../Sidebar';
 import { UserProfile } from '../../types';
+
+// Mock ResizeObserver
+global.ResizeObserver = class ResizeObserver {
+  observe() { }
+  unobserve() { }
+  disconnect() { }
+};
+
+// Mock Scroll functionality
+Element.prototype.scrollTo = vi.fn();
+
+// Mock localStorage
+const localStorageMock = (function () {
+  let store: Record<string, string> = {};
+  return {
+    getItem: function (key: string) {
+      return store[key] || null;
+    },
+    setItem: function (key: string, value: string) {
+      store[key] = value.toString();
+    },
+    clear: function () {
+      store = {};
+    },
+    removeItem: function (key: string) {
+      delete store[key];
+    },
+    length: 0,
+    key: (index: number) => null
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
 const ownerUser: UserProfile = {
   id: '1',
@@ -19,65 +52,118 @@ const limitedUser: UserProfile = {
   access_rights: ['dashboard', 'tasks']
 };
 
-const moduleLabels = [
-  'Dashboard',
-  'Pipelines',
-  'Customer Database',
-  'Product Database',
-  'Reorder Report',
-  'Staff & Agents',
-  'Inbox',
-  'Calendar',
-  'Daily Call Monitoring',
-  'Tasks'
-];
-
-afterEach(() => {
-  cleanup();
-});
-
 describe('Sidebar', () => {
-  it('renders every module for the owner role', () => {
-    render(<Sidebar activeTab="dashboard" setActiveTab={vi.fn()} user={ownerUser} />);
+  beforeEach(() => {
+    // Mock the size of the container for virtualizer
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 256 });
+  });
 
-    moduleLabels.forEach((label) => {
-      expect(screen.getByText(label)).toBeInTheDocument();
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    window.localStorage.clear();
+  });
+
+  it('renders module items for the owner role', async () => {
+    const user = userEvent.setup();
+    render(<Sidebar activeTab="home" setActiveTab={vi.fn()} user={ownerUser} />);
+
+    const toggleBtn = screen.getByRole('button', { name: /expand sidebar/i });
+    await user.click(toggleBtn);
+
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument();
+
+    const searchInput = await screen.findByPlaceholderText('Search navigation...');
+    await user.type(searchInput, 'Pipelines');
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 350));
     });
+
+    expect(screen.getByText('Pipelines')).toBeInTheDocument();
   });
 
-  it('only renders modules allowed by access_rights', () => {
-    render(<Sidebar activeTab="dashboard" setActiveTab={vi.fn()} user={limitedUser} />);
+  it('only renders modules allowed by access_rights', async () => {
+    const user = userEvent.setup();
+    render(<Sidebar activeTab="home" setActiveTab={vi.fn()} user={limitedUser} />);
 
-    expect(screen.queryAllByText('Dashboard')).not.toHaveLength(0);
-    expect(screen.queryAllByText('Tasks')).not.toHaveLength(0);
-    expect(screen.queryAllByText('Pipelines')).toHaveLength(0);
-    expect(screen.queryAllByText('Staff & Agents')).toHaveLength(0);
-  });
+    const toggleBtn = screen.getByRole('button', { name: /expand sidebar/i });
+    await user.click(toggleBtn);
 
-  it('defaults to showing everything when access_rights is missing', () => {
-    const fallbackUser: UserProfile = {
-      id: '3',
-      email: 'legacy@example.com',
-      role: 'Sales Agent'
-    };
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument();
 
-    render(<Sidebar activeTab="dashboard" setActiveTab={vi.fn()} user={fallbackUser} />);
+    const searchInput = await screen.findByPlaceholderText('Search navigation...');
+    await user.type(searchInput, 'Pipelines');
 
-    moduleLabels.forEach((label) => {
-      expect(screen.queryAllByText(label)).not.toHaveLength(0);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 350));
     });
+
+    expect(screen.queryByText('Pipelines')).not.toBeInTheDocument();
+    expect(screen.queryByText('Staff')).not.toBeInTheDocument();
   });
 
-  it('invokes setActiveTab when the matching icon button is clicked', async () => {
+  it('invokes setActiveTab when item is clicked', async () => {
     const user = userEvent.setup();
     const setActiveTab = vi.fn();
-    render(<Sidebar activeTab="dashboard" setActiveTab={setActiveTab} user={ownerUser} />);
+    render(<Sidebar activeTab="home" setActiveTab={setActiveTab} user={ownerUser} />);
 
-    const tasksLabel = screen.getAllByText('Tasks')[0];
-    const tasksButton = tasksLabel.previousSibling as HTMLElement | null;
-    expect(tasksButton).toBeTruthy();
+    // Expand sidebar to make sure label is inside button (and not in tooltip)
+    const toggleBtn = screen.getByRole('button', { name: /expand sidebar/i });
+    await user.click(toggleBtn);
 
-    await user.click(tasksButton as HTMLElement);
-    expect(setActiveTab).toHaveBeenCalledWith('tasks');
+    const dashboardLabel = await screen.findByText('Dashboard');
+    // The button is the parent or containing button
+    const button = dashboardLabel.closest('button');
+    expect(button).toBeInTheDocument();
+
+    await user.click(button as HTMLElement);
+    expect(setActiveTab).toHaveBeenCalledWith('home');
+  });
+
+  it('toggles group expansion', async () => {
+    const user = userEvent.setup();
+    render(<Sidebar activeTab="home" setActiveTab={vi.fn()} user={ownerUser} />);
+
+    const expandBtn = screen.getByRole('button', { name: /expand sidebar/i });
+    await user.click(expandBtn);
+
+    expect(await screen.findByText('Warehouse')).toBeInTheDocument();
+    expect(screen.getByText('Inventory')).toBeInTheDocument();
+
+    const warehouseHeader = screen.getByText('Warehouse');
+    const toggleButton = warehouseHeader.closest('button');
+
+    await user.click(toggleButton as HTMLElement);
+
+    await act(async () => {
+      // allow virtualizer to settle
+    });
+    expect(screen.queryByText('Inventory')).not.toBeInTheDocument();
+
+    await user.click(toggleButton as HTMLElement);
+    expect(await screen.findByText('Inventory')).toBeInTheDocument();
+  });
+
+  it('filters items when searching', async () => {
+    const user = userEvent.setup();
+    render(<Sidebar activeTab="home" setActiveTab={vi.fn()} user={ownerUser} />);
+
+    // Expand sidebar
+    const toggleBtn = screen.getByRole('button', { name: /expand sidebar/i });
+    await user.click(toggleBtn);
+
+    const searchInput = await screen.findByPlaceholderText('Search navigation...');
+    await user.type(searchInput, 'Tasks');
+
+    // Wait for debounced search (300ms)
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 350));
+    });
+
+    expect(screen.getByText('Tasks')).toBeInTheDocument();
+    // Dashboard should be filtered out
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
   });
 });

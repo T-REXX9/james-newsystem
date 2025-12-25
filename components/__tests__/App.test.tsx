@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import App from '../../App';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -47,6 +47,10 @@ vi.mock('../../components/ToastProvider', () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>
 }));
 
+vi.mock('../../components/NotificationProvider', () => ({
+  NotificationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>
+}));
+
 const typedSupabase = supabase as unknown as {
   auth: {
     getSession: ReturnType<typeof vi.fn>;
@@ -66,6 +70,10 @@ beforeEach(() => {
   typedSupabase.auth.signOut.mockReset();
   typedSupabase.from.mockReset();
   typedSupabase.auth.onAuthStateChange.mockReturnValue({ data: { subscription } });
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 describe('App authentication flow', () => {
