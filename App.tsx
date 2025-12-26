@@ -423,6 +423,8 @@ const App: React.FC = () => {
       }
       case 'maintenance-customer-customer-group':
         return renderComingSoon('Customer Group');
+      case 'maintenance-customer-pipeline':
+        return <PipelineView currentUser={userProfile} />;
       case 'maintenance-product-suppliers':
         return renderComingSoon('Suppliers');
       case 'maintenance-product-special-price':

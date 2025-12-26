@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { useKeyboardShortcuts, getShortcutDisplay } from '../hooks/useKeyboardShortcuts';
+import { useSmartDropdownPosition } from '../hooks/useSmartDropdownPosition';
 import { MODULE_ID_ALIASES } from '../constants';
 import {
   TOPBAR_MENU_CONFIG,
@@ -35,6 +36,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const menuButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const dropdownRefs = useRef<Array<HTMLDivElement | null>>([]);
   const menuCloseTimeout = useRef<number | null>(null);
 
   const normalizedActiveTab = MODULE_ID_ALIASES[activeTab] || activeTab;
@@ -214,12 +216,25 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
           const isActive = isMenuActive(menu);
           const isOpen = openMenuId === menu.id;
           const submenuCount = menu.submenus?.length || 0;
+
+          // Enhanced responsive width handling
           const containerClass = submenuCount <= 1
-            ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg shadow-lg border border-slate-200 dark:border-slate-800 p-4 w-max min-w-[240px]'
-            : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg shadow-lg border border-slate-200 dark:border-slate-800 p-4 w-[min(900px,80vw)]';
+            ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg shadow-lg border border-slate-200 dark:border-slate-800 p-4 w-max min-w-[240px] max-w-[min(400px,90vw)] px-4 mx-2'
+            : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-lg shadow-lg border border-slate-200 dark:border-slate-800 p-4 min-w-[600px] max-w-[min(900px,90vw)] px-4 mx-2';
+
+          // Responsive grid with mobile breakpoints
           const gridClass = submenuCount <= 1
             ? 'grid gap-4 grid-cols-1'
-            : 'grid gap-4 grid-cols-[repeat(auto-fit,minmax(220px,260px))]';
+            : 'grid gap-4 grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]';
+
+          // Use smart positioning hook for each dropdown
+          const dropdownPosition = useSmartDropdownPosition(
+            menuButtonRefs.current[index],
+            dropdownRefs.current[index],
+            isOpen,
+            { preferredAlignment: 'center', offset: 16, padding: 16 }
+          );
+
           return (
             <li key={menu.id} className="relative">
               <div
@@ -240,6 +255,8 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                     flex items-center gap-2 px-3 py-2 rounded-md transition-colors
                     ${isActive ? 'bg-white/15 text-white' : 'text-white/80 hover:text-white hover:bg-white/10'}
                   `}
+                  aria-expanded={isOpen}
+                  aria-haspopup={menu.submenus ? 'true' : undefined}
                 >
                   <menu.icon className="w-4 h-4" />
                   <span>{menu.label}</span>
@@ -248,11 +265,21 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
 
                 {menu.submenus && isOpen && (
                   <div
-                    className="absolute top-full pt-4 z-[60] left-1/2 -translate-x-1/2"
+                    ref={(el) => {
+                      dropdownRefs.current[index] = el;
+                    }}
+                    className="absolute top-full pt-4 z-[60]"
+                    style={{
+                      ...dropdownPosition,
+                      visibility: Object.keys(dropdownPosition).length > 0 ? 'visible' : 'hidden',
+                      opacity: Object.keys(dropdownPosition).length > 0 ? 1 : 0,
+                      transition: 'opacity 120ms ease-out, transform 120ms ease-out, left 120ms ease-out, right 120ms ease-out, top 120ms ease-out, bottom 120ms ease-out',
+                    }}
                     onMouseEnter={clearMenuCloseTimer}
                     onMouseLeave={scheduleMenuClose}
+                    role="menu"
                   >
-                    <div className={containerClass}>
+                    <div className={`${containerClass} scrollbar-thin`}>
                       <div className={gridClass}>
                         {menu.submenus.map((submenu) => (
                           <div key={submenu.id} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 p-3">
@@ -274,6 +301,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                                     w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-md leading-snug
                                     ${item.route === normalizedActiveTab ? 'bg-brand-blue/10 text-brand-blue' : 'hover:bg-white/70 dark:hover:bg-slate-900'}
                                   `}
+                                  role="menuitem"
                                 >
                                   <item.icon className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                                   {item.label}
@@ -293,13 +321,15 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
       </ul>
 
       {isMobileMenuOpen && (
-        <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-t border-slate-200 dark:border-slate-800 shadow-lg md:hidden z-[60]">
-          <div className="max-h-[70vh] overflow-y-auto p-4 space-y-4">
+        <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-t border-slate-200 dark:border-slate-800 shadow-lg md:hidden z-[60] backdrop-blur-sm">
+          <div className="max-h-[calc(100vh-theme(spacing.20))] overflow-y-auto p-4 space-y-4 scrollbar-thin scroll-smooth">
             {filteredMenus.map((menu) => (
               <div key={menu.id}>
                 <button
                   onClick={() => (menu.route ? navigateTo(menu.route) : undefined)}
-                  className="w-full flex items-center gap-2 text-left font-semibold text-sm"
+                  className="w-full flex items-center gap-2 text-left font-semibold text-sm py-2"
+                  aria-expanded={menu.submenus ? 'true' : undefined}
+                  aria-haspopup={menu.submenus ? 'true' : undefined}
                 >
                   <menu.icon className="w-4 h-4" />
                   {menu.label}
@@ -308,16 +338,17 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
                   <div className="mt-2 space-y-3 pl-6">
                     {menu.submenus.map((submenu) => (
                       <div key={submenu.id} className="space-y-1">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 py-1">
                           <submenu.icon className="w-4 h-4" />
                           {submenu.label}
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1" role="menu">
                           {submenu.items.map((item) => (
                             <button
                               key={item.id}
                               onClick={() => navigateTo(item.route)}
-                              className="w-full text-left text-sm py-1.5 px-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
+                              className="w-full text-left text-sm py-2 px-3 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 min-h-[44px] flex items-center"
+                              role="menuitem"
                             >
                               {item.label}
                             </button>

@@ -57,6 +57,7 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'maintenance-customer-customer-data',
   'maintenance-customer-daily-call-monitoring',
   'maintenance-customer-customer-group',
+  'maintenance-customer-pipeline',
   'maintenance-product-suppliers',
   'maintenance-product-special-price',
   'maintenance-product-category-management',
@@ -125,6 +126,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'maintenance-customer-customer-data', label: 'Customer Data' },
   { id: 'maintenance-customer-daily-call-monitoring', label: 'Daily Call Monitoring' },
   { id: 'maintenance-customer-customer-group', label: 'Customer Group' },
+  { id: 'maintenance-customer-pipeline', label: 'Pipeline' },
   { id: 'maintenance-product-suppliers', label: 'Suppliers' },
   { id: 'maintenance-product-special-price', label: 'Special Price' },
   { id: 'maintenance-product-category-management', label: 'Category Management' },
@@ -152,6 +154,7 @@ export const AVAILABLE_APP_MODULES = [
 // Used for routing and permission backward compatibility.
 export const MODULE_ID_ALIASES: Record<string, string> = {
   dashboard: 'home',
+  pipeline: 'maintenance-customer-pipeline',
   pipelines: 'sales-pipeline-board',
   customers: 'sales-database-customer-database',
   products: 'warehouse-inventory-product-database',
