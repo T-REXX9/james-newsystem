@@ -31,10 +31,6 @@ vi.mock('../../components/TopNav', () => ({
   )
 }));
 
-vi.mock('../../components/Sidebar', () => ({
-  default: () => <div data-testid="sidebar">Sidebar</div>
-}));
-
 vi.mock('../../components/Dashboard', () => ({
   default: () => <div>Dashboard</div>
 }));

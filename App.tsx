@@ -8,7 +8,6 @@
 
 
 import React, { useState, useEffect } from 'react';
-import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
 import PipelineView from './components/PipelineView';
 import Dashboard from './components/Dashboard';
@@ -34,7 +33,6 @@ import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
-import { useSidebarState } from './hooks/useSidebarState';
 import { AVAILABLE_APP_MODULES, DEFAULT_STAFF_ACCESS_RIGHTS, MODULE_ID_ALIASES } from './constants';
 
 const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_ALIASES).reduce(
@@ -66,9 +64,6 @@ const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState('home');
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>({});
-
-  // Get sidebar state for dynamic layout
-  const { isExpanded } = useSidebarState();
 
   // 1. Auth Logic
   useEffect(() => {
@@ -378,8 +373,24 @@ const App: React.FC = () => {
         return renderComingSoon('Collection Report');
       case 'accounting-reports-sales-return-report':
         return renderComingSoon('Sales Return Report');
+      case 'accounting-reports-freight-charges-report':
+        return renderComingSoon('Freight Charges Report');
       case 'accounting-reports-accounts-receivable-report':
         return renderComingSoon('Accounts Receivable Report');
+      case 'accounting-reports-purchase-history':
+        return renderComingSoon('Purchase History');
+      case 'accounting-reports-inactive-active-customers':
+        return renderComingSoon('Inactive/Active Customers');
+      case 'accounting-reports-old-new-customers':
+        return renderComingSoon('Old/New Customers');
+      case 'accounting-reports-daily-calls-monitoring': {
+        const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
+        return isSalesAgent ? (
+          <DailyCallMonitoringView currentUser={userProfile} />
+        ) : (
+          <OwnerLiveCallMonitoringView currentUser={userProfile} />
+        );
+      }
       case 'accounting-transactions-freight-charges-debit':
         return renderComingSoon('Freight Charges (Debit)');
       case 'accounting-transactions-sales-return-credit':
@@ -488,16 +499,8 @@ const App: React.FC = () => {
               onSignOut={handleSignOut}
             />
 
-            <div className="flex flex-1 overflow-hidden pt-14">
-              <Sidebar activeTab={activeTab} setActiveTab={handleSetActiveTab} user={userProfile} />
-
-              <main
-                className={`
-                  flex-1 print:ml-0 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950
-                  transition-all duration-300 ease-in-out
-                  ${isExpanded ? 'ml-64' : 'ml-16'}
-                `}
-              >
+            <div className="flex flex-1 overflow-hidden pt-16">
+              <main className="flex-1 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950">
                 {renderContent()}
               </main>
             </div>

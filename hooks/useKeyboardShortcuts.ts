@@ -8,20 +8,16 @@ interface KeyboardShortcut {
   alt?: boolean;
   handler: () => void;
   description: string;
+  allowInInput?: boolean;
 }
 
 export const useKeyboardShortcuts = (shortcuts: KeyboardShortcut[], enabled: boolean = true) => {
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!enabled) return;
 
-    // Don't trigger shortcuts when typing in input fields
     const target = event.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-      // Exception: Allow Cmd/Ctrl+K even in input fields
-      if (!(event.key === 'k' && (event.metaKey || event.ctrlKey))) {
-        return;
-      }
-    }
+    const isInputTarget =
+      target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
     for (const shortcut of shortcuts) {
       const keyMatches = event.key.toLowerCase() === shortcut.key.toLowerCase();
@@ -34,6 +30,13 @@ export const useKeyboardShortcuts = (shortcuts: KeyboardShortcut[], enabled: boo
       const modifierMatches = shortcut.ctrl || shortcut.meta
         ? (event.ctrlKey || event.metaKey)
         : true;
+
+      const allowInInput = shortcut.allowInInput ??
+        (shortcut.key.toLowerCase() === 'k' && (shortcut.meta || shortcut.ctrl));
+
+      if (isInputTarget && !allowInInput) {
+        continue;
+      }
 
       if (keyMatches && modifierMatches && shiftMatches && altMatches) {
         event.preventDefault();
@@ -66,4 +69,3 @@ export const getShortcutDisplay = (shortcut: KeyboardShortcut): string => {
 
   return parts.join(isMac ? '' : '+');
 };
-

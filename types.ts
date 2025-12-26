@@ -110,6 +110,7 @@ export interface KeyboardShortcut {
   alt?: boolean;
   handler: () => void;
   description: string;
+  allowInInput?: boolean;
 }
 
 export interface SidebarMenuItem {
