@@ -122,55 +122,55 @@ export interface SidebarMenuItem {
   shortcut?: string;
 }
 
-	// Hierarchical sidebar navigation types
-	export type MenuLevel = 1 | 2 | 3;
+// Hierarchical sidebar navigation types
+export type MenuLevel = 1 | 2 | 3;
 
-	export interface MenuItemLeaf {
-	  id: string;
-	  label: string;
-	  icon?: any;
-	  level: 3;
-	  parentId: string;
-	  /**
-	   * Route identifier used by the router (activeTab) and access control.
-	   * Follows the convention: {category}-{subcategory}-{page-name}
-	   * e.g. "warehouse-inventory-product-database".
-	   */
-	  route: string;
-	  isExpandable?: false;
-	}
+export interface MenuItemLeaf {
+  id: string;
+  label: string;
+  icon?: any;
+  level: 3;
+  parentId: string;
+  /**
+   * Route identifier used by the router (activeTab) and access control.
+   * Follows the convention: {category}-{subcategory}-{page-name}
+   * e.g. "warehouse-inventory-product-database".
+   */
+  route: string;
+  isExpandable?: false;
+}
 
-	export interface MenuSubCategory {
-	  id: string;
-	  label: string;
-	  icon?: any;
-	  level: 2;
-	  parentId: string;
-	  /**
-	   * Optional route when the submenu itself should be clickable.
-	   * Most submenus will only act as containers for leaf pages.
-	   */
-	  route?: string;
-	  isExpandable?: boolean;
-	  children: MenuItemLeaf[];
-	}
+export interface MenuSubCategory {
+  id: string;
+  label: string;
+  icon?: any;
+  level: 2;
+  parentId: string;
+  /**
+   * Optional route when the submenu itself should be clickable.
+   * Most submenus will only act as containers for leaf pages.
+   */
+  route?: string;
+  isExpandable?: boolean;
+  children: MenuItemLeaf[];
+}
 
-	export interface MenuCategory {
-	  id: string;
-	  label: string;
-	  icon: any;
-	  level: 1;
-	  parentId?: null;
-	  /**
-	   * When present (e.g. for HOME), clicking the category navigates directly
-	   * to this route instead of expanding children.
-	   */
-	  route?: string;
-	  isExpandable?: boolean;
-	  children?: Array<MenuSubCategory | MenuItemLeaf>;
-	}
+export interface MenuCategory {
+  id: string;
+  label: string;
+  icon: any;
+  level: 1;
+  parentId?: null;
+  /**
+   * When present (e.g. for HOME), clicking the category navigates directly
+   * to this route instead of expanding children.
+   */
+  route?: string;
+  isExpandable?: boolean;
+  children?: Array<MenuSubCategory | MenuItemLeaf>;
+}
 
-	export type HierarchicalMenuItem = MenuCategory | MenuSubCategory | MenuItemLeaf;
+export type HierarchicalMenuItem = MenuCategory | MenuSubCategory | MenuItemLeaf;
 
 export interface CreateStaffAccountInput {
   email: string;
@@ -829,6 +829,19 @@ export interface SalesInquiry {
   is_deleted: boolean;
   deleted_at?: string;
   items?: SalesInquiryItem[];
+}
+
+export interface InquiryReportFilters {
+  dateFrom: string;
+  dateTo: string;
+  customerId?: string;
+  reportType: 'today' | 'week' | 'month' | 'year' | 'custom';
+}
+
+export interface InquiryReportData extends SalesInquiry {
+  customer_company: string;
+  formatted_date: string;
+  formatted_time: string;
 }
 
 export interface SalesInquiryDTO {

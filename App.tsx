@@ -22,6 +22,8 @@ import SalesInquiryView from './components/SalesInquiryView';
 import SalesOrderView from './components/SalesOrderView';
 import OrderSlipView from './components/OrderSlipView';
 import InvoiceView from './components/InvoiceView';
+import InquiryReportFilter from './components/InquiryReportFilter';
+
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
 import SalesAgentDashboard from './components/SalesAgentDashboard';
@@ -356,7 +358,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'sales-reports-inquiry-report':
-        return renderComingSoon('Inquiry Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <InquiryReportFilter />
+          </div>
+        );
       case 'sales-reports-sales-report':
         return renderComingSoon('Sales Report');
       case 'sales-reports-sales-development-report':

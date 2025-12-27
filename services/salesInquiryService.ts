@@ -275,3 +275,93 @@ export const restoreSalesInquiry = async (id: string): Promise<boolean> => {
     return false;
   }
 };
+
+/**
+ * Get inquiry report data with detailed items
+ */
+export const getInquiryReportData = async (dateFrom: string, dateTo: string, customerId?: string): Promise<SalesInquiry[]> => {
+  try {
+    let query = supabase
+      .from('sales_inquiries')
+      .select(`
+        *,
+        contacts (
+          company
+        )
+      `)
+      .gte('sales_date', dateFrom)
+      .lte('sales_date', dateTo)
+      .eq('is_deleted', false)
+      .order('sales_date', { ascending: false });
+
+    if (customerId) {
+      query = query.eq('contact_id', customerId);
+    }
+
+    const { data: inquiries, error } = await query;
+
+    if (error || !inquiries) return [];
+
+    const inquiriesWithItems = await Promise.all(
+      inquiries.map(async (inquiry) => {
+        const { data: items } = await supabase
+          .from('sales_inquiry_items')
+          .select('*')
+          .eq('inquiry_id', inquiry.id);
+
+        return {
+          ...inquiry,
+          customer_company: (inquiry.contacts as any)?.company || 'N/A',
+          items: (items || []) as any,
+        } as SalesInquiry;
+      })
+    );
+
+    return inquiriesWithItems;
+  } catch (err) {
+    console.error('Error fetching inquiry report data:', err);
+    return [];
+  }
+};
+
+
+/**
+ * Get inquiry report summary headers
+ */
+export const getInquiryReportSummary = async (dateFrom: string, dateTo: string, customerId?: string): Promise<any[]> => {
+  try {
+    let query = supabase
+      .from('sales_inquiries')
+      .select(`
+        id,
+        inquiry_no,
+        sales_date,
+        created_at,
+        grand_total,
+        contact_id,
+        contacts (
+          company
+        )
+      `)
+      .gte('sales_date', dateFrom)
+      .lte('sales_date', dateTo)
+      .eq('is_deleted', false)
+      .order('sales_date', { ascending: false });
+
+    if (customerId) {
+      query = query.eq('contact_id', customerId);
+    }
+
+    const { data: inquiries, error } = await query;
+
+    if (error || !inquiries) return [];
+
+    return inquiries.map(inquiry => ({
+      ...inquiry,
+      customer_company: (inquiry.contacts as any)?.company || 'N/A'
+    }));
+  } catch (err) {
+    console.error('Error fetching inquiry report summary:', err);
+    return [];
+  }
+};
