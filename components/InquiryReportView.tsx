@@ -16,7 +16,8 @@ import {
     TrendingUp,
     DollarSign,
     Hash,
-    Clock
+    Clock,
+    Sparkles
 } from 'lucide-react';
 
 interface InquiryReportViewProps {
@@ -87,210 +88,267 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
 
     if (isLoading) {
         return (
-            <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-                <div className="flex flex-col items-center gap-4">
+            <div className="flex h-full items-center justify-center bg-gradient-to-br from-slate-50 via-slate-50/95 to-blue-50/30 dark:from-slate-950 dark:via-slate-950 dark:to-blue-950/20">
+                <div className="flex flex-col items-center gap-6">
                     <div className="relative">
-                        <div className="absolute inset-0 bg-brand-blue blur-xl opacity-20 animate-pulse"></div>
-                        <Loader2 className="w-12 h-12 text-brand-blue animate-spin relative z-10" />
+                        <div className="absolute inset-0 bg-brand-blue blur-2xl opacity-15 animate-pulse rounded-full"></div>
+                        <div className="relative">
+                            <Loader2 className="w-14 h-14 text-brand-blue animate-spin" />
+                            <div className="absolute inset-0 bg-brand-blue/20 blur-xl rounded-full animate-pulse"></div>
+                        </div>
                     </div>
-                    <p className="text-slate-500 font-medium animate-pulse">Generating Report...</p>
+                    <div className="text-center space-y-2">
+                        <p className="text-slate-700 dark:text-slate-200 font-semibold text-lg tracking-tight">Generating Report</p>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm">Please wait while we compile your data...</p>
+                    </div>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 p-6 md:p-8 animate-fadeIn print:p-0 print:bg-white overflow-y-auto">
+        <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 via-slate-50/95 to-blue-50/30 dark:from-slate-950 dark:via-slate-950 dark:to-blue-950/20 p-6 md:p-8 lg:p-10 animate-fadeIn print:p-0 print:bg-white overflow-y-auto">
 
             {/* Header & Controls */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 print:mb-4 animate-slideInUp">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 gap-6 print:mb-6 animate-slideInUp">
                 <div className="flex items-center gap-4">
                     <button
                         onClick={onBack}
-                        className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 hover:text-brand-blue transition-all duration-300 shadow-sm print:hidden group"
+                        className="group relative p-2.5 bg-white dark:bg-slate-900/80 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 hover:text-brand-blue transition-all duration-300 shadow-sm hover:shadow-md print:hidden"
                     >
                         <ChevronLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                        <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-blue/0 via-brand-blue/5 to-brand-blue/0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                     </button>
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-3 print:text-black">
-                            <span className="p-2 bg-brand-blue/10 rounded-lg print:hidden">
-                                <FileText className="w-6 h-6 text-brand-blue" />
-                            </span>
-                            Inquiry Report
-                        </h1>
-                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-2 text-sm text-slate-500 dark:text-slate-400 print:text-gray-600">
-                            <span className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/50 px-3 py-1 rounded-full">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-3">
+                            <div className="relative">
+                                <div className="absolute inset-0 bg-brand-blue/10 blur-xl rounded-lg"></div>
+                                <span className="relative p-2 bg-gradient-to-br from-brand-blue/10 to-brand-blue/5 rounded-lg print:hidden">
+                                    <FileText className="w-6 h-6 text-brand-blue" />
+                                </span>
+                            </div>
+                            <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white print:text-black tracking-tight">
+                                Inquiry Report
+                            </h1>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                            <span className="flex items-center gap-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 px-3.5 py-1.5 rounded-full text-slate-600 dark:text-slate-300 print:text-gray-600 print:bg-transparent print:border-none">
                                 <Calendar className="w-4 h-4 text-brand-blue" />
-                                {filters.dateFrom} <span className="text-slate-300 mx-1">→</span> {filters.dateTo}
+                                <span className="font-medium">{filters.dateFrom}</span>
+                                <span className="text-slate-300 mx-1">→</span>
+                                <span className="font-medium">{filters.dateTo}</span>
                             </span>
-                            <span className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/50 px-3 py-1 rounded-full">
+                            <span className="flex items-center gap-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 px-3.5 py-1.5 rounded-full text-slate-600 dark:text-slate-300 print:text-gray-600 print:bg-transparent print:border-none">
                                 <User className="w-4 h-4 text-brand-blue" />
-                                {!filters.customerId ? 'All Customers' : (inquiries[0]?.customer_company || 'Selected Customer')}
+                                <span className="font-medium">{!filters.customerId ? 'All Customers' : (inquiries[0]?.customer_company || 'Selected Customer')}</span>
                             </span>
                         </div>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-3 print:hidden">
-                    <div className="glass-card p-1 rounded-xl flex items-center">
+                    <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-1 rounded-xl flex items-center border border-slate-200/60 dark:border-slate-700/60 shadow-sm">
                         <button
                             onClick={() => setViewMode('summary')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${viewMode === 'summary'
-                                ? 'bg-brand-blue text-white shadow-md'
-                                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            className={`relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 ${viewMode === 'summary'
+                                ? 'bg-gradient-to-r from-brand-blue to-blue-600 text-white shadow-md'
+                                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
                                 }`}
                         >
-                            <List className="w-4 h-4" /> Summary
+                            <List className="w-4 h-4" />
+                            <span>Summary</span>
                         </button>
                         <button
                             onClick={() => setViewMode('detailed')}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${viewMode === 'detailed'
-                                ? 'bg-brand-blue text-white shadow-md'
-                                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            className={`relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 ${viewMode === 'detailed'
+                                ? 'bg-gradient-to-r from-brand-blue to-blue-600 text-white shadow-md'
+                                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
                                 }`}
                         >
-                            <LayoutList className="w-4 h-4" /> Detailed
+                            <LayoutList className="w-4 h-4" />
+                            <span>Detailed</span>
                         </button>
                     </div>
 
                     <button
                         onClick={handlePrint}
-                        className="flex items-center gap-2 px-5 py-3 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-xl shadow-lg font-medium transition-all hover:-translate-y-0.5 active:translate-y-0"
+                        className="group relative flex items-center gap-2.5 px-5 py-3 bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-800 dark:to-slate-700 hover:from-slate-700 hover:to-slate-800 dark:hover:from-slate-700 dark:hover:to-slate-600 text-white rounded-xl shadow-lg hover:shadow-xl font-medium transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0"
                     >
-                        <Printer className="w-4 h-4" /> Print
+                        <Printer className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        <span>Print</span>
+                        <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity translate-x-[-100%] group-hover:translate-x-[100%] duration-700"></div>
                     </button>
                 </div>
             </div>
 
             {/* Summary Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 print:hidden animate-slideInUp" style={{ animationDelay: '0.1s' }}>
-                <div className="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-brand-blue/30 transition-colors">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Hash className="w-16 h-16 text-brand-blue" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10 print:hidden animate-slideInUp" style={{ animationDelay: '0.1s' }}>
+                <div className="group relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 p-6 rounded-2xl overflow-hidden hover:border-brand-blue/40 hover:shadow-lg hover:shadow-brand-blue/5 transition-all duration-300">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity duration-300">
+                        <Hash className="w-20 h-20 text-brand-blue" />
                     </div>
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Total Inquiries</p>
-                    <h3 className="text-2xl font-black text-slate-800 dark:text-white animate-countUp">{totalInquiries}</h3>
-                    <div className="mt-2 text-xs font-medium text-green-500 flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3" />
-                        <span>Recorded</span>
+                    <div className="relative">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="p-1.5 bg-brand-blue/10 rounded-lg">
+                                <Hash className="w-4 h-4 text-brand-blue" />
+                            </div>
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Inquiries</p>
+                        </div>
+                        <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight animate-countUp">
+                            {totalInquiries}
+                        </h3>
+                        <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                            <TrendingUp className="w-3.5 h-3.5" />
+                            <span>Recorded in period</span>
+                        </div>
                     </div>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-brand-blue/20 to-transparent group-hover:via-brand-blue/40 transition-all duration-300"></div>
                 </div>
 
-                <div className="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-brand-blue/30 transition-colors">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <DollarSign className="w-16 h-16 text-brand-blue" />
+                <div className="group relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 p-6 rounded-2xl overflow-hidden hover:border-brand-blue/40 hover:shadow-lg hover:shadow-brand-blue/5 transition-all duration-300">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity duration-300">
+                        <DollarSign className="w-20 h-20 text-brand-blue" />
                     </div>
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Total Amount</p>
-                    <h3 className="text-2xl font-black text-slate-800 dark:text-white animate-countUp" style={{ animationDelay: '0.1s' }}>
-                        {formatCompactCurrency(totalAmount)}
-                    </h3>
-                    <div className="mt-2 text-xs font-medium text-brand-blue flex items-center gap-1">
-                        <span>Gross Revenue</span>
+                    <div className="relative">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="p-1.5 bg-brand-blue/10 rounded-lg">
+                                <DollarSign className="w-4 h-4 text-brand-blue" />
+                            </div>
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Amount</p>
+                        </div>
+                        <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight animate-countUp" style={{ animationDelay: '0.1s' }}>
+                            {formatCompactCurrency(totalAmount)}
+                        </h3>
+                        <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-brand-blue">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Gross revenue</span>
+                        </div>
                     </div>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-brand-blue/20 to-transparent group-hover:via-brand-blue/40 transition-all duration-300"></div>
                 </div>
 
-                <div className="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-brand-blue/30 transition-colors">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <TrendingUp className="w-16 h-16 text-brand-blue" />
+                <div className="group relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 p-6 rounded-2xl overflow-hidden hover:border-brand-blue/40 hover:shadow-lg hover:shadow-brand-blue/5 transition-all duration-300">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity duration-300">
+                        <TrendingUp className="w-20 h-20 text-brand-blue" />
                     </div>
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Average Value</p>
-                    <h3 className="text-2xl font-black text-slate-800 dark:text-white animate-countUp" style={{ animationDelay: '0.2s' }}>
-                        {formatCompactCurrency(averageamount)}
-                    </h3>
-                    <div className="mt-2 text-xs font-medium text-slate-400 flex items-center gap-1">
-                        <span>Per Inquiry</span>
+                    <div className="relative">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="p-1.5 bg-brand-blue/10 rounded-lg">
+                                <TrendingUp className="w-4 h-4 text-brand-blue" />
+                            </div>
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Average Value</p>
+                        </div>
+                        <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight animate-countUp" style={{ animationDelay: '0.2s' }}>
+                            {formatCompactCurrency(averageamount)}
+                        </h3>
+                        <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                            <span>Per inquiry</span>
+                        </div>
                     </div>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-brand-blue/20 to-transparent group-hover:via-brand-blue/40 transition-all duration-300"></div>
                 </div>
 
-                <div className="glass-card p-5 rounded-2xl relative overflow-hidden group hover:border-brand-blue/30 transition-colors">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Clock className="w-16 h-16 text-brand-blue" />
+                <div className="group relative bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 p-6 rounded-2xl overflow-hidden hover:border-brand-blue/40 hover:shadow-lg hover:shadow-brand-blue/5 transition-all duration-300">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity duration-300">
+                        <Clock className="w-20 h-20 text-brand-blue" />
                     </div>
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Period Length</p>
-                    <h3 className="text-2xl font-black text-slate-800 dark:text-white animate-countUp" style={{ animationDelay: '0.3s' }}>
-                        {dateRangeDays} <span className="text-sm font-normal text-slate-500">days</span>
-                    </h3>
-                    <div className="mt-2 text-xs font-medium text-slate-400 flex items-center gap-1">
-                        <span>Selected Range</span>
+                    <div className="relative">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="p-1.5 bg-brand-blue/10 rounded-lg">
+                                <Clock className="w-4 h-4 text-brand-blue" />
+                            </div>
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Period Length</p>
+                        </div>
+                        <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight animate-countUp" style={{ animationDelay: '0.3s' }}>
+                            {dateRangeDays}
+                            <span className="text-base font-normal text-slate-500 dark:text-slate-400 ml-1">days</span>
+                        </h3>
+                        <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                            <span>Selected range</span>
+                        </div>
                     </div>
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-brand-blue/20 to-transparent group-hover:via-brand-blue/40 transition-all duration-300"></div>
                 </div>
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 overflow-hidden glass-card bg-white/50 dark:bg-slate-900/50 rounded-2xl shadow-xl print:shadow-none print:border-none print:overflow-visible flex flex-col animate-slideInUp" style={{ animationDelay: '0.2s' }}>
+            <div className="flex-1 overflow-hidden bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-xl shadow-slate-200/20 dark:shadow-slate-900/20 print:shadow-none print:border-none print:overflow-visible flex flex-col animate-slideInUp" style={{ animationDelay: '0.2s' }}>
                 <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar print:overflow-visible print:h-auto">
                     {inquiries.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-20 text-center">
-                            <div className="w-24 h-24 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 animate-pulse-subtle">
-                                <FileText className="w-12 h-12 text-slate-300 dark:text-slate-600" />
+                        <div className="flex flex-col items-center justify-center p-24 text-center">
+                            <div className="relative mb-8">
+                                <div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 rounded-full blur-2xl opacity-50"></div>
+                                <div className="relative w-28 h-28 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-full flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                                    <FileText className="w-14 h-14 text-slate-300 dark:text-slate-600" />
+                                </div>
                             </div>
-                            <h3 className="text-xl font-bold text-slate-700 dark:text-slate-300">No data available</h3>
-                            <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-sm">
-                                We couldn't find any inquiries for this period. Try calculating a different date range.
+                            <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-3">No data available</h3>
+                            <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8 leading-relaxed">
+                                We couldn't find any inquiries for this period. Try adjusting your date range or filter criteria.
                             </p>
                             <button
                                 onClick={onBack}
-                                className="mt-8 px-8 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold transition-colors print:hidden"
+                                className="group relative px-8 py-3.5 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 hover:from-slate-200 hover:to-slate-300 dark:hover:from-slate-700 dark:hover:to-slate-600 text-slate-700 dark:text-slate-200 rounded-xl font-bold transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 print:hidden"
                             >
                                 Adjust Filters
+                                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                             </button>
                         </div>
                     ) : (
                         <table className="w-full text-left border-collapse print:text-sm">
-                            <thead className="bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur sticky top-0 z-10 shadow-sm print:shadow-none print:bg-gray-100 print:static">
-                                <tr className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700 print:text-black print:border-gray-300">
-                                    {viewMode === 'detailed' && <th className="p-4 w-10 print:hidden text-center">#</th>}
-                                    <th className="p-4 print:p-2">Inquiry Details</th>
-                                    <th className="p-4 print:p-2">Customer</th>
-                                    <th className="p-4 print:p-2">Date & Time</th>
-                                    <th className="p-4 text-right print:p-2">Amount</th>
+                            <thead className="bg-gradient-to-r from-slate-50/90 to-slate-100/90 dark:from-slate-800/90 dark:to-slate-800/80 backdrop-blur-sm sticky top-0 z-10 shadow-sm print:shadow-none print:bg-gray-100 print:static">
+                                <tr className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200/60 dark:border-slate-700/60 print:text-black print:border-gray-300">
+                                    {viewMode === 'detailed' && <th className="p-5 w-12 print:hidden text-center"></th>}
+                                    <th className="p-5 print:p-3 font-semibold">Inquiry Details</th>
+                                    <th className="p-5 print:p-3 font-semibold">Customer</th>
+                                    <th className="p-5 print:p-3 font-semibold">Date & Time</th>
+                                    <th className="p-5 text-right print:p-3 font-semibold">Amount</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-gray-200">
+                            <tbody className="divide-y divide-slate-100/60 dark:divide-slate-800/60 print:divide-gray-200">
                                 {inquiries.map((inquiry, index) => (
                                     <React.Fragment key={inquiry.id}>
                                         <tr
                                             onClick={() => viewMode === 'detailed' && toggleExpand(inquiry.id)}
-                                            className={`group transition-all duration-200 print:hover:bg-transparent border-l-4 border-transparent ${viewMode === 'detailed'
-                                                ? 'cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-900/10 hover:border-brand-blue'
-                                                : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/20'
+                                            className={`group transition-all duration-300 print:hover:bg-transparent border-l-2 ${viewMode === 'detailed'
+                                                ? 'cursor-pointer hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-transparent dark:hover:from-blue-900/10 dark:hover:to-transparent hover:border-brand-blue hover:shadow-sm'
+                                                : 'hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent dark:hover:from-slate-800/30 dark:hover:to-transparent hover:border-slate-300 dark:hover:border-slate-600'
                                                 }`}
-                                            style={{ animationDelay: `${index * 0.05}s` }}
+                                            style={{ animationDelay: `${index * 0.03}s` }}
                                         >
                                             {viewMode === 'detailed' && (
-                                                <td className="p-4 print:hidden text-center">
-                                                    <div className={`transition-transform duration-300 ${expandedInquiryIds.has(inquiry.id) ? 'rotate-180' : ''}`}>
-                                                        {expandedInquiryIds.has(inquiry.id) ? (
-                                                            <ChevronDown className="w-5 h-5 text-brand-blue" />
-                                                        ) : (
-                                                            <ChevronDown className="w-5 h-5 text-slate-300 group-hover:text-brand-blue" />
-                                                        )}
+                                                <td className="p-5 print:hidden text-center">
+                                                    <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 ${expandedInquiryIds.has(inquiry.id)
+                                                        ? 'bg-brand-blue/10 text-brand-blue rotate-180'
+                                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 group-hover:bg-brand-blue/10 group-hover:text-brand-blue'
+                                                        }`}>
+                                                        <ChevronDown className="w-4 h-4" />
                                                     </div>
                                                 </td>
                                             )}
-                                            <td className="p-4 print:p-2">
-                                                <div className="font-bold text-slate-800 dark:text-white print:text-black group-hover:text-brand-blue transition-colors">
+                                            <td className="p-5 print:p-3">
+                                                <div className="font-bold text-slate-800 dark:text-white print:text-black group-hover:text-brand-blue transition-colors duration-200">
                                                     {inquiry.inquiry_no}
                                                 </div>
-                                                <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 font-mono">
+                                                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-mono tracking-wide">
                                                     ID: {inquiry.id.slice(0, 8)}
                                                 </div>
                                             </td>
-                                            <td className="p-4 print:p-2">
-                                                <div className="font-medium text-slate-700 dark:text-slate-300 print:text-black">
+                                            <td className="p-5 print:p-3">
+                                                <div className="font-semibold text-slate-700 dark:text-slate-300 print:text-black">
                                                     {inquiry.customer_company}
                                                 </div>
                                             </td>
-                                            <td className="p-4 print:p-2">
-                                                <div className="text-sm text-slate-600 dark:text-slate-400 print:text-black">
-                                                    {new Date(inquiry.sales_date).toLocaleDateString()}
+                                            <td className="p-5 print:p-3">
+                                                <div className="text-sm text-slate-600 dark:text-slate-400 print:text-black font-medium">
+                                                    {new Date(inquiry.sales_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
                                                 </div>
-                                                <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                                                    {new Date(inquiry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                                    {new Date(inquiry.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
                                                 </div>
                                             </td>
-                                            <td className="p-4 text-right print:p-2">
-                                                <span className="inline-flex items-center px-3 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-brand-blue font-bold text-sm badge-glow">
+                                            <td className="p-5 text-right print:p-3">
+                                                <span className="inline-flex items-center px-4 py-1.5 rounded-lg bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-900/10 text-brand-blue font-bold text-sm shadow-sm border border-blue-100 dark:border-blue-900/30">
                                                     {formatCurrency(inquiry.grand_total || 0)}
                                                 </span>
                                             </td>
@@ -299,53 +357,54 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
                                         {/* Expanded Detail View */}
                                         {viewMode === 'detailed' && inquiry.items && (
                                             <tr className={`transition-all duration-300 overflow-hidden ${expandedInquiryIds.has(inquiry.id) ? 'opacity-100' : 'opacity-0 h-0 hidden'}`}>
-                                                <td colSpan={5} className="p-0 bg-slate-50/30 dark:bg-slate-800/20 print:bg-transparent">
-                                                    <div className="p-4 md:p-6 print:p-0">
-                                                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-slideInUp">
-                                                            <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                                <td colSpan={5} className="p-0 bg-gradient-to-b from-slate-50/50 to-transparent dark:from-slate-800/30 dark:to-transparent print:bg-transparent">
+                                                    <div className="p-5 md:p-6 print:p-0">
+                                                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shadow-lg overflow-hidden animate-slideInUp">
+                                                            <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800/80 dark:to-slate-800/60 border-b border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
                                                                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                                                    <List className="w-3 h-3" /> Line Items
+                                                                    <List className="w-3.5 h-3.5" />
+                                                                    Line Items
                                                                 </h4>
-                                                                <span className="text-xs bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
+                                                                <span className="text-xs bg-gradient-to-r from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 px-3 py-1 rounded-full text-slate-700 dark:text-slate-300 font-semibold">
                                                                     {inquiry.items.length} items
                                                                 </span>
                                                             </div>
                                                             <div className="overflow-x-auto">
                                                                 <table className="w-full text-left text-xs">
-                                                                    <thead className="text-slate-400 dark:text-slate-500 font-semibold border-b border-slate-100 dark:border-slate-800">
+                                                                    <thead className="bg-gradient-to-r from-slate-50/80 to-slate-100/60 dark:from-slate-800/60 dark:to-slate-800/40 text-slate-400 dark:text-slate-500 font-semibold border-b border-slate-200/60 dark:border-slate-700/60">
                                                                         <tr>
-                                                                            <th className="py-3 px-4 w-16">Qty</th>
-                                                                            <th className="py-3 px-4">Item Code</th>
-                                                                            <th className="py-3 px-4">Part No</th>
-                                                                            <th className="py-3 px-4">Brand</th>
-                                                                            <th className="py-3 px-4">Description</th>
-                                                                            <th className="py-3 px-4 text-right">Unit Price</th>
-                                                                            <th className="py-3 px-4 text-right">Total</th>
+                                                                            <th className="py-3.5 px-4 w-16 font-semibold">Qty</th>
+                                                                            <th className="py-3.5 px-4 font-semibold">Item Code</th>
+                                                                            <th className="py-3.5 px-4 font-semibold">Part No</th>
+                                                                            <th className="py-3.5 px-4 font-semibold">Brand</th>
+                                                                            <th className="py-3.5 px-4 font-semibold">Description</th>
+                                                                            <th className="py-3.5 px-4 text-right font-semibold">Unit Price</th>
+                                                                            <th className="py-3.5 px-4 text-right font-semibold">Total</th>
                                                                         </tr>
                                                                     </thead>
-                                                                    <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                                                                    <tbody className="divide-y divide-slate-100/60 dark:divide-slate-800/60">
                                                                         {inquiry.items.map((item: any, idx: number) => (
-                                                                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                                                                <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">{item.qty}</td>
-                                                                                <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">{item.item_code}</td>
-                                                                                <td className="py-3 px-4">{item.part_no}</td>
-                                                                                <td className="py-3 px-4">
-                                                                                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-600 dark:text-slate-400">
+                                                                            <tr key={idx} className="hover:bg-gradient-to-r hover:from-slate-50/80 hover:to-transparent dark:hover:from-slate-800/40 dark:hover:to-transparent transition-colors duration-200">
+                                                                                <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-300">{item.qty}</td>
+                                                                                <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-slate-400 tracking-wide">{item.item_code}</td>
+                                                                                <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">{item.part_no}</td>
+                                                                                <td className="py-3.5 px-4">
+                                                                                    <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 rounded-md text-slate-600 dark:text-slate-400 font-medium text-xs">
                                                                                         {item.brand || '---'}
                                                                                     </span>
                                                                                 </td>
-                                                                                <td className="py-3 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={item.description}>
+                                                                                <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={item.description}>
                                                                                     {item.description}
                                                                                 </td>
-                                                                                <td className="py-3 px-4 text-right font-medium text-slate-600 dark:text-slate-400">{formatCurrency(item.unit_price)}</td>
-                                                                                <td className="py-3 px-4 text-right font-bold text-slate-800 dark:text-slate-200">{formatCurrency(item.qty * item.unit_price)}</td>
+                                                                                <td className="py-3.5 px-4 text-right font-medium text-slate-600 dark:text-slate-400">{formatCurrency(item.unit_price)}</td>
+                                                                                <td className="py-3.5 px-4 text-right font-bold text-slate-800 dark:text-slate-200">{formatCurrency(item.qty * item.unit_price)}</td>
                                                                             </tr>
                                                                         ))}
                                                                     </tbody>
-                                                                    <tfoot className="bg-slate-50 dark:bg-slate-800/30">
+                                                                    <tfoot className="bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800/40 dark:to-slate-800/30">
                                                                         <tr>
-                                                                            <td colSpan={6} className="py-3 px-4 text-right font-bold text-slate-500 uppercase text-[10px] tracking-wider">Grand Total</td>
-                                                                            <td className="py-3 px-4 text-right font-black text-brand-blue text-sm">
+                                                                            <td colSpan={6} className="py-4 px-4 text-right font-bold text-slate-500 uppercase text-[10px] tracking-widest">Grand Total</td>
+                                                                            <td className="py-4 px-4 text-right font-black text-brand-blue text-base">
                                                                                 {formatCurrency(inquiry.grand_total)}
                                                                             </td>
                                                                         </tr>
