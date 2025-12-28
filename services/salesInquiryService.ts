@@ -66,6 +66,7 @@ export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesIn
       .insert(
         data.items.map(item => ({
           inquiry_id: inquiry.id,
+          item_id: item.item_id,
           qty: item.qty,
           part_no: item.part_no,
           item_code: item.item_code,

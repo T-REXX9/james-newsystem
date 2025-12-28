@@ -79,6 +79,7 @@ export const generateOrderNumber = (): string => {
 
 const mapOrderItemPayload = (item: Omit<SalesOrderItem, 'id' | 'order_id'>, orderId: string) => ({
   order_id: orderId,
+  item_id: item.item_id,
   qty: item.qty,
   part_no: item.part_no,
   item_code: item.item_code,
@@ -195,6 +196,13 @@ export const createFromInquiry = async (inquiryId: string): Promise<SalesOrder> 
       throw new Error('Inquiry must be approved before conversion');
     }
 
+    // Validate that all items have an item_id (product reference)
+    // This is crucial for inventory log tracking
+    const missingItemIds = items.some((item: any) => !item.item_id);
+    if (missingItemIds) {
+      throw new Error('Cannot convert inquiry: One or more items are missing product references (item_id). Please recreate the inquiry with valid products.');
+    }
+
     const dto: SalesOrderDTO = {
       inquiry_id: inquiry.id,
       contact_id: inquiry.contact_id,
@@ -214,6 +222,7 @@ export const createFromInquiry = async (inquiryId: string): Promise<SalesOrder> 
       urgency: inquiry.urgency,
       urgency_date: inquiry.urgency_date,
       items: items.map((item: any) => ({
+        item_id: item.item_id,
         qty: item.qty,
         part_no: item.part_no,
         item_code: item.item_code,

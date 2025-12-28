@@ -148,9 +148,8 @@ const WidgetCard: React.FC<WidgetCardProps> = ({ widget, layout, span, isArrangi
       style={style}
       {...attributes}
       {...listeners}
-      className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col ${
-        isActiveDrag && isArranging ? 'opacity-70' : ''
-      }`}
+      className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col ${isActiveDrag && isArranging ? 'opacity-70' : ''
+        }`}
     >
       <div className="flex items-center justify-between mb-2 text-[11px] text-slate-400 dark:text-slate-500">
         <div className="flex items-center gap-2">
@@ -159,7 +158,9 @@ const WidgetCard: React.FC<WidgetCardProps> = ({ widget, layout, span, isArrangi
         </div>
         <span>{widget.description}</span>
       </div>
-      {widget.render()}
+      <div className="flex-1 min-h-0 w-full relative">
+        {widget.render()}
+      </div>
     </div>
   );
 };
@@ -191,7 +192,7 @@ const packWidgets = (
 
   const findBestFit = (id: WidgetId, preferredRow: number, preferredCol: number, width: number) => {
     const clampedCol = clampColumn(preferredCol, width);
-    
+
     // Try exact position first
     if (fits(preferredRow, clampedCol, width)) {
       place(id, preferredRow, clampedCol, width);
@@ -209,12 +210,12 @@ const packWidgets = (
           return true;
         }
       }
-      
+
       // Check nearby rows
       for (let rowOffset = -radius; rowOffset <= radius; rowOffset++) {
         const testRow = Math.max(1, preferredRow + rowOffset);
         if (testRow === preferredRow) continue; // Already checked this row
-        
+
         for (let colOffset = -radius; colOffset <= radius; colOffset++) {
           const testCol = clampColumn(clampedCol + colOffset, width);
           if (fits(testRow, testCol, width)) {
@@ -271,12 +272,12 @@ const packWidgets = (
     if (placed.has(id)) return;
     const width = spans[id] ?? defaultWidgetSpans[id] ?? 4;
     const previous = currentLayout[id] ?? defaultWidgetLayout[id];
-    
+
     if (previous) {
       const placedExisting = findBestFit(id, previous.row, previous.col, width);
       if (placedExisting) return;
     }
-    
+
     // Find any available spot
     findBestFit(id, 1, 1, width);
   });
@@ -518,13 +519,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                          task.priority === 'High'
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${task.priority === 'High'
                             ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/30'
                             : task.priority === 'Medium'
                               ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30'
                               : 'bg-blue-50 text-blue-600 dark:bg-blue-900/30'
-                        }`}
+                          }`}
                       >
                         {task.priority}
                       </span>
@@ -664,16 +664,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       const width = widgetSpans[id] ?? defaultWidgetSpans[id] ?? 4;
       const col = clampColumn(snap.col, width);
       const active = widgetOrder.filter((widgetId) => availableWidgets.includes(widgetId));
-      
+
       // Create temporary layout without the dragged widget to find best placement
       const tempLayout = { ...widgetLayout };
       delete tempLayout[id];
-      
+
       // Smart placement: try to place at desired position, move others if needed
       setWidgetLayout((prev) => {
         const newLayout = { ...prev };
         const draggedWidth = widgetSpans[id] ?? defaultWidgetSpans[id] ?? 4;
-        
+
         // Check if desired position is available
         const isPositionAvailable = (row: number, col: number, width: number, layout: WidgetLayout) => {
           for (let c = col; c < col + width; c++) {
@@ -687,7 +687,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           }
           return true;
         };
-        
+
         // Find widgets that need to be moved
         const widgetsToMove: WidgetId[] = [];
         for (let c = col; c < col + draggedWidth; c++) {
@@ -701,25 +701,25 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             }
           }
         }
-        
+
         // Remove conflicting widgets temporarily
         widgetsToMove.forEach(widgetId => delete newLayout[widgetId]);
-        
+
         // Place the dragged widget
         newLayout[id] = { row: snap.row, col, width: draggedWidth };
-        
+
         // Reposition displaced widgets
         widgetsToMove.forEach(widgetId => {
           const widgetWidth = widgetSpans[widgetId] ?? defaultWidgetSpans[widgetId] ?? 4;
           const originalPos = widgetLayout[widgetId];
-          
+
           // Try to place near original position first
           let placed = false;
           for (let rowOffset = 0; rowOffset <= 3; rowOffset++) {
             for (let colOffset = 0; colOffset <= GRID_COLUMNS - widgetWidth + 1; colOffset++) {
               const testRow = originalPos.row + rowOffset;
               const testCol = Math.max(1, Math.min(colOffset, GRID_COLUMNS - widgetWidth + 1));
-              
+
               if (isPositionAvailable(testRow, testCol, widgetWidth, newLayout)) {
                 newLayout[widgetId] = { row: testRow, col: testCol, width: widgetWidth };
                 placed = true;
@@ -728,7 +728,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             }
             if (placed) break;
           }
-          
+
           // If still not placed, use packWidgets to find a spot
           if (!placed) {
             const remainingWidgets = active.filter(wId => wId !== id && !widgetsToMove.includes(wId));
@@ -738,7 +738,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             }
           }
         });
-        
+
         return newLayout;
       });
     }
@@ -758,10 +758,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       {/* 1. Header (Compact) */}
       <div className="flex justify-between items-center shrink-0 h-10">
         <div>
-            <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              Dashboard
-              <span className="text-xs font-normal text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">Overview</span>
-            </h1>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            Dashboard
+            <span className="text-xs font-normal text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">Overview</span>
+          </h1>
         </div>
         <div className="flex items-center space-x-2">
           <button className="px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-md transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700">Last 7 Days</button>
@@ -790,11 +790,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                   key={widget.id}
                   type="button"
                   onClick={() => toggleWidget(widget.id)}
-                  className={`text-[11px] px-3 py-1 rounded-lg border transition-colors flex items-center gap-1 ${
-                    isActive
+                  className={`text-[11px] px-3 py-1 rounded-lg border transition-colors flex items-center gap-1 ${isActive
                       ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-brand-blue'
                       : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                  }`}
+                    }`}
                   aria-pressed={isActive}
                 >
                   <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: isActive ? '#0F5298' : '#cbd5e1' }}></span>
@@ -805,11 +804,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             <button
               type="button"
               onClick={() => setIsArranging((prev) => !prev)}
-              className={`text-[11px] px-3 py-1 rounded-lg border flex items-center gap-1 transition-colors ${
-                isArranging
+              className={`text-[11px] px-3 py-1 rounded-lg border flex items-center gap-1 transition-colors ${isArranging
                   ? 'bg-blue-600 text-white border-blue-700'
                   : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}
+                }`}
             >
               {isArranging ? 'Exit Arrange Mode' : 'Arrange Mode'}
             </button>
@@ -826,57 +824,57 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
       {/* 2. Metrics Rail (Consolidated 7 Columns) */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 shrink-0 h-24">
-        <CompactMetricCard 
-          title="Revenue (2025)" 
-          value={`₱${(totalRevenue2025/1000000).toFixed(1)}M`} 
-          trend={12.5} 
+        <CompactMetricCard
+          title="Revenue (2025)"
+          value={`₱${(totalRevenue2025 / 1000000).toFixed(1)}M`}
+          trend={12.5}
           icon={DollarSign}
           bgClass="bg-blue-50 dark:bg-blue-900/20"
           colorClass="text-brand-blue dark:text-blue-400"
         />
-        <CompactMetricCard 
-          title="Active Deals" 
-          value="45" 
-          trend={-2.4} 
+        <CompactMetricCard
+          title="Active Deals"
+          value="45"
+          trend={-2.4}
           icon={Briefcase}
           bgClass="bg-indigo-50 dark:bg-indigo-900/20"
           colorClass="text-indigo-600 dark:text-indigo-400"
         />
-        <CompactMetricCard 
-          title="Win Rate" 
-          value="68%" 
-          trend={5.1} 
+        <CompactMetricCard
+          title="Win Rate"
+          value="68%"
+          trend={5.1}
           icon={Trophy}
           bgClass="bg-amber-50 dark:bg-amber-900/20"
           colorClass="text-amber-600 dark:text-amber-400"
         />
-        <CompactMetricCard 
-          title="Pipeline Val" 
-          value="₱120M" 
-          trend={8.2} 
+        <CompactMetricCard
+          title="Pipeline Val"
+          value="₱120M"
+          trend={8.2}
           icon={Activity}
           bgClass="bg-purple-50 dark:bg-purple-900/20"
           colorClass="text-purple-600 dark:text-purple-400"
         />
-        <CompactMetricCard 
-          title="Total Deals" 
-          value="311" 
+        <CompactMetricCard
+          title="Total Deals"
+          value="311"
           subtext="in pipeline"
           icon={BarChart2}
           bgClass="bg-slate-50 dark:bg-slate-800"
           colorClass="text-slate-600 dark:text-slate-400"
         />
-        <CompactMetricCard 
-          title="Won Deals" 
-          value="64" 
+        <CompactMetricCard
+          title="Won Deals"
+          value="64"
           subtext="this year"
           icon={CheckCircle}
           bgClass="bg-emerald-50 dark:bg-emerald-900/20"
           colorClass="text-emerald-600 dark:text-emerald-400"
         />
-        <CompactMetricCard 
-          title="Lost Deals" 
-          value="15" 
+        <CompactMetricCard
+          title="Lost Deals"
+          value="15"
           subtext="this year"
           icon={XCircle}
           bgClass="bg-rose-50 dark:bg-rose-900/20"

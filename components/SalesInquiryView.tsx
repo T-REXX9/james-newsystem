@@ -29,6 +29,9 @@ import {
   convertToOrder,
   updateInquiryStatus,
 } from '../services/salesInquiryService';
+import { getProductPrice } from '../services/productService';
+
+import ProductSearchModal from './ProductSearchModal';
 import { getSalesOrderByInquiry } from '../services/salesOrderService';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
@@ -41,6 +44,7 @@ import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id'> {
   tempId?: string;
+  isNew?: boolean; // Flag to indicate if the row is new and editable via autocomplete
 }
 
 type SectionKey = 'metrics' | 'customer' | 'references' | 'pricing' | 'details' | 'items';
@@ -74,7 +78,8 @@ const SalesInquiryView: React.FC = () => {
   const {
     data: inquiries,
     isLoading: listLoading,
-    setData: setInquiries
+    setData: setInquiries,
+    refetch: refetchInquiries
   } = useRealtimeNestedList<SalesInquiry, SalesInquiryItem>({
     parentTableName: 'sales_inquiries',
     childTableName: 'sales_inquiry_items',
@@ -122,6 +127,40 @@ const SalesInquiryView: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [manageError, setManageError] = useState<string | null>(null);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
+
+  const handleOpenProductModal = (rowTempId: string) => {
+    setActiveRowId(rowTempId);
+    setShowProductModal(true);
+  };
+
+  const handleProductSelect = (product: any) => {
+    if (!activeRowId) return;
+
+    const price = getProductPrice(product, priceGroup);
+    setItems(prev => prev.map(item => {
+      if (item.tempId === activeRowId) {
+        return {
+          ...item,
+          item_id: product.id,
+          part_no: product.part_no,
+          item_code: product.item_code,
+          description: product.description,
+          unit_price: price,
+          amount: (item.qty || 1) * price,
+          isNew: false
+        };
+      }
+      return item;
+    }));
+    // Modal handling is done in handleProductSelect or modal close logic
+    // Actually simpler to just close it here or let modal callback handle it.
+    // The Modal component calls onSelect then onClose? No, I implemented it to call onSelect then onClose inside the modal.
+    // But better to manage state here if needed. 
+    // Wait, ProductSearchModal: `onSelect(product); onClose();`
+    // So here I just need to update state.
+  };
 
   const notifyUser = useCallback(async (title: string, message: string, type: NotificationType = 'success') => {
     try {
@@ -305,6 +344,7 @@ const SalesInquiryView: React.FC = () => {
         remark: '',
         approval_status: 'pending',
         tempId: `temp-${Date.now()}`,
+        isNew: true,
       },
     ]);
   };
@@ -348,8 +388,19 @@ const SalesInquiryView: React.FC = () => {
       return;
     }
 
+
     if (items.length === 0) {
       addToast({ type: 'error', message: 'Please add at least one item' });
+      return;
+    }
+
+    // Validate that all items have a product selected (item_id is present)
+    const invalidItems = items.filter(item => !item.item_id);
+    if (invalidItems.length > 0) {
+      addToast({
+        type: 'error',
+        message: `Please select valid products for all items. ${invalidItems.length} item(s) are missing product details.`
+      });
       return;
     }
 
@@ -382,7 +433,8 @@ const SalesInquiryView: React.FC = () => {
       };
 
       await createSalesInquiry(inquiryData);
-      // Real-time subscription will add the new inquiry
+      // Real-time subscription will add the new inquiry, but we force a refetch to be sure
+      await refetchInquiries();
 
       // Reset form
       setSelectedCustomer(null);
@@ -876,23 +928,39 @@ const SalesInquiryView: React.FC = () => {
                                       className="w-12 px-1 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px]"
                                     />
                                   </td>
-                                  <td className="px-1 py-0.5">
-                                    <input
-                                      type="text"
-                                      value={item.part_no}
-                                      onChange={(e) => updateItemRow(item.tempId, 'part_no', e.target.value)}
-                                      className="w-24 px-1 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px]"
-                                      placeholder="Part"
-                                    />
-                                  </td>
-                                  <td className="px-1 py-0.5">
-                                    <input
-                                      type="text"
-                                      value={item.description}
-                                      onChange={(e) => updateItemRow(item.tempId, 'description', e.target.value)}
-                                      className="w-36 px-1 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px]"
-                                      placeholder="Desc"
-                                    />
+                                  <td className="px-1 py-0.5" colSpan={2}>
+
+                                    {item.isNew && !item.part_no ? (
+                                      <div
+                                        onClick={() => handleOpenProductModal(item.tempId!)}
+                                        className="w-full px-2 py-1.5 border border-dashed border-slate-300 dark:border-slate-600 rounded bg-slate-50 dark:bg-slate-800/50 text-slate-500 hover:text-brand-blue hover:border-brand-blue cursor-pointer flex items-center justify-between group transition-colors"
+                                      >
+                                        <span className="text-xs italic">Click to search product...</span>
+                                        <Search className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                                      </div>
+                                    ) : (
+                                      <div className="flex gap-1" onDoubleClick={() => updateItemRow(item.tempId, 'isNew', true)}>
+                                        <div className="w-[30%]">
+                                          <input
+                                            type="text"
+                                            value={item.part_no}
+                                            onChange={(e) => updateItemRow(item.tempId, 'part_no', e.target.value)}
+                                            className="w-full px-1 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px] font-bold"
+                                            placeholder="Part"
+                                          />
+                                          <div className="text-[9px] text-slate-500 font-mono mt-0.5">{item.item_code}</div>
+                                        </div>
+                                        <div className="w-[70%]">
+                                          <input
+                                            type="text"
+                                            value={item.description}
+                                            onChange={(e) => updateItemRow(item.tempId, 'description', e.target.value)}
+                                            className="w-full px-1 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px]"
+                                            placeholder="Desc"
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
                                   </td>
                                   <td className="px-1 py-0.5">
                                     <input
@@ -1265,6 +1333,13 @@ const SalesInquiryView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Product Search Modal */}
+      <ProductSearchModal
+        isOpen={showProductModal}
+        onClose={() => setShowProductModal(false)}
+        onSelect={handleProductSelect}
+      />
     </div>
   );
 };

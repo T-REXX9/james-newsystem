@@ -23,6 +23,7 @@ import SalesOrderView from './components/SalesOrderView';
 import OrderSlipView from './components/OrderSlipView';
 import InvoiceView from './components/InvoiceView';
 import InquiryReportFilter from './components/InquiryReportFilter';
+import StockMovementView from './components/StockMovementView';
 
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
@@ -281,7 +282,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'warehouse-inventory-stock-movement':
-        return renderComingSoon('Stock Movement');
+        return (
+          <div className="h-full overflow-y-auto">
+            <StockMovementView />
+          </div>
+        );
       case 'warehouse-inventory-transfer-stock':
         return renderComingSoon('Transfer Stock');
       case 'warehouse-inventory-inventory-audit':

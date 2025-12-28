@@ -408,6 +408,39 @@ export interface Product {
   updated_at?: string;
 }
 
+export interface InventoryLog {
+  id: string;
+  item_id: string;
+  date: string;
+  transaction_type: 'Purchase Order' | 'Invoice' | 'Order Slip' | 'Transfer Receipt' | 'Credit Memo' | 'Stock Adjustment';
+  reference_no: string;
+  partner: string;
+  warehouse_id: string;
+  qty_in: number;
+  qty_out: number;
+  status_indicator: '+' | '-';
+  unit_price: number;
+  processed_by: string;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+  is_deleted?: boolean;
+  deleted_at?: string;
+  balance?: number;
+}
+
+export interface InventoryLogWithProduct extends InventoryLog {
+  product?: Product;
+}
+
+export interface InventoryLogFilters {
+  item_id?: string;
+  warehouse_id?: string;
+  date_from?: string;
+  date_to?: string;
+  transaction_type?: string;
+}
+
 export type ReorderStatus = 'critical' | 'low' | 'healthy';
 
 export interface ReorderReportEntry {
@@ -791,6 +824,7 @@ export interface AgentPerformanceSummary {
 export interface SalesInquiryItem {
   id: string;
   inquiry_id: string;
+  item_id?: string;
   qty: number;
   part_no: string;
   item_code: string;
@@ -868,6 +902,7 @@ export interface SalesInquiryDTO {
 export interface SalesOrderItem {
   id: string;
   order_id: string;
+  item_id?: string;
   qty: number;
   part_no: string;
   item_code: string;
@@ -938,6 +973,7 @@ export interface SalesOrderDTO {
 export interface OrderSlipItem {
   id: string;
   order_slip_id: string;
+  item_id?: string;
   qty: number;
   part_no: string;
   item_code: string;
@@ -1007,6 +1043,7 @@ export interface OrderSlipDTO {
 export interface InvoiceItem {
   id: string;
   invoice_id: string;
+  item_id?: string;
   qty: number;
   part_no: string;
   item_code: string;
@@ -1187,4 +1224,88 @@ export interface RecycleBinItem {
   restored_at: string | null;
   restored_by: string | null;
   permanent_delete_at: string;
+}
+
+// Purchase Order types
+export interface PurchaseOrderItem {
+  id: string;
+  po_id: string;
+  item_id: string;
+  qty: number;
+  unit_price: number;
+  amount: number;
+  notes?: string;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  po_no: string;
+  supplier_id: string;
+  order_date: string;
+  delivery_date?: string;
+  warehouse_id: string;
+  status: 'draft' | 'ordered' | 'delivered' | 'cancelled';
+  grand_total: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  is_deleted: boolean;
+  deleted_at?: string;
+  items?: PurchaseOrderItem[];
+}
+
+export interface PurchaseOrderDTO {
+  po_no: string;
+  supplier_id: string;
+  order_date: string;
+  delivery_date?: string;
+  warehouse_id: string;
+  items: Omit<PurchaseOrderItem, 'id' | 'po_id' | 'amount'>[];
+}
+
+export enum PurchaseOrderStatus {
+  DRAFT = 'draft',
+  ORDERED = 'ordered',
+  DELIVERED = 'delivered',
+  CANCELLED = 'cancelled'
+}
+
+// Stock Adjustment types
+export interface StockAdjustmentItem {
+  id: string;
+  adjustment_id: string;
+  item_id: string;
+  system_qty: number;
+  physical_qty: number;
+  difference: number;
+  reason?: string;
+}
+
+export interface StockAdjustment {
+  id: string;
+  adjustment_no: string;
+  adjustment_date: string;
+  warehouse_id: string;
+  adjustment_type: 'physical_count' | 'damage' | 'correction';
+  notes?: string;
+  status: 'draft' | 'finalized';
+  processed_by?: string;
+  created_at: string;
+  updated_at: string;
+  items?: StockAdjustmentItem[];
+}
+
+export interface StockAdjustmentDTO {
+  adjustment_no: string;
+  adjustment_date: string;
+  warehouse_id: string;
+  adjustment_type: 'physical_count' | 'damage' | 'correction';
+  notes?: string;
+  items: Omit<StockAdjustmentItem, 'id' | 'adjustment_id' | 'difference'>[];
+}
+
+export enum StockAdjustmentType {
+  PHYSICAL_COUNT = 'physical_count',
+  DAMAGE = 'damage',
+  CORRECTION = 'correction'
 }
