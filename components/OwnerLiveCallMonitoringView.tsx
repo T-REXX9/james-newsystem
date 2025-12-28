@@ -10,7 +10,7 @@ import { MOCK_AGENTS } from '../constants';
 import { fetchContacts, fetchCallLogs, fetchInquiries, fetchPurchases, subscribeToCallMonitoringUpdates, updateContact, createInquiry, fetchAgentPerformanceLeaderboard, fetchAgentPerformanceSummary, fetchAllPendingIncidentReports, approveIncidentReport, rejectIncidentReport } from '../services/supabaseService';
 import { Contact, CustomerStatus, CallLogEntry, Inquiry, Purchase, AgentSalesData, AgentPerformanceSummary, IncidentReportWithCustomer, UserProfile } from '../types';
 import CompanyName from './CompanyName';
-import AgentCallActivity from './AgentCallActivity';
+import AgentCallActivity, { AgentActivityItem } from './AgentCallActivity';
 import { useToast } from './ToastProvider';
 import { countCallOutcomes } from './callMetricsUtils';
 import SalesPerformanceCard from './SalesPerformanceCard';
@@ -90,6 +90,8 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     const [showBlacklistModal, setShowBlacklistModal] = useState(false);
     const [showReplyModal, setShowReplyModal] = useState(false);
     const [showStatsModal, setShowStatsModal] = useState(false);
+    const [showActivityModal, setShowActivityModal] = useState(false);
+    const [selectedActivityItem, setSelectedActivityItem] = useState<AgentActivityItem | null>(null);
     const [statsModalKey, setStatsModalKey] = useState<
         'active'
         | 'inactive'
@@ -352,6 +354,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     const effectiveLogs = useMemo(() => callLogs, [callLogs]);
 
     const formatDate = (value?: string | null) => value ? new Date(value).toLocaleDateString() : 'N/A';
+    const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString() : 'N/A';
     const formatDuration = (seconds: number) => {
         if (!seconds) return '0s';
         const m = Math.floor(seconds / 60);
@@ -722,6 +725,16 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
             .filter((log) => isWithinStart(log.occurred_at, start))
             .filter((log) => missedCallPredicate(log)).length;
     }, [effectiveLogs, missedCallPredicate]);
+
+    const openActivityModal = useCallback((item: AgentActivityItem) => {
+        setSelectedActivityItem(item);
+        setShowActivityModal(true);
+    }, []);
+
+    const selectedActivityContact = useMemo(() => {
+        if (!selectedActivityItem) return null;
+        return contactsMap.get(selectedActivityItem.contact_id) || null;
+    }, [selectedActivityItem, contactsMap]);
 
     const CompactMetric = ({ title, value, subtext, icon: Icon, colorClass, bgClass, onClick }: any) => {
         const inner = (
@@ -1097,6 +1110,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                                 maxItems={8}
                                 title="Recent Activity"
                                 className="h-full"
+                                onItemClick={openActivityModal}
                             />
                         </div>
                     </div>
@@ -1654,6 +1668,120 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         </div>
                     </div>
                 </div>
+                <ActionModal
+                    open={showActivityModal}
+                    title={selectedActivityItem
+                        ? `${selectedActivityItem.type === 'call' ? 'Call' : 'Inquiry'} Details`
+                        : 'Activity Details'}
+                    confirmLabel="Close"
+                    onClose={() => setShowActivityModal(false)}
+                    onConfirm={() => setShowActivityModal(false)}
+                >
+                    {selectedActivityItem ? (
+                        <div className="space-y-4">
+                            <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3 bg-slate-50/60 dark:bg-slate-800/40">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-bold text-slate-800 dark:text-white truncate">
+                                            {selectedActivityContact?.company || 'Unknown customer'}
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                            {selectedActivityContact?.address ? selectedActivityContact.address : '—'}
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                            {selectedActivityContact?.city || '—'}{selectedActivityContact?.province ? `, ${selectedActivityContact.province}` : ''}
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
+                                            Assigned: {selectedActivityContact?.salesman || selectedActivityContact?.assignedAgent || '—'}
+                                        </p>
+                                    </div>
+                                    <div className="shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedContactId(selectedActivityItem.contact_id);
+                                                setShowActivityModal(false);
+                                            }}
+                                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-blue/10 text-brand-blue hover:bg-brand-blue/20"
+                                        >
+                                            Open Customer
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {selectedActivityItem.type === 'call' ? (
+                                <div className="space-y-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Agent</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{selectedActivityItem.agent_name || '—'}</p>
+                                        </div>
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Occurred</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{formatDateTime(selectedActivityItem.occurred_at)}</p>
+                                        </div>
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Direction</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{selectedActivityItem.direction}</p>
+                                        </div>
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Channel</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{selectedActivityItem.channel}</p>
+                                        </div>
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Outcome</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{selectedActivityItem.outcome || '—'}</p>
+                                        </div>
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Duration</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{formatDuration(selectedActivityItem.duration_seconds || 0)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                        <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Notes</p>
+                                        <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">{selectedActivityItem.notes || '—'}</p>
+                                    </div>
+                                    {(selectedActivityItem.next_action || selectedActivityItem.next_action_due) && (
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Next Action</p>
+                                            <p className="text-sm font-semibold text-slate-800 dark:text-white mt-1">{selectedActivityItem.next_action || '—'}</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Due: {formatDateTime(selectedActivityItem.next_action_due)}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Channel</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{selectedActivityItem.channel}</p>
+                                        </div>
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Occurred</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{formatDateTime(selectedActivityItem.occurred_at)}</p>
+                                        </div>
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Title</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{selectedActivityItem.title || '—'}</p>
+                                        </div>
+                                        <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Sentiment</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{selectedActivityItem.sentiment || '—'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                        <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Notes</p>
+                                        <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">{selectedActivityItem.notes || '—'}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="text-sm text-slate-500 dark:text-slate-400">No activity selected.</div>
+                    )}
+                </ActionModal>
+
                 <ActionModal
                     open={showStatsModal}
                     title={`${statsModalTitle}${statsModalKey && ['active', 'inactive', 'prospective'].includes(statsModalKey) ? ` (${statsModalContacts.length})` : ''}`}
