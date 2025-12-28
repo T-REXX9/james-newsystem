@@ -89,6 +89,21 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     const [showReassignModal, setShowReassignModal] = useState(false);
     const [showBlacklistModal, setShowBlacklistModal] = useState(false);
     const [showReplyModal, setShowReplyModal] = useState(false);
+    const [showStatsModal, setShowStatsModal] = useState(false);
+    const [statsModalKey, setStatsModalKey] = useState<
+        'active'
+        | 'inactive'
+        | 'prospective'
+        | 'totalCalls'
+        | 'missedCalls'
+        | 'pendingReports'
+        | 'weeklySales'
+        | 'monthlySales'
+        | 'yearlySales'
+        | null
+    >(null);
+    const [statsModalSearch, setStatsModalSearch] = useState('');
+    const [statsCallsRange, setStatsCallsRange] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('today');
     const [pricingForm, setPricingForm] = useState({ priceGroup: '', terms: '', creditLimit: '' });
     const [reassignForm, setReassignForm] = useState({ agentId: '' });
     const [blacklistReason, setBlacklistReason] = useState('');
@@ -396,8 +411,6 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     };
 
     const totalCalls = effectiveLogs.length;
-    const missedCalls = 0; // No explicit status in new schema; keep placeholder for metric slot
-    const inProgressCalls = 0;
 
     const outcomeCounts = useMemo(() => countCallOutcomes(effectiveLogs), [effectiveLogs]);
     const outcomeData = [
@@ -502,20 +515,250 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
         });
     };
 
-    const CompactMetric = ({ title, value, subtext, icon: Icon, colorClass, bgClass }: any) => (
-        <div className={`flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 ${bgClass || 'bg-white dark:bg-slate-900'} shadow-sm`}>
-            <div className={`p-1.5 rounded-md ${colorClass}`}>
-                <Icon className="w-4 h-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-                <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wide whitespace-nowrap truncate">{title}</p>
-                <div className="flex items-baseline gap-1.5">
-                    <h4 className="text-lg font-bold text-slate-800 dark:text-white leading-none">{value}</h4>
-                    {subtext && <span className="text-[9px] text-slate-500 font-medium truncate">{subtext}</span>}
+    const openStatsModal = (
+        key:
+            | 'active'
+            | 'inactive'
+            | 'prospective'
+            | 'totalCalls'
+            | 'missedCalls'
+            | 'pendingReports'
+            | 'weeklySales'
+            | 'monthlySales'
+            | 'yearlySales'
+    ) => {
+        setStatsModalKey(key);
+        setStatsModalSearch('');
+        if (key === 'totalCalls' || key === 'missedCalls') {
+            setStatsCallsRange('today');
+        }
+        setShowStatsModal(true);
+    };
+
+    const formatPeso = (value: number) =>
+        new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value || 0);
+
+    const formatPesoCompact = (value: number) => {
+        const formatted = new Intl.NumberFormat('en-PH', {
+            notation: 'compact',
+            compactDisplay: 'short',
+            maximumFractionDigits: 1
+        }).format(value || 0);
+        return `₱${formatted}`;
+    };
+
+    const getStartOfTodayLocal = () => {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        return start;
+    };
+
+    const getStartOfWeekLocal = () => {
+        const start = getStartOfTodayLocal();
+        const day = start.getDay();
+        const diff = (day - 1 + 7) % 7;
+        start.setDate(start.getDate() - diff);
+        return start;
+    };
+
+    const getStartOfMonthLocal = () => {
+        const start = new Date();
+        start.setDate(1);
+        start.setHours(0, 0, 0, 0);
+        return start;
+    };
+
+    const getStartOfYearLocal = () => {
+        const start = new Date();
+        start.setMonth(0, 1);
+        start.setHours(0, 0, 0, 0);
+        return start;
+    };
+
+    const isWithinStart = (value?: string | null, start?: Date | null) => {
+        if (!value) return false;
+        const timestamp = Date.parse(value);
+        if (Number.isNaN(timestamp)) return false;
+        if (!start) return true;
+        return timestamp >= start.getTime();
+    };
+
+    const missedCallPredicate = useCallback((log: CallLogEntry) => {
+        return log.channel === 'call' && (!log.duration_seconds || log.duration_seconds === 0);
+    }, []);
+
+    const statsModalTitle = useMemo(() => {
+        if (statsModalKey === 'active') return 'Active Clients';
+        if (statsModalKey === 'inactive') return 'Inactive Clients';
+        if (statsModalKey === 'prospective') return 'Prospective Clients';
+        if (statsModalKey === 'totalCalls') return 'Total Calls';
+        if (statsModalKey === 'missedCalls') return 'Missed Calls';
+        if (statsModalKey === 'pendingReports') return 'Pending Incident Reports';
+        if (statsModalKey === 'weeklySales') return 'Weekly Sales Breakdown';
+        if (statsModalKey === 'monthlySales') return 'Monthly Sales Breakdown';
+        if (statsModalKey === 'yearlySales') return 'Yearly Sales Breakdown';
+        return 'Details';
+    }, [statsModalKey]);
+
+    const statsModalSearchNormalized = useMemo(() => statsModalSearch.trim().toLowerCase(), [statsModalSearch]);
+
+    const statsModalContacts = useMemo(() => {
+        if (!statsModalKey) return [] as Contact[];
+        if (!['active', 'inactive', 'prospective'].includes(statsModalKey)) return [] as Contact[];
+
+        const status = statsModalKey === 'active'
+            ? CustomerStatus.ACTIVE
+            : statsModalKey === 'inactive'
+                ? CustomerStatus.INACTIVE
+                : CustomerStatus.PROSPECTIVE;
+
+        return contacts
+            .filter((contact) => contact.status === status)
+            .filter((contact) => {
+                if (!statsModalSearchNormalized) return true;
+                return [contact.company, contact.name, contact.province, contact.city]
+                    .filter(Boolean)
+                    .some((field) => String(field).toLowerCase().includes(statsModalSearchNormalized));
+            })
+            .sort((a, b) => (a.company || '').localeCompare(b.company || ''));
+    }, [contacts, statsModalKey, statsModalSearchNormalized]);
+
+    const statsCallsRangeStart = useMemo(() => {
+        if (statsCallsRange === 'today') return getStartOfTodayLocal();
+        if (statsCallsRange === 'week') return getStartOfWeekLocal();
+        if (statsCallsRange === 'month') return getStartOfMonthLocal();
+        if (statsCallsRange === 'year') return getStartOfYearLocal();
+        return null;
+    }, [statsCallsRange]);
+
+    const statsModalCallLogs = useMemo(() => {
+        if (!statsModalKey) return [] as CallLogEntry[];
+        if (!['totalCalls', 'missedCalls'].includes(statsModalKey)) return [] as CallLogEntry[];
+
+        return effectiveLogs
+            .filter((log) => isWithinStart(log.occurred_at, statsCallsRangeStart))
+            .filter((log) => {
+                if (!statsModalSearchNormalized) return true;
+                const contact = contactsMap.get(log.contact_id);
+                return [contact?.company, contact?.name, log.agent_name, log.direction, log.channel, log.outcome]
+                    .filter(Boolean)
+                    .some((field) => String(field).toLowerCase().includes(statsModalSearchNormalized));
+            })
+            .filter((log) => (statsModalKey === 'missedCalls' ? missedCallPredicate(log) : true))
+            .sort((a, b) => Date.parse(b.occurred_at || '') - Date.parse(a.occurred_at || ''));
+    }, [statsModalKey, effectiveLogs, statsCallsRangeStart, statsModalSearchNormalized, contactsMap, missedCallPredicate]);
+
+    const statsModalSalesRows = useMemo(() => {
+        if (!statsModalKey) return [] as Array<{ contactId: string; company: string; salesman: string; total: number }>;
+        if (!['weeklySales', 'monthlySales', 'yearlySales'].includes(statsModalKey)) {
+            return [] as Array<{ contactId: string; company: string; salesman: string; total: number }>;
+        }
+
+        const rangeStart = statsModalKey === 'weeklySales'
+            ? getStartOfWeekLocal()
+            : statsModalKey === 'monthlySales'
+                ? getStartOfMonthLocal()
+                : getStartOfYearLocal();
+
+        const totals = new Map<string, number>();
+        purchases
+            .filter((purchase) => purchase.status === 'paid')
+            .filter((purchase) => isWithinStart(purchase.purchased_at, rangeStart))
+            .forEach((purchase) => {
+                totals.set(purchase.contact_id, (totals.get(purchase.contact_id) || 0) + Number(purchase.amount || 0));
+            });
+
+        const rows = Array.from(totals.entries()).map(([contactId, total]) => {
+            const contact = contactsMap.get(contactId);
+            return {
+                contactId,
+                company: contact?.company || 'Unknown customer',
+                salesman: contact?.salesman || contact?.assignedAgent || '—',
+                total
+            };
+        });
+
+        return rows
+            .filter((row) => {
+                if (!statsModalSearchNormalized) return true;
+                return [row.company, row.salesman]
+                    .filter(Boolean)
+                    .some((field) => String(field).toLowerCase().includes(statsModalSearchNormalized));
+            })
+            .sort((a, b) => b.total - a.total);
+    }, [statsModalKey, purchases, contactsMap, statsModalSearchNormalized]);
+
+    const statsModalSalesTotal = useMemo(() => {
+        return statsModalSalesRows.reduce((sum, row) => sum + (row.total || 0), 0);
+    }, [statsModalSalesRows]);
+
+    const weeklySalesTotal = useMemo(() => {
+        const start = getStartOfWeekLocal();
+        return purchases
+            .filter((purchase) => purchase.status === 'paid')
+            .filter((purchase) => isWithinStart(purchase.purchased_at, start))
+            .reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
+    }, [purchases]);
+
+    const monthlySalesTotal = useMemo(() => {
+        const start = getStartOfMonthLocal();
+        return purchases
+            .filter((purchase) => purchase.status === 'paid')
+            .filter((purchase) => isWithinStart(purchase.purchased_at, start))
+            .reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
+    }, [purchases]);
+
+    const yearlySalesTotal = useMemo(() => {
+        const start = getStartOfYearLocal();
+        return purchases
+            .filter((purchase) => purchase.status === 'paid')
+            .filter((purchase) => isWithinStart(purchase.purchased_at, start))
+            .reduce((sum, purchase) => sum + Number(purchase.amount || 0), 0);
+    }, [purchases]);
+
+    const missedCallsToday = useMemo(() => {
+        const start = getStartOfTodayLocal();
+        return effectiveLogs
+            .filter((log) => isWithinStart(log.occurred_at, start))
+            .filter((log) => missedCallPredicate(log)).length;
+    }, [effectiveLogs, missedCallPredicate]);
+
+    const CompactMetric = ({ title, value, subtext, icon: Icon, colorClass, bgClass, onClick }: any) => {
+        const inner = (
+            <>
+                <div className={`p-1.5 rounded-md ${colorClass}`}>
+                    <Icon className="w-4 h-4" />
                 </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wide whitespace-nowrap truncate">{title}</p>
+                    <div className="flex items-baseline gap-1.5">
+                        <h4 className="text-lg font-bold text-slate-800 dark:text-white leading-none">{value}</h4>
+                        {subtext && <span className="text-[9px] text-slate-500 font-medium truncate">{subtext}</span>}
+                    </div>
+                </div>
+            </>
+        );
+
+        const baseClasses = `flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 ${bgClass || 'bg-white dark:bg-slate-900'} shadow-sm`;
+
+        if (typeof onClick === 'function') {
+            return (
+                <button
+                    type="button"
+                    onClick={onClick}
+                    className={`${baseClasses} text-left hover:bg-white/80 dark:hover:bg-slate-900/70 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-blue/40`}
+                >
+                    {inner}
+                </button>
+            );
+        }
+
+        return (
+            <div className={baseClasses}>
+                {inner}
             </div>
-        </div>
-    );
+        );
+    };
 
     const selectedAgentOptions = useMemo(() => MOCK_AGENTS.map(agent => ({ id: agent.id, name: agent.name })), []);
     const customerSearchResults = useMemo(() => {
@@ -710,6 +953,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         icon={UserCheck}
                         bgClass="bg-emerald-50/50 dark:bg-emerald-900/10"
                         colorClass="text-emerald-600 dark:text-emerald-400 bg-white dark:bg-emerald-900/20"
+                        onClick={() => openStatsModal('active')}
                     />
                     <CompactMetric
                         title="Inactive"
@@ -717,6 +961,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         icon={UserX}
                         bgClass="bg-slate-100/50 dark:bg-slate-800/50"
                         colorClass="text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800"
+                        onClick={() => openStatsModal('inactive')}
                     />
                     <CompactMetric
                         title="Prospective"
@@ -724,6 +969,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         icon={UserPlus}
                         bgClass="bg-blue-50/50 dark:bg-blue-900/10"
                         colorClass="text-blue-600 dark:text-blue-400 bg-white dark:bg-blue-900/20"
+                        onClick={() => openStatsModal('prospective')}
                     />
 
                     {/* Call Stats */}
@@ -733,12 +979,14 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         subtext={`Target: 120`}
                         icon={Phone}
                         colorClass="text-brand-blue dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20"
+                        onClick={() => openStatsModal('totalCalls')}
                     />
                     <CompactMetric
                         title="Missed Calls"
-                        value={missedCalls}
+                        value={missedCallsToday}
                         icon={PhoneIncoming}
                         colorClass="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20"
+                        onClick={() => openStatsModal('missedCalls')}
                     />
 
                     {/* Pending Reports */}
@@ -748,26 +996,30 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         icon={AlertTriangle}
                         bgClass="bg-amber-50/50 dark:bg-amber-900/10"
                         colorClass="text-amber-600 dark:text-amber-400 bg-white dark:bg-amber-900/20"
+                        onClick={() => openStatsModal('pendingReports')}
                     />
 
                     {/* Sales */}
                     <CompactMetric
                         title="Weekly Sales"
-                        value="₱850k"
+                        value={formatPesoCompact(weeklySalesTotal)}
                         icon={TrendingUp}
                         colorClass="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20"
+                        onClick={() => openStatsModal('weeklySales')}
                     />
                     <CompactMetric
                         title="Monthly Sales"
-                        value="₱3.2M"
+                        value={formatPesoCompact(monthlySalesTotal)}
                         icon={PhilippinePeso}
                         colorClass="text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20"
+                        onClick={() => openStatsModal('monthlySales')}
                     />
                     <CompactMetric
                         title="Yearly Sales"
-                        value="₱42.5M"
+                        value={formatPesoCompact(yearlySalesTotal)}
                         icon={BarChart3}
                         colorClass="text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20"
+                        onClick={() => openStatsModal('yearlySales')}
                     />
                 </div>
             </div>
@@ -1402,6 +1654,208 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         </div>
                     </div>
                 </div>
+                <ActionModal
+                    open={showStatsModal}
+                    title={`${statsModalTitle}${statsModalKey && ['active', 'inactive', 'prospective'].includes(statsModalKey) ? ` (${statsModalContacts.length})` : ''}`}
+                    confirmLabel="Close"
+                    onClose={() => setShowStatsModal(false)}
+                    onConfirm={() => setShowStatsModal(false)}
+                >
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg">
+                            <Search className="w-4 h-4 text-slate-400" />
+                            <input
+                                value={statsModalSearch}
+                                onChange={(e) => setStatsModalSearch(e.target.value)}
+                                placeholder={
+                                    statsModalKey && ['totalCalls', 'missedCalls'].includes(statsModalKey)
+                                        ? 'Search customers, agents, outcomes...'
+                                        : statsModalKey && ['weeklySales', 'monthlySales', 'yearlySales'].includes(statsModalKey)
+                                            ? 'Search customers or salesman...'
+                                            : statsModalKey === 'pendingReports'
+                                                ? 'Search reports...'
+                                                : 'Search clients...'
+                                }
+                                className="bg-transparent text-sm outline-none text-slate-800 dark:text-slate-200 placeholder:text-slate-400 flex-1"
+                            />
+                        </div>
+
+                        {statsModalKey && ['totalCalls', 'missedCalls'].includes(statsModalKey) && (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Range</span>
+                                <select
+                                    value={statsCallsRange}
+                                    onChange={(e) => setStatsCallsRange(e.target.value as typeof statsCallsRange)}
+                                    className="text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-slate-700 dark:text-slate-200"
+                                >
+                                    <option value="today">Today</option>
+                                    <option value="week">This week</option>
+                                    <option value="month">This month</option>
+                                    <option value="year">This year</option>
+                                    <option value="all">All time</option>
+                                </select>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                    {statsModalCallLogs.length} logs
+                                </span>
+                            </div>
+                        )}
+
+                        <div className="max-h-[420px] overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg">
+                            {statsModalKey && ['active', 'inactive', 'prospective'].includes(statsModalKey) && (
+                                statsModalContacts.length === 0 ? (
+                                    <div className="p-4 text-sm text-slate-500 dark:text-slate-400 text-center">No clients found.</div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        {statsModalContacts.map((contact) => {
+                                            const lastActivity = latestActivityDate(contact.id) || contact.lastContactDate;
+                                            return (
+                                                <button
+                                                    key={contact.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedContactId(contact.id);
+                                                        setShowStatsModal(false);
+                                                    }}
+                                                    className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+                                                >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{contact.company}</p>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                                                {contact.city}{contact.province ? `, ${contact.province}` : ''}
+                                                                {contact.salesman ? ` • ${contact.salesman}` : ''}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right shrink-0">
+                                                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{formatDate(lastActivity)}</p>
+                                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">Last activity</p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )
+                            )}
+
+                            {statsModalKey && ['totalCalls', 'missedCalls'].includes(statsModalKey) && (
+                                statsModalCallLogs.length === 0 ? (
+                                    <div className="p-4 text-sm text-slate-500 dark:text-slate-400 text-center">No call logs found.</div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        {statsModalCallLogs.map((log) => {
+                                            const contact = contactsMap.get(log.contact_id);
+                                            return (
+                                                <button
+                                                    key={log.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (contact?.id) setSelectedContactId(contact.id);
+                                                        setShowStatsModal(false);
+                                                    }}
+                                                    className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+                                                >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{contact?.company || 'Unknown customer'}</p>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                                                {log.agent_name} • {log.direction} • {log.channel} • {log.outcome}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right shrink-0">
+                                                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{formatDate(log.occurred_at)}</p>
+                                                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                                {log.channel === 'call' ? formatDuration(log.duration_seconds) : '—'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )
+                            )}
+
+                            {statsModalKey === 'pendingReports' && (
+                                pendingIncidentReports.length === 0 ? (
+                                    <div className="p-4 text-sm text-slate-500 dark:text-slate-400 text-center">No pending incident reports.</div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        {pendingIncidentReports
+                                            .filter((report) => {
+                                                if (!statsModalSearchNormalized) return true;
+                                                return [report.customer_company, report.customer_city, report.customer_salesman, report.issue_type, report.description]
+                                                    .filter(Boolean)
+                                                    .some((field) => String(field).toLowerCase().includes(statsModalSearchNormalized));
+                                            })
+                                            .map((report) => (
+                                                <div key={report.id} className="p-3">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{report.customer_company}</p>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                                                {report.customer_city} • {report.customer_salesman} • {report.issue_type}
+                                                            </p>
+                                                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 line-clamp-2">{report.description}</p>
+                                                        </div>
+                                                        <div className="flex flex-col gap-2 shrink-0">
+                                                            <button
+                                                                onClick={() => handleApproveIncidentReport(report.id)}
+                                                                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors"
+                                                            >
+                                                                Approve
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRejectIncidentReport(report.id)}
+                                                                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold rounded-lg transition-colors"
+                                                            >
+                                                                Deny
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                    </div>
+                                )
+                            )}
+
+                            {statsModalKey && ['weeklySales', 'monthlySales', 'yearlySales'].includes(statsModalKey) && (
+                                statsModalSalesRows.length === 0 ? (
+                                    <div className="p-4 text-sm text-slate-500 dark:text-slate-400 text-center">No paid purchases found for this period.</div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 flex items-center justify-between">
+                                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total</p>
+                                            <p className="text-sm font-bold text-slate-800 dark:text-white">{formatPeso(statsModalSalesTotal)}</p>
+                                        </div>
+                                        {statsModalSalesRows.map((row) => (
+                                            <button
+                                                key={row.contactId}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedContactId(row.contactId);
+                                                    setShowStatsModal(false);
+                                                }}
+                                                className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{row.company}</p>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">Salesman: {row.salesman}</p>
+                                                    </div>
+                                                    <div className="text-right shrink-0">
+                                                        <p className="text-sm font-bold text-slate-800 dark:text-white">{formatPeso(row.total)}</p>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )
+                            )}
+                        </div>
+                    </div>
+                </ActionModal>
+
                 <ActionModal
                     open={showPricingModal}
                     title="Adjust Pricing"
