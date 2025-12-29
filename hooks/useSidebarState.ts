@@ -90,6 +90,17 @@ export const useSidebarState = () => {
     setFavorites(newOrder);
   }, []);
 
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const updateSearchQuery = useCallback((query: string) => {
     setSearchQuery(query);
     if (query) {
@@ -101,6 +112,7 @@ export const useSidebarState = () => {
     isExpanded,
     favorites,
     searchQuery,
+    debouncedSearchQuery,
     toggleExpanded,
     addFavorite,
     removeFavorite,

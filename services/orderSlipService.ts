@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { OrderSlip, OrderSlipDTO, OrderSlipItem, OrderSlipStatus, RecycleBinItemType, SalesOrderStatus } from '../types';
+import { createInventoryLogFromOrderSlip } from './inventoryLogService';
 
 const generateSequence = () => String(Math.floor(Math.random() * 100000)).padStart(5, '0');
 
@@ -11,6 +12,7 @@ export const generateSlipNumber = (): string => {
 
 const orderSlipItemPayload = (item: Omit<OrderSlipItem, 'id' | 'order_slip_id'>, orderSlipId: string) => ({
   order_slip_id: orderSlipId,
+  item_id: item.item_id,
   qty: item.qty,
   part_no: item.part_no,
   item_code: item.item_code,
@@ -140,6 +142,7 @@ export const createFromOrder = async (orderId: string): Promise<OrderSlip> => {
     urgency: order.urgency,
     urgency_date: order.urgency_date,
     items: items.map((item: any) => ({
+      item_id: item.item_id,
       qty: item.qty,
       part_no: item.part_no,
       item_code: item.item_code,
@@ -250,12 +253,34 @@ export const updateOrderSlip = async (
 
 export const finalizeOrderSlip = async (id: string): Promise<OrderSlip | null> => {
   try {
-    await supabase
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) throw new Error('User not authenticated');
+
+    // Update order slip status
+    const { error: updateError } = await supabase
       .from('order_slips')
       .update({ status: OrderSlipStatus.FINALIZED })
       .eq('id', id);
 
-    return getOrderSlip(id);
+    if (updateError) throw updateError;
+
+    // Fetch the updated slip with items to pass to inventory log service
+    // This ensures we have the latest state with 'finalized' status and all items
+    const updatedSlip = await getOrderSlip(id);
+    if (!updatedSlip) throw new Error('Failed to retrieve updated order slip');
+
+    // Create inventory logs
+    try {
+      // Pass the fully updated object to avoid re-fetching and potential race conditions
+      await createInventoryLogFromOrderSlip(updatedSlip, user.id);
+    } catch (error) {
+      console.error('Error creating inventory logs:', error);
+      // Note: We don't rollback the order slip status update here as the slip is technically finalized
+      // This might require manual intervention or a retry mechanism for logs in a real prod env
+    }
+
+    return updatedSlip;
   } catch (err) {
     console.error('Error finalizing order slip:', err);
     throw err;
@@ -299,10 +324,10 @@ export const deleteOrderSlip = async (id: string): Promise<boolean> => {
       .insert({
         item_type: RecycleBinItemType.ORDERSLIP,
         item_id: id,
-        original_data: slip,
+        original_data: slip as any,
         deleted_by: user.id,
         deleted_at: new Date().toISOString(),
-      });
+      } as any);
 
     if (recycleError) throw recycleError;
 

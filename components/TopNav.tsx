@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, LogOut, Sun, Moon } from 'lucide-react';
 import { UserProfile } from '../types';
 import NotificationCenter from './NotificationCenter';
+import TopbarNavigation from './TopbarNavigation';
 
 interface TopNavProps {
   activeTab?: string;
@@ -11,7 +12,7 @@ interface TopNavProps {
   onSignOut?: () => void;
 }
 
-const TopNav: React.FC<TopNavProps> = ({ activeTab = 'dashboard', onNavigate, user, onSignOut }) => {
+  const TopNav: React.FC<TopNavProps> = ({ activeTab = 'home', onNavigate, user, onSignOut }) => {
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
@@ -42,27 +43,31 @@ const TopNav: React.FC<TopNavProps> = ({ activeTab = 'dashboard', onNavigate, us
   };
 
   return (
-    <div className="h-14 bg-gradient-to-r from-brand-blue to-[#0a3d74] flex items-center justify-between px-6 fixed top-0 left-0 right-0 z-50 text-white shadow-md print:hidden">
-      <div className="flex items-center space-x-8">
-        <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => onNavigate?.('dashboard')}>
+    <div className="h-16 bg-gradient-to-r from-brand-blue to-[#0a3d74] flex items-center justify-between px-6 fixed top-0 left-0 right-0 z-50 text-white shadow-md print:hidden">
+      <div className="flex items-center space-x-6 flex-1">
+        <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => onNavigate?.('home')}>
            <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center font-bold border border-white/10 group-hover:bg-white/20 transition-colors">T</div>
            <div className="flex items-center">
              <span className="font-bold text-lg tracking-tight">TND-OPC</span>
            </div>
         </div>
-        
-        {/* Search */}
-        <div className="relative group hidden md:block">
+
+        {onNavigate && (
+          <TopbarNavigation activeTab={activeTab} onNavigate={onNavigate} user={user} />
+        )}
+      </div>
+
+      <div className="flex items-center space-x-4">
+         {/* Search */}
+         <div className="relative group hidden md:block">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/50 group-focus-within:text-white/80 transition-colors" />
             <input 
                 type="text" 
                 placeholder="Search anything" 
                 className="bg-black/20 border border-transparent text-sm rounded-md pl-9 pr-4 py-1.5 focus:outline-none focus:bg-black/30 focus:border-white/10 text-white placeholder-white/40 w-64 transition-all"
+                data-topnav-search
             />
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-4">
+         </div>
          {/* Theme Switcher */}
          <button
            onClick={toggleTheme}

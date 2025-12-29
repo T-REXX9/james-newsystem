@@ -8,7 +8,6 @@
 
 
 import React, { useState, useEffect } from 'react';
-import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
 import PipelineView from './components/PipelineView';
 import Dashboard from './components/Dashboard';
@@ -23,28 +22,51 @@ import SalesInquiryView from './components/SalesInquiryView';
 import SalesOrderView from './components/SalesOrderView';
 import OrderSlipView from './components/OrderSlipView';
 import InvoiceView from './components/InvoiceView';
+import InquiryReportFilter from './components/InquiryReportFilter';
+import StockMovementView from './components/StockMovementView';
+
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
 import SalesAgentDashboard from './components/SalesAgentDashboard';
 import ManagementView from './components/ManagementView';
 import RecycleBinView from './components/RecycleBinView';
+import ReportsView from './components/ReportsView';
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
-import { useSidebarState } from './hooks/useSidebarState';
+import { AVAILABLE_APP_MODULES, DEFAULT_STAFF_ACCESS_RIGHTS, MODULE_ID_ALIASES } from './constants';
+
+const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_ALIASES).reduce(
+  (acc, [alias, canonical]) => {
+    if (!acc[canonical]) acc[canonical] = [];
+    acc[canonical].push(alias);
+    return acc;
+  },
+  {} as Record<string, string[]>
+);
+
+const normalizeModuleId = (moduleId: string): string => MODULE_ID_ALIASES[moduleId] || moduleId;
+
+const expandModuleIds = (canonicalId: string): string[] => {
+  const aliases = CANONICAL_TO_ALIASES[canonicalId] || [];
+  return [canonicalId, ...aliases];
+};
+
+const getModuleLabel = (moduleId: string): string => {
+  const canonical = normalizeModuleId(moduleId);
+  const match = AVAILABLE_APP_MODULES.find((m) => m.id === canonical);
+  return match?.label || canonical;
+};
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [appLoading, setAppLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('home');
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>({});
-
-  // Get sidebar state for dynamic layout
-  const { isExpanded } = useSidebarState();
 
   // 1. Auth Logic
   useEffect(() => {
@@ -76,7 +98,7 @@ const App: React.FC = () => {
         ...prev,
         [customEvent.detail.tab]: customEvent.detail.payload || {},
       }));
-      setActiveTab(customEvent.detail.tab);
+      setActiveTab(normalizeModuleId(customEvent.detail.tab));
     };
 
     window.addEventListener('workflow:navigate', handler as EventListener);
@@ -94,13 +116,20 @@ const App: React.FC = () => {
           full_name: user.user_metadata?.full_name,
           avatar_url: user.user_metadata?.avatar_url,
           role,
-          access_rights: user.user_metadata?.access_rights || (role === 'Owner'
-            ? ['*']
-            : ['dashboard', 'pipelines', 'mail', 'calendar', 'tasks', 'salesorder', 'orderslip', 'invoice', 'products', 'customers'])
+          access_rights:
+            user.user_metadata?.access_rights ||
+            (role === 'Owner'
+              ? ['*']
+              : DEFAULT_STAFF_ACCESS_RIGHTS)
         };
         setUserProfile(fallbackProfile);
       } else {
-        setUserProfile(null);
+        setUserProfile({
+          id: userId,
+          email: '',
+          role: 'Unknown',
+          access_rights: [],
+        });
       }
     };
 
@@ -136,6 +165,10 @@ const App: React.FC = () => {
     setUserProfile(null);
   };
 
+  const handleSetActiveTab = (tab: string) => {
+    setActiveTab(normalizeModuleId(tab));
+  };
+
   // 2. Render Logic
   const renderComingSoon = (title: string) => (
     <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
@@ -154,11 +187,11 @@ const App: React.FC = () => {
       </div>
       <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Access Denied</h2>
       <p className="text-slate-400 dark:text-slate-500 max-w-md">
-        You do not have permission to view the <strong>{activeTab}</strong> module.
+        You do not have permission to view the <strong>{getModuleLabel(activeTab)}</strong> module.
         Please contact the administrator if you need access.
       </p>
       <button
-        onClick={() => setActiveTab('dashboard')}
+        onClick={() => handleSetActiveTab('home')}
         className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 transition-colors"
       >
         Go to Dashboard
@@ -166,47 +199,51 @@ const App: React.FC = () => {
     </div>
   );
 
-  // Permission Check Logic
+  // Permission Check Logic (supports legacy and canonical IDs)
   const checkPermission = (moduleId: string) => {
     if (!userProfile) return false;
-    
+
+    const canonical = normalizeModuleId(moduleId);
+
     // Special case: Recycle Bin only for Owner or Developer
-    if (moduleId === 'recyclebin') {
+    if (canonical === 'maintenance-profile-server-maintenance' || moduleId === 'recyclebin') {
       return userProfile.role === 'Owner' || userProfile.role === 'Developer';
     }
-    
+
     if (userProfile.role === 'Owner') return true;
 
-    // Sales Agents should always reach their dashboard even if access_rights is misconfigured.
+    const rights = userProfile.access_rights || [];
+
+    if (rights.includes('*')) return true;
+
+    // Sales Agents should always reach their home/dashboard even if access_rights is misconfigured.
     if (
-      moduleId === 'dashboard' &&
+      (canonical === 'home' || moduleId === 'dashboard') &&
       (userProfile.role === 'Sales Agent' || userProfile.role === 'sales_agent')
     ) {
       return true;
     }
 
-    // Default to true if access_rights is missing (backward compatibility), 
-    // unless we want strict mode. Assuming strict mode for this feature request.
-    const rights = userProfile.access_rights || [];
-    return rights.includes('*') || rights.includes(moduleId);
+    const idsToCheck = expandModuleIds(canonical);
+    return idsToCheck.some((id) => rights.includes(id));
   };
 
   const renderContent = () => {
-    // Special case for settings
-    if (activeTab === 'settings') {
-      if (checkPermission('settings')) return <AccessControlSettings />;
+    const canonicalTab = normalizeModuleId(activeTab);
+
+    // Special case for settings / access control
+    if (canonicalTab === 'maintenance-profile-system-access' || activeTab === 'settings') {
+      if (checkPermission(canonicalTab)) return <AccessControlSettings />;
       return renderAccessDenied();
     }
 
-    if (!checkPermission(activeTab)) {
+    if (!checkPermission(canonicalTab)) {
       return renderAccessDenied();
     }
 
-    switch (activeTab) {
-      // Role-based dashboard routing:
-      // - Sales Agent role → SalesAgentDashboard (metrics, tasks, calls, team chat)
-      // - Owner role → Dashboard (full widgets, charts, customization)
-      // - Fallback → Dashboard (for undefined or custom roles)
+    switch (canonicalTab) {
+      // Role-based home/dashboard routing
+      case 'home':
       case 'dashboard': {
         const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
 
@@ -224,44 +261,140 @@ const App: React.FC = () => {
           </div>
         );
       }
-      case 'pipelines': return <PipelineView />;
-      case 'staff': return <StaffView />;
-      case 'products': return (
-        <div className="h-full overflow-y-auto">
-          <ProductDatabase />
-        </div>
-      );
-      case 'reorder': return (
-        <div className="h-full overflow-y-auto">
-          <ReorderReport />
-        </div>
-      );
-      case 'salesinquiry': return (
-        <div className="h-full overflow-y-auto">
-          <SalesInquiryView />
-        </div>
-      );
-      case 'salesorder': return (
-        <div className="h-full overflow-y-auto">
-          <SalesOrderView initialOrderId={moduleContext.salesorder?.orderId} />
-        </div>
-      );
-      case 'orderslip': return (
-        <div className="h-full overflow-y-auto">
-          <OrderSlipView initialSlipId={moduleContext.orderslip?.orderSlipId} />
-        </div>
-      );
-      case 'invoice': return (
-        <div className="h-full overflow-y-auto">
-          <InvoiceView initialInvoiceId={moduleContext.invoice?.invoiceId} />
-        </div>
-      );
-      case 'customers': return (
-        <div className="h-full overflow-y-auto">
-          <CustomerDatabase />
-        </div>
-      );
-      case 'calls': {
+      case 'pipelines':
+      case 'sales-pipeline-board':
+        return <PipelineView />;
+      case 'staff':
+      case 'maintenance-profile-staff':
+        return <StaffView />;
+      case 'products':
+      case 'warehouse-inventory-product-database':
+        return (
+          <div className="h-full overflow-y-auto">
+            <ProductDatabase />
+          </div>
+        );
+      case 'reorder':
+      case 'warehouse-reports-reorder-report':
+        return (
+          <div className="h-full overflow-y-auto">
+            <ReorderReport />
+          </div>
+        );
+      case 'warehouse-inventory-stock-movement':
+        return (
+          <div className="h-full overflow-y-auto">
+            <StockMovementView />
+          </div>
+        );
+      case 'warehouse-inventory-transfer-stock':
+        return renderComingSoon('Transfer Stock');
+      case 'warehouse-inventory-inventory-audit':
+        return renderComingSoon('Inventory Audit');
+      case 'warehouse-purchasing-purchase-request':
+        return renderComingSoon('Purchase Request');
+      case 'warehouse-purchasing-purchase-order':
+        return renderComingSoon('Purchase Order');
+      case 'warehouse-purchasing-receiving-stock':
+        return renderComingSoon('Receiving Stock');
+      case 'warehouse-purchasing-return-to-supplier':
+        return renderComingSoon('Return to Supplier');
+      case 'warehouse-reports-inventory-report':
+        return renderComingSoon('Inventory Report');
+      case 'warehouse-reports-item-suggested-for-stock-report':
+        return renderComingSoon('Item Suggested for Stock Report');
+      case 'warehouse-reports-fast-slow-inventory-report':
+        return renderComingSoon('Fast/Slow Inventory Report');
+      case 'customers':
+      case 'sales-database-customer-database':
+        return (
+          <div className="h-full overflow-y-auto">
+            <CustomerDatabase />
+          </div>
+        );
+      case 'salesinquiry':
+      case 'sales-transaction-sales-inquiry':
+        return (
+          <div className="h-full overflow-y-auto">
+            <SalesInquiryView />
+          </div>
+        );
+      case 'salesorder':
+      case 'sales-transaction-sales-order':
+        return (
+          <div className="h-full overflow-y-auto">
+            <SalesOrderView
+              initialOrderId={
+                moduleContext['sales-transaction-sales-order']?.orderId ||
+                moduleContext.salesorder?.orderId
+              }
+            />
+          </div>
+        );
+      case 'orderslip':
+      case 'sales-transaction-order-slip':
+        return (
+          <div className="h-full overflow-y-auto">
+            <OrderSlipView
+              initialSlipId={
+                moduleContext['sales-transaction-order-slip']?.orderSlipId ||
+                moduleContext.orderslip?.orderSlipId
+              }
+            />
+          </div>
+        );
+      case 'invoice':
+      case 'sales-transaction-invoice':
+        return (
+          <div className="h-full overflow-y-auto">
+            <InvoiceView
+              initialInvoiceId={
+                moduleContext['sales-transaction-invoice']?.invoiceId ||
+                moduleContext.invoice?.invoiceId
+              }
+            />
+          </div>
+        );
+      case 'management':
+      case 'sales-performance-management-dashboard':
+        return (
+          <div className="h-full overflow-y-auto">
+            <ManagementView currentUser={userProfile} />
+          </div>
+        );
+      case 'sales-reports-inquiry-report':
+        return (
+          <div className="h-full overflow-y-auto">
+            <InquiryReportFilter />
+          </div>
+        );
+      case 'sales-reports-sales-report':
+        return renderComingSoon('Sales Report');
+      case 'sales-reports-sales-development-report':
+        return renderComingSoon('Sales Development Report');
+      case 'accounting-reports-accounting-overview':
+        return (
+          <div className="h-full overflow-y-auto">
+            <ReportsView />
+          </div>
+        );
+      case 'accounting-reports-aging-report':
+        return renderComingSoon('Aging Report');
+      case 'accounting-reports-collection-report':
+        return renderComingSoon('Collection Report');
+      case 'accounting-reports-sales-return-report':
+        return renderComingSoon('Sales Return Report');
+      case 'accounting-reports-freight-charges-report':
+        return renderComingSoon('Freight Charges Report');
+      case 'accounting-reports-accounts-receivable-report':
+        return renderComingSoon('Accounts Receivable Report');
+      case 'accounting-reports-purchase-history':
+        return renderComingSoon('Purchase History');
+      case 'accounting-reports-inactive-active-customers':
+        return renderComingSoon('Inactive/Active Customers');
+      case 'accounting-reports-old-new-customers':
+        return renderComingSoon('Old/New Customers');
+      case 'accounting-reports-daily-calls-monitoring': {
         const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
         return isSalesAgent ? (
           <DailyCallMonitoringView currentUser={userProfile} />
@@ -269,20 +402,101 @@ const App: React.FC = () => {
           <OwnerLiveCallMonitoringView currentUser={userProfile} />
         );
       }
-      case 'tasks': return <TasksView currentUser={userProfile} />;
-      case 'management': return (
-        <div className="h-full overflow-y-auto">
-          <ManagementView currentUser={userProfile} />
-        </div>
-      );
-      case 'recyclebin': return (
-        <div className="h-full overflow-y-auto">
-          <RecycleBinView />
-        </div>
-      );
-      case 'mail': return renderComingSoon('Inbox');
-      case 'calendar': return renderComingSoon('Calendar');
-      default: return renderComingSoon(activeTab.charAt(0).toUpperCase() + activeTab.slice(1));
+      case 'accounting-transactions-freight-charges-debit':
+        return renderComingSoon('Freight Charges (Debit)');
+      case 'accounting-transactions-sales-return-credit':
+        return renderComingSoon('Sales Return (Credit)');
+      case 'accounting-transactions-adjustment-entry':
+        return renderComingSoon('Adjustment Entry');
+      case 'accounting-transactions-daily-collection-entry':
+        return renderComingSoon('Daily Collection Entry');
+      case 'accounting-accounting-customer-ledger':
+        return renderComingSoon('Customer Ledger');
+      case 'accounting-accounting-collection-summary':
+        return renderComingSoon('Collection Summary');
+      case 'accounting-accounting-statement-of-account':
+        return renderComingSoon('Statement of Account');
+      case 'accounting-accounting-accounts-receivable':
+        return renderComingSoon('Accounts Receivable');
+      case 'maintenance-customer-customer-data':
+        return (
+          <div className="h-full overflow-y-auto">
+            <CustomerDatabase />
+          </div>
+        );
+      case 'maintenance-customer-daily-call-monitoring': {
+        const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
+        return isSalesAgent ? (
+          <DailyCallMonitoringView currentUser={userProfile} />
+        ) : (
+          <OwnerLiveCallMonitoringView currentUser={userProfile} />
+        );
+      }
+      case 'maintenance-customer-customer-group':
+        return renderComingSoon('Customer Group');
+      case 'maintenance-customer-pipeline':
+        return <PipelineView currentUser={userProfile} />;
+      case 'maintenance-product-suppliers':
+        return renderComingSoon('Suppliers');
+      case 'maintenance-product-special-price':
+        return renderComingSoon('Special Price');
+      case 'maintenance-product-category-management':
+        return renderComingSoon('Category Management');
+      case 'maintenance-product-courier-management':
+        return renderComingSoon('Courier Management');
+      case 'maintenance-product-remark-templates':
+        return renderComingSoon('Remark Templates');
+      case 'maintenance-profile-team':
+        return (
+          <div className="h-full overflow-y-auto">
+            <ManagementView currentUser={userProfile} />
+          </div>
+        );
+      case 'maintenance-profile-approver':
+        return renderComingSoon('Approver');
+      case 'maintenance-profile-activity-logs':
+        return renderComingSoon('Activity Logs');
+      case 'recyclebin':
+      case 'maintenance-profile-server-maintenance':
+        return (
+          <div className="h-full overflow-y-auto">
+            <RecycleBinView />
+          </div>
+        );
+      case 'maintenance-profile-system-access':
+        return <AccessControlSettings />;
+      case 'mail':
+      case 'communication-messaging-inbox':
+        return renderComingSoon('Inbox');
+      case 'communication-text-menu-text-messages':
+        return renderComingSoon('Text Messages');
+      case 'communication-text-menu-inbox':
+        return renderComingSoon('Inbox');
+      case 'communication-text-menu-sent':
+        return renderComingSoon('Sent');
+      case 'communication-text-menu-pending':
+        return renderComingSoon('Pending');
+      case 'communication-text-menu-failed':
+        return renderComingSoon('Failed');
+      case 'communication-text-menu-operator':
+        return renderComingSoon('Operator');
+      case 'calendar':
+      case 'communication-productivity-calendar':
+        return renderComingSoon('Calendar');
+      case 'calls':
+      case 'communication-productivity-daily-call-monitoring': {
+        const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
+        return isSalesAgent ? (
+          <DailyCallMonitoringView currentUser={userProfile} />
+        ) : (
+          <OwnerLiveCallMonitoringView currentUser={userProfile} />
+        );
+      }
+      case 'tasks':
+      case 'communication-productivity-tasks':
+        return <TasksView currentUser={userProfile} />;
+      default:
+        return renderComingSoon(getModuleLabel(canonicalTab));
     }
   };
 
@@ -293,21 +507,13 @@ const App: React.FC = () => {
           <div className="h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 flex flex-col">
             <TopNav
               activeTab={activeTab}
-              onNavigate={setActiveTab}
+              onNavigate={handleSetActiveTab}
               user={userProfile}
               onSignOut={handleSignOut}
             />
 
-            <div className="flex flex-1 overflow-hidden pt-14">
-              <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={userProfile} />
-
-              <main
-                className={`
-                  flex-1 print:ml-0 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950
-                  transition-all duration-300 ease-in-out
-                  ${isExpanded ? 'ml-64' : 'ml-16'}
-                `}
-              >
+            <div className="flex flex-1 overflow-hidden pt-16">
+              <main className="flex-1 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950">
                 {renderContent()}
               </main>
             </div>

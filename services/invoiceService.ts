@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { Invoice, InvoiceDTO, InvoiceItem, InvoiceStatus, RecycleBinItemType, SalesOrderStatus } from '../types';
+import { createInventoryLogFromInvoice } from './inventoryLogService';
 
 const randomSequence = () => String(Math.floor(Math.random() * 100000)).padStart(5, '0');
 
@@ -11,6 +12,7 @@ export const generateInvoiceNumber = (): string => {
 
 const invoiceItemPayload = (item: Omit<InvoiceItem, 'id' | 'invoice_id'>, invoiceId: string) => ({
   invoice_id: invoiceId,
+  item_id: item.item_id,
   qty: item.qty,
   part_no: item.part_no,
   item_code: item.item_code,
@@ -142,6 +144,7 @@ export const createFromOrder = async (orderId: string): Promise<Invoice> => {
     urgency: order.urgency,
     urgency_date: order.urgency_date,
     items: items.map((item: any) => ({
+      item_id: item.item_id,
       qty: item.qty,
       part_no: item.part_no,
       item_code: item.item_code,
@@ -253,6 +256,11 @@ export const updateInvoice = async (
 
 export const sendInvoice = async (id: string): Promise<Invoice | null> => {
   try {
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) throw new Error('User not authenticated');
+
+    // Update invoice status
     await supabase
       .from('invoices')
       .update({
@@ -260,6 +268,14 @@ export const sendInvoice = async (id: string): Promise<Invoice | null> => {
         sent_at: new Date().toISOString(),
       })
       .eq('id', id);
+
+    // Create inventory logs
+    try {
+      await createInventoryLogFromInvoice(id, user.id);
+    } catch (error) {
+      console.error('Error creating inventory logs:', error);
+      // Note: We don't rollback the invoice status update here
+    }
 
     return getInvoice(id);
   } catch (err) {
@@ -273,6 +289,18 @@ export const recordPayment = async (
   paymentData: { payment_date: string; payment_method: string }
 ): Promise<Invoice | null> => {
   try {
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) throw new Error('User not authenticated');
+
+    // Check if inventory logs already exist for this invoice
+    const { data: existingLogs } = await supabase
+      .from('inventory_logs')
+      .select('id')
+      .eq('reference_no', (await getInvoice(id))?.invoice_no)
+      .limit(1);
+
+    // Update invoice status
     await supabase
       .from('invoices')
       .update({
@@ -281,6 +309,16 @@ export const recordPayment = async (
         payment_method: paymentData.payment_method,
       })
       .eq('id', id);
+
+    // Create inventory logs only if they don't already exist
+    if (!existingLogs || existingLogs.length === 0) {
+      try {
+        await createInventoryLogFromInvoice(id, user.id);
+      } catch (error) {
+        console.error('Error creating inventory logs:', error);
+        // Note: We don't rollback the invoice status update here
+      }
+    }
 
     return getInvoice(id);
   } catch (err) {

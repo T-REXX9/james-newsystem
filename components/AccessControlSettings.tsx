@@ -4,7 +4,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CreateStaffAccountInput, StaffAccountValidationError, UserProfile } from '../types';
 import { fetchProfiles, updateProfile, createStaffAccount } from '../services/supabaseService';
-import { AVAILABLE_APP_MODULES, DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, STAFF_ROLES } from '../constants';
+import {
+  AVAILABLE_APP_MODULES,
+  DEFAULT_STAFF_ACCESS_RIGHTS,
+  DEFAULT_STAFF_ROLE,
+  STAFF_ROLES,
+  MODULE_ID_ALIASES,
+} from '../constants';
 import { Loader2, Shield, Save, CheckCircle, AlertTriangle, User, UserPlus, X } from 'lucide-react';
 
 const AccessControlSettings: React.FC = () => {
@@ -26,6 +32,36 @@ const AccessControlSettings: React.FC = () => {
   const [formErrors, setFormErrors] = useState<StaffAccountValidationError>({});
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error' | null; text: string }>({ type: null, text: '' });
 
+  const CANONICAL_TO_ALIASES: Record<string, string[]> = useMemo(
+    () =>
+      Object.entries(MODULE_ID_ALIASES).reduce(
+        (acc, [alias, canonical]) => {
+          if (!acc[canonical]) acc[canonical] = [];
+          acc[canonical].push(alias);
+          return acc;
+        },
+        {} as Record<string, string[]>
+      ),
+    []
+  );
+
+  const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<string> => {
+    const result = new Set<string>();
+    if (!rights) return result;
+
+    rights.forEach((id) => {
+      if (id === '*' || id === 'settings') {
+        result.add(id);
+        return;
+      }
+
+      const canonical = MODULE_ID_ALIASES[id] || id;
+      result.add(canonical);
+    });
+
+    return result;
+  };
+
   useEffect(() => {
     loadProfiles();
   }, []);
@@ -43,20 +79,25 @@ const AccessControlSettings: React.FC = () => {
 
       // Ensure access_rights array exists
       const currentRights = profile.access_rights || [];
+      const canonical = MODULE_ID_ALIASES[moduleId] || moduleId;
       let newRights: string[];
 
       if (currentRights.includes('*')) {
-          // If they had full access, converting to granular means adding all except the one being toggled? 
-          // Or just removing '*' and adding specific.
-          // For simplicity, if they have '*', we treat it as having all IDs.
-          const allIds = AVAILABLE_APP_MODULES.map(m => m.id);
-          newRights = allIds.filter(id => id !== moduleId);
-      } else if (currentRights.includes(moduleId)) {
-          // Remove
-          newRights = currentRights.filter(id => id !== moduleId);
+        // If they had full access, converting to granular means giving all modules except the one being toggled off.
+        const allIds = AVAILABLE_APP_MODULES.map(m => m.id);
+        newRights = allIds.filter(id => id !== canonical);
       } else {
-          // Add
-          newRights = [...currentRights, moduleId];
+        const aliases = CANONICAL_TO_ALIASES[canonical] || [];
+        const idsForModule = [canonical, ...aliases];
+        const hasModule = currentRights.some(id => idsForModule.includes(id));
+
+        if (hasModule) {
+          // Remove all representations (canonical + any legacy aliases) for this module
+          newRights = currentRights.filter(id => !idsForModule.includes(id));
+        } else {
+          // Add canonical ID and let alias layer handle backwards compatibility
+          newRights = [...currentRights, canonical];
+        }
       }
 
       return { ...profile, access_rights: newRights };
@@ -181,7 +222,7 @@ const AccessControlSettings: React.FC = () => {
           </button>
        </div>
 
-       {formMessage.type && (
+       {!isAddUserModalOpen && formMessage.type && (
           <div className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${formMessage.type === 'success' ? 'bg-green-50 text-green-800 border-green-100 dark:bg-green-900/20 dark:text-green-200 dark:border-green-800' : 'bg-red-50 text-red-800 border-red-100 dark:bg-red-900/20 dark:text-red-200 dark:border-red-800'}`}>
             {formMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
             <span>{formMessage.text}</span>
@@ -204,9 +245,10 @@ const AccessControlSettings: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {profiles.map(user => {
-                    const isOwner = user.role === 'Owner';
-                    const userRights = user.access_rights || [];
-                    const hasFullAccess = userRights.includes('*');
+	                    const isOwner = user.role === 'Owner';
+	                    const userRights = user.access_rights || [];
+	                    const hasFullAccess = userRights.includes('*');
+	                    const effectiveCanonicalRights = getEffectiveCanonicalRights(userRights);
 
                     return (
                         <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -235,8 +277,8 @@ const AccessControlSettings: React.FC = () => {
                                 </div>
                             </td>
                             
-                            {AVAILABLE_APP_MODULES.filter(m => m.id !== 'settings').map(module => {
-                                const isAllowed = isOwner || hasFullAccess || userRights.includes(module.id);
+	                            {AVAILABLE_APP_MODULES.filter(m => m.id !== 'settings').map(module => {
+	                                const isAllowed = isOwner || hasFullAccess || effectiveCanonicalRights.has(module.id);
                                 return (
                                     <td key={module.id} className="p-4 text-center border-l border-slate-100 dark:border-slate-800">
                                         <div className="flex justify-center">
@@ -295,7 +337,7 @@ const AccessControlSettings: React.FC = () => {
                     </button>
                 </div>
                 
-                <form onSubmit={handleCreateUser} className="p-6 space-y-4">
+                <form onSubmit={handleCreateUser} noValidate className="p-6 space-y-4">
                     {formMessage.type === 'error' && (
                       <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 text-red-800 px-3 py-2 text-sm">
                         <AlertTriangle className="w-4 h-4" />

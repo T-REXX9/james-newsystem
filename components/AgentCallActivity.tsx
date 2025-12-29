@@ -9,9 +9,10 @@ interface AgentCallActivityProps {
   maxItems?: number;
   title?: string;
   className?: string;
+  onItemClick?: (item: AgentActivityItem) => void;
 }
 
-type ActivityItem = (CallLogEntry & { type: 'call' }) | (Inquiry & { type: 'inquiry' });
+export type AgentActivityItem = (CallLogEntry & { type: 'call' }) | (Inquiry & { type: 'inquiry' });
 
 const formatRelativeTime = (value?: string | null) => {
   if (!value) return '';
@@ -58,7 +59,8 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
   contacts,
   maxItems = 8,
   title = 'Recent Activity',
-  className = ''
+  className = '',
+  onItemClick
 }) => {
   const contactsMap = useMemo(() => {
     const map = new Map<string, Contact>();
@@ -67,7 +69,7 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
   }, [contacts]);
 
   const recentActivity = useMemo(() => {
-    const merged: ActivityItem[] = [
+    const merged: AgentActivityItem[] = [
       ...callLogs.map((log) => ({ ...log, type: 'call' as const })),
       ...inquiries.map((inquiry) => ({ ...inquiry, type: 'inquiry' as const }))
     ];
@@ -100,10 +102,21 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
                 ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300'
                 : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300';
 
+            const Wrapper: React.ElementType = typeof onItemClick === 'function' ? 'button' : 'div';
+            const wrapperProps = typeof onItemClick === 'function'
+              ? {
+                type: 'button',
+                onClick: () => onItemClick(item),
+                className: 'w-full text-left p-2.5 bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700 hover:border-brand-blue/40 hover:bg-white dark:hover:bg-slate-800/80 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/40'
+              }
+              : {
+                className: 'p-2.5 bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700'
+              };
+
             return (
-              <div
+              <Wrapper
                 key={`${item.type}-${item.id}`}
-                className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700"
+                {...wrapperProps}
               >
                 <div className="flex items-start gap-2.5">
                   <div className="w-9 h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center">
@@ -170,7 +183,7 @@ const AgentCallActivity: React.FC<AgentCallActivityProps> = ({
                     </div>
                   </div>
                 </div>
-              </div>
+              </Wrapper>
             );
           })}
         </div>

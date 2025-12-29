@@ -1,35 +1,50 @@
-# How to Add New Sidebar Menu Items
+# How to Add New Navigation Items
 
-This guide explains how to add new pages/modules to the sidebar navigation.
+This guide explains how to add new pages/modules to the topbar navigation.
 
 ## Quick Steps
 
-### 1. Add the Menu Item to Sidebar Component
+### 1. Add the Menu Item to Topbar Config
 
-Edit `components/Sidebar.tsx` and add your new item to the `menuItems` array:
+Edit `utils/topbarMenuConfig.ts` and add your new item to the appropriate menu:
 
 ```typescript
-const menuItems = [
-  // ... existing items ...
-  { 
-    id: 'your-new-page',           // Unique identifier
-    icon: YourIcon,                 // Lucide React icon
-    label: 'Your New Page',         // Display name
-    group: 'tools'                  // Group: main, data, sales, admin, or tools
+export const TOPBAR_MENU_CONFIG = [
+  // ... existing menus ...
+  {
+    id: 'your-section',
+    label: 'YOUR SECTION',
+    icon: YourIcon,
+    submenus: [
+      {
+        id: 'your-submenu',
+        label: 'YOUR SUBMENU',
+        icon: YourIcon,
+        items: [
+          {
+            id: 'your-new-page',
+            label: 'Your New Page',
+            route: 'your-new-page',
+            icon: YourIcon,
+          },
+        ],
+      },
+    ],
   },
 ];
 ```
 
-**Available Groups:**
-- `main` - Core features (Dashboard, Pipelines)
-- `data` - Data management (Customers, Products, Reports)
-- `sales` - Sales workflow (Inquiry, Orders, Invoices)
-- `admin` - Administration (Staff, Management, Settings)
-- `tools` - Productivity tools (Mail, Calendar, Tasks)
+**Available Main Menus:**
+- `HOME` - Core dashboard
+- `WAREHOUSE` - Inventory, Purchasing, Reports
+- `SALES` - Transactions, Reports
+- `ACCOUNTING` - Transactions, Accounting, Reports
+- `MAINTENANCE` - Customer, Product, Profile
+- `COMMUNICATION` - Text Menu
 
 ### 2. Import the Icon
 
-At the top of `components/Sidebar.tsx`, import your icon from lucide-react:
+At the top of `utils/topbarMenuConfig.ts`, import your icon from lucide-react:
 
 ```typescript
 import { 
@@ -97,14 +112,14 @@ export default YourNewPage;
 
 If you want to restrict access to certain roles:
 
-Edit `components/Sidebar.tsx` and add special logic in `isItemAllowed()`:
+Edit `components/TopbarNavigation.tsx` and add special logic in `canAccessRoute()`:
 
 ```typescript
-const isItemAllowed = (itemId: string) => {
+const canAccessRoute = (routeId: string) => {
   // ... existing logic ...
   
   // Special case: Your new page only for specific roles
-  if (itemId === 'your-new-page') {
+  if (routeId === 'your-new-page') {
     return user.role === 'Owner' || user.role === 'Manager';
   }
   
@@ -114,13 +129,22 @@ const isItemAllowed = (itemId: string) => {
 
 ## Example: Adding a "Reports" Page
 
-### Step 1: Add to Sidebar
+### Step 1: Add to Topbar Config
 ```typescript
-{ 
-  id: 'reports', 
-  icon: FileBarChart, 
-  label: 'Reports', 
-  group: 'data' 
+{
+  id: 'reports',
+  label: 'REPORTS',
+  icon: FileBarChart,
+  submenus: [
+    {
+      id: 'reports-main',
+      label: 'MAIN',
+      icon: FileBarChart,
+      items: [
+        { id: 'reports', label: 'Reports', route: 'reports', icon: FileBarChart },
+      ],
+    },
+  ],
 },
 ```
 
@@ -187,7 +211,7 @@ export default ReportsView;
 
 After adding a new item, test:
 
-1. ✅ Item appears in sidebar for authorized users
+1. ✅ Item appears in topbar for authorized users
 2. ✅ Item is hidden for unauthorized users
 3. ✅ Clicking item navigates to correct page
 4. ✅ Tooltip shows correct label
@@ -196,28 +220,13 @@ After adding a new item, test:
 
 Run tests:
 ```bash
-npm run test -- Sidebar.test.tsx
+npm run test
 ```
 
 ## Troubleshooting
 
-**Item not showing up?**
-- Check user has access rights to the module ID
-- Verify the ID matches in all three places (Sidebar, constants, App)
-- Check for typos in the ID
-
-**Icon not displaying?**
-- Verify icon is imported from lucide-react
-- Check icon name is correct (case-sensitive)
-- Ensure icon component is capitalized
-
-**Route not working?**
-- Verify case statement in App.tsx matches the ID exactly
-- Check component is imported in App.tsx
-- Ensure component is exported correctly
-
-**Access control not working?**
-- Check `isItemAllowed()` logic in Sidebar.tsx
-- Verify user's `access_rights` array includes the module ID
-- Remember: Owners bypass access control
-
+- If the menu item doesn't appear, confirm the user has the route in `access_rights`.
+- If the route renders "Coming Soon", add a case to `App.tsx`.
+- If the menu item still doesn't appear, verify the ID matches in `utils/topbarMenuConfig.ts` and `constants.ts`.
+- If an icon doesn't render, confirm the lucide icon is imported and capitalized.
+- If access control fails, review `components/TopbarNavigation.tsx` `canAccessRoute()`.

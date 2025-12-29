@@ -28,7 +28,8 @@ export function useRealtimeList<T extends { id: string }>({
       setIsLoading(true);
       setError(null);
       const result = await initialFetchFn();
-      setData(result);
+      const sorted = sortFn ? [...result].sort(sortFn) : result;
+      setData(sorted);
     } catch (err) {
       console.error(`Error fetching ${tableName}:`, err);
       setError(err as Error);
@@ -105,4 +106,3 @@ export function useRealtimeList<T extends { id: string }>({
     setData, // Expose for optimistic updates
   };
 }
-
