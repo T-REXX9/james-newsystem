@@ -12,9 +12,45 @@ vi.mock('../../lib/supabaseClient', () => ({
     supabase: mockSupabase,
 }));
 
+const createFromMock = (responses: Record<string, any[]>) => {
+    const queues: Record<string, any[]> = Object.fromEntries(
+        Object.entries(responses).map(([table, items]) => [table, [...items]])
+    );
+
+    const buildersByTable: Record<string, any[]> = {};
+
+    const fromFn = (table: string) => {
+        const queue = (queues[table] ??= []);
+        const resolveNext = () => queue.shift() ?? { data: null, error: null };
+
+        const builder: any = {
+            insert: vi.fn(() => builder),
+            update: vi.fn(() => builder),
+            delete: vi.fn(() => builder),
+            select: vi.fn(() => builder),
+            eq: vi.fn(() => builder),
+            order: vi.fn(() => builder),
+            gte: vi.fn(() => builder),
+            lte: vi.fn(() => builder),
+            single: vi.fn(() => Promise.resolve(resolveNext())),
+            then: (onFulfilled: any, onRejected: any) => Promise.resolve(resolveNext()).then(onFulfilled, onRejected),
+        };
+
+        (buildersByTable[table] ??= []).push(builder);
+        return builder;
+    };
+
+    return { fromFn, buildersByTable };
+};
+
 describe('inventoryLogService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+
+        mockSupabase.auth.getUser.mockResolvedValue({
+            data: { user: { id: 'user-123' } },
+            error: null,
+        });
     });
 
     afterEach(() => {
@@ -57,63 +93,26 @@ describe('inventoryLogService', () => {
                 company: 'Test Supplier Inc.',
             };
 
-            // Mock auth user
-            mockSupabase.auth.getUser.mockResolvedValue({
-                data: { user: { id: userId } },
-                error: null,
+            const { fromFn, buildersByTable } = createFromMock({
+                purchase_orders: [{ data: mockPO, error: null }],
+                contacts: [{ data: mockSupplier, error: null }],
+                inventory_logs: [
+                    { data: { id: 'log-1', item_id: 'item-1' }, error: null },
+                    { data: { id: 'log-2', item_id: 'item-2' }, error: null },
+                ],
             });
 
-            // Setup chain mocks
-            const mockSelect = vi.fn();
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'contacts') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'inventory_logs') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { select: mockSelect };
-            });
-
-            // Setup return values
-            mockSingle.mockImplementation(() => {
-                const lastCall = mockSupabase.from.mock.calls[mockSupabase.from.mock.calls.length - 1];
-                if (lastCall[0] === 'purchase_orders') {
-                    return Promise.resolve({ data: mockPO, error: null });
-                }
-                if (lastCall[0] === 'contacts') {
-                    return Promise.resolve({ data: mockSupplier, error: null });
-                }
-                return Promise.resolve({ data: null, error: null });
-            });
-
-            mockInsert.mockResolvedValue({
-                data: { id: 'log-1', item_id: 'item-1' },
-                error: null,
-            });
+            mockSupabase.from.mockImplementation(fromFn);
 
             const { createInventoryLogFromPO } = await import('../inventoryLogService');
             const result = await createInventoryLogFromPO(poId, userId);
 
             expect(result).toHaveLength(2);
-            expect(mockInsert).toHaveBeenCalledTimes(2);
+            const totalInsertCalls = (buildersByTable.inventory_logs || []).reduce(
+                (sum, b) => sum + b.insert.mock.calls.length,
+                0
+            );
+            expect(totalInsertCalls).toBe(2);
         });
 
         it('throws error when PO status is not delivered', async () => {
@@ -203,53 +202,20 @@ describe('inventoryLogService', () => {
                 company: 'Test Customer Corp.',
             };
 
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'invoices') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'contacts') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'inventory_logs') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { select: vi.fn() };
+            const { fromFn, buildersByTable } = createFromMock({
+                invoices: [{ data: mockInvoice, error: null }],
+                contacts: [{ data: mockCustomer, error: null }],
+                inventory_logs: [{ data: { id: 'log-1', item_id: 'item-1' }, error: null }],
             });
 
-            mockSingle.mockImplementation(() => {
-                const lastCall = mockSupabase.from.mock.calls[mockSupabase.from.mock.calls.length - 1];
-                if (lastCall[0] === 'invoices') {
-                    return Promise.resolve({ data: mockInvoice, error: null });
-                }
-                if (lastCall[0] === 'contacts') {
-                    return Promise.resolve({ data: mockCustomer, error: null });
-                }
-                return Promise.resolve({ data: null, error: null });
-            });
-
-            mockInsert.mockResolvedValue({
-                data: { id: 'log-1', item_id: 'item-1' },
-                error: null,
-            });
+            mockSupabase.from.mockImplementation(fromFn);
 
             const { createInventoryLogFromInvoice } = await import('../inventoryLogService');
             const result = await createInventoryLogFromInvoice(invoiceId, userId);
 
             expect(result).toHaveLength(1);
-            expect(mockInsert).toHaveBeenCalledWith(
+            const insertBuilder = (buildersByTable.inventory_logs || [])[0];
+            expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
                     qty_in: 0,
                     qty_out: 5,
@@ -283,52 +249,28 @@ describe('inventoryLogService', () => {
                 company: 'Test Customer Corp.',
             };
 
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'invoices') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'contacts') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'inventory_logs') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { select: vi.fn() };
+            const { fromFn, buildersByTable } = createFromMock({
+                invoices: [{ data: mockInvoice, error: null }],
+                contacts: [{ data: mockCustomer, error: null }],
+                inventory_logs: [{ data: { id: 'log-1', item_id: 'item-1' }, error: null }],
             });
 
-            mockSingle.mockImplementation(() => {
-                const lastCall = mockSupabase.from.mock.calls[mockSupabase.from.mock.calls.length - 1];
-                if (lastCall[0] === 'invoices') {
-                    return Promise.resolve({ data: mockInvoice, error: null });
-                }
-                if (lastCall[0] === 'contacts') {
-                    return Promise.resolve({ data: mockCustomer, error: null });
-                }
-                return Promise.resolve({ data: null, error: null });
-            });
-
-            mockInsert.mockResolvedValue({
-                data: { id: 'log-1', item_id: 'item-1' },
-                error: null,
-            });
+            mockSupabase.from.mockImplementation(fromFn);
 
             const { createInventoryLogFromInvoice } = await import('../inventoryLogService');
             const result = await createInventoryLogFromInvoice(invoiceId, userId);
 
             expect(result).toHaveLength(1);
+            const insertBuilder = (buildersByTable.inventory_logs || [])[0];
+            expect(insertBuilder.insert).toHaveBeenCalledTimes(1);
+            expect(insertBuilder.insert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    transaction_type: 'Invoice',
+                    qty_in: 0,
+                    qty_out: 3,
+                    status_indicator: '-',
+                })
+            );
         });
 
         it('throws error when invoice status is invalid', async () => {
@@ -392,53 +334,20 @@ describe('inventoryLogService', () => {
                 company: 'Test Customer Corp.',
             };
 
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'order_slips') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'contacts') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'inventory_logs') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { select: vi.fn() };
+            const { fromFn, buildersByTable } = createFromMock({
+                order_slips: [{ data: mockSlip, error: null }],
+                contacts: [{ data: mockCustomer, error: null }],
+                inventory_logs: [{ data: { id: 'log-1', item_id: 'item-1' }, error: null }],
             });
 
-            mockSingle.mockImplementation(() => {
-                const lastCall = mockSupabase.from.mock.calls[mockSupabase.from.mock.calls.length - 1];
-                if (lastCall[0] === 'order_slips') {
-                    return Promise.resolve({ data: mockSlip, error: null });
-                }
-                if (lastCall[0] === 'contacts') {
-                    return Promise.resolve({ data: mockCustomer, error: null });
-                }
-                return Promise.resolve({ data: null, error: null });
-            });
-
-            mockInsert.mockResolvedValue({
-                data: { id: 'log-1', item_id: 'item-1' },
-                error: null,
-            });
+            mockSupabase.from.mockImplementation(fromFn);
 
             const { createInventoryLogFromOrderSlip } = await import('../inventoryLogService');
             const result = await createInventoryLogFromOrderSlip(slipId, userId);
 
             expect(result).toHaveLength(1);
-            expect(mockInsert).toHaveBeenCalledWith(
+            const insertBuilder = (buildersByTable.inventory_logs || [])[0];
+            expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
                     transaction_type: 'Order Slip',
                     qty_in: 0,
@@ -508,36 +417,19 @@ describe('inventoryLogService', () => {
                 ],
             };
 
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'inventory_logs') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { select: vi.fn() };
+            const { fromFn, buildersByTable } = createFromMock({
+                stock_adjustments: [{ data: mockAdjustment, error: null }],
+                inventory_logs: [{ data: { id: 'log-1', item_id: 'item-1' }, error: null }],
             });
 
-            mockSingle.mockResolvedValue({ data: mockAdjustment, error: null });
-            mockInsert.mockResolvedValue({
-                data: { id: 'log-1', item_id: 'item-1' },
-                error: null,
-            });
+            mockSupabase.from.mockImplementation(fromFn);
 
             const { createInventoryLogFromStockAdjustment } = await import('../inventoryLogService');
             const result = await createInventoryLogFromStockAdjustment(adjustmentId, userId);
 
             expect(result).toHaveLength(1);
-            expect(mockInsert).toHaveBeenCalledWith(
+            const insertBuilder = (buildersByTable.inventory_logs || [])[0];
+            expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
                     qty_in: 5,
                     qty_out: 0,
@@ -571,36 +463,19 @@ describe('inventoryLogService', () => {
                 ],
             };
 
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'inventory_logs') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { select: vi.fn() };
+            const { fromFn, buildersByTable } = createFromMock({
+                stock_adjustments: [{ data: mockAdjustment, error: null }],
+                inventory_logs: [{ data: { id: 'log-1', item_id: 'item-1' }, error: null }],
             });
 
-            mockSingle.mockResolvedValue({ data: mockAdjustment, error: null });
-            mockInsert.mockResolvedValue({
-                data: { id: 'log-1', item_id: 'item-1' },
-                error: null,
-            });
+            mockSupabase.from.mockImplementation(fromFn);
 
             const { createInventoryLogFromStockAdjustment } = await import('../inventoryLogService');
             const result = await createInventoryLogFromStockAdjustment(adjustmentId, userId);
 
             expect(result).toHaveLength(1);
-            expect(mockInsert).toHaveBeenCalledWith(
+            const insertBuilder = (buildersByTable.inventory_logs || [])[0];
+            expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
                     qty_in: 0,
                     qty_out: 5,
@@ -728,63 +603,21 @@ describe('inventoryLogService', () => {
                 description: 'Product A',
             };
 
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'sales_returns') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'contacts') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'products') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'inventory_logs') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { select: vi.fn() };
+            const { fromFn, buildersByTable } = createFromMock({
+                sales_returns: [{ data: mockReturn, error: null }],
+                contacts: [{ data: mockCustomer, error: null }],
+                products: [{ data: mockProduct, error: null }],
+                inventory_logs: [{ data: { id: 'log-1', item_id: 'product-1' }, error: null }],
             });
 
-            mockSingle.mockImplementation(() => {
-                const lastCall = mockSupabase.from.mock.calls[mockSupabase.from.mock.calls.length - 1];
-                if (lastCall[0] === 'sales_returns') {
-                    return Promise.resolve({ data: mockReturn, error: null });
-                }
-                if (lastCall[0] === 'contacts') {
-                    return Promise.resolve({ data: mockCustomer, error: null });
-                }
-                if (lastCall[0] === 'products') {
-                    return Promise.resolve({ data: mockProduct, error: null });
-                }
-                return Promise.resolve({ data: null, error: null });
-            });
-
-            mockInsert.mockResolvedValue({
-                data: { id: 'log-1', item_id: 'product-1' },
-                error: null,
-            });
+            mockSupabase.from.mockImplementation(fromFn);
 
             const { createInventoryLogFromReturn } = await import('../inventoryLogService');
             const result = await createInventoryLogFromReturn(returnId, userId);
 
             expect(result).toHaveLength(1);
-            expect(mockInsert).toHaveBeenCalledWith(
+            const insertBuilder = (buildersByTable.inventory_logs || [])[0];
+            expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
                     transaction_type: 'Credit Memo',
                     qty_in: 2,
@@ -858,52 +691,22 @@ describe('inventoryLogService', () => {
                 company: 'Test Supplier Inc.',
             };
 
-            mockSupabase.auth.getUser.mockResolvedValue({
-                data: { user: { id: userId } },
-                error: null,
+            const { fromFn, buildersByTable } = createFromMock({
+                purchase_orders: [
+                    { data: mockPO, error: null },
+                    { data: mockPO, error: null },
+                ],
+                contacts: [
+                    { data: mockSupplier, error: null },
+                    { data: mockSupplier, error: null },
+                ],
+                inventory_logs: [
+                    { data: { id: 'log-1', item_id: 'item-1' }, error: null },
+                    { data: { id: 'log-2', item_id: 'item-1' }, error: null },
+                ],
             });
 
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'contacts') {
-                    return {
-                        select: () => ({
-                            eq: () => ({ single: mockSingle }),
-                        }),
-                    };
-                }
-                if (table === 'inventory_logs') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { select: vi.fn() };
-            });
-
-            mockSingle.mockImplementation(() => {
-                const lastCall = mockSupabase.from.mock.calls[mockSupabase.from.mock.calls.length - 1];
-                if (lastCall[0] === 'purchase_orders') {
-                    return Promise.resolve({ data: mockPO, error: null });
-                }
-                if (lastCall[0] === 'contacts') {
-                    return Promise.resolve({ data: mockSupplier, error: null });
-                }
-                return Promise.resolve({ data: null, error: null });
-            });
-
-            mockInsert.mockResolvedValue({
-                data: { id: 'log-1', item_id: 'item-1' },
-                error: null,
-            });
+            mockSupabase.from.mockImplementation(fromFn);
 
             const { createInventoryLogFromPO } = await import('../inventoryLogService');
 
@@ -915,7 +718,11 @@ describe('inventoryLogService', () => {
 
             expect(result1).toHaveLength(1);
             expect(result2).toHaveLength(1);
-            expect(mockInsert).toHaveBeenCalledTimes(2);
+            const totalInsertCalls = (buildersByTable.inventory_logs || []).reduce(
+                (sum, b) => sum + b.insert.mock.calls.length,
+                0
+            );
+            expect(totalInsertCalls).toBe(2);
         });
     });
 });

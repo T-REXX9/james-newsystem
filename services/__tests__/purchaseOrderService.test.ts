@@ -12,6 +12,28 @@ vi.mock('../../lib/supabaseClient', () => ({
     supabase: mockSupabase,
 }));
 
+vi.mock('../inventoryLogService', () => ({
+    createInventoryLogFromPO: vi.fn().mockResolvedValue(undefined),
+}));
+
+const createQueryBuilderMock = (result: any) => {
+    const queue = [result];
+    const resolveNext = () => queue.shift() ?? { data: null, error: null };
+
+    const builder: any = {
+        insert: vi.fn(() => builder),
+        update: vi.fn(() => builder),
+        delete: vi.fn(() => builder),
+        select: vi.fn(() => builder),
+        eq: vi.fn(() => builder),
+        order: vi.fn(() => builder),
+        single: vi.fn(() => Promise.resolve(resolveNext())),
+        then: (onFulfilled: any, onRejected: any) => Promise.resolve(resolveNext()).then(onFulfilled, onRejected),
+    };
+
+    return builder;
+};
+
 describe('purchaseOrderService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -89,52 +111,21 @@ describe('purchaseOrderService', () => {
                 error: null,
             });
 
-            const mockSelect = vi.fn();
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-            const mockDelete = vi.fn();
+            const insertPOBuilder = createQueryBuilderMock({ data: mockCreatedPO, error: null });
+            const insertItemsBuilder = createQueryBuilderMock({ error: null });
+            const getPOBuilder = createQueryBuilderMock({ data: mockPOWithItems, error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        insert: mockInsert,
-                        select: () => ({ single: mockSingle }),
-                        delete: () => ({ eq: mockDelete }),
-                        eq: mockEq,
-                    };
-                }
-                if (table === 'purchase_order_items') {
-                    return {
-                        insert: mockInsert,
-                        delete: () => ({ eq: mockDelete }),
-                    };
-                }
-                return { select: mockSelect };
-            });
-
-            // First insert: create PO
-            mockInsert.mockResolvedValueOnce({
-                data: mockCreatedPO,
-                error: null,
-            });
-
-            // Second insert: create items
-            mockInsert.mockResolvedValueOnce({
-                error: null,
-            });
-
-            // getPurchaseOrder call
-            mockEq.mockResolvedValue({
-                data: mockPOWithItems,
-                error: null,
-            });
+            mockSupabase.from
+                .mockReturnValueOnce(insertPOBuilder)
+                .mockReturnValueOnce(insertItemsBuilder)
+                .mockReturnValueOnce(getPOBuilder);
 
             const { createPurchaseOrder } = await import('../purchaseOrderService');
             const result = await createPurchaseOrder(poData);
 
             expect(result).toEqual(mockPOWithItems);
-            expect(mockInsert).toHaveBeenCalledTimes(2);
+            expect(insertPOBuilder.insert).toHaveBeenCalledTimes(1);
+            expect(insertItemsBuilder.insert).toHaveBeenCalledTimes(1);
             expect(result.grand_total).toBe(2000);
         });
 
@@ -194,43 +185,19 @@ describe('purchaseOrderService', () => {
                 error: null,
             });
 
-            const mockEq = vi.fn();
-            const mockInsert = vi.fn();
-            const mockDelete = vi.fn();
+            const insertPOBuilder = createQueryBuilderMock({ data: mockCreatedPO, error: null });
+            const insertItemsBuilder = createQueryBuilderMock({ error: new Error('Failed to insert items') });
+            const rollbackDeleteBuilder = createQueryBuilderMock({ error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        insert: mockInsert,
-                        delete: () => ({ eq: mockDelete }),
-                    };
-                }
-                if (table === 'purchase_order_items') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { eq: mockEq };
-            });
-
-            // First insert: create PO (success)
-            mockInsert.mockResolvedValueOnce({
-                data: mockCreatedPO,
-                error: null,
-            });
-
-            // Second insert: create items (failure)
-            mockInsert.mockResolvedValueOnce({
-                error: { message: 'Failed to insert items' },
-            });
-
-            // Delete for rollback
-            mockDelete.mockResolvedValue({ error: null });
+            mockSupabase.from
+                .mockReturnValueOnce(insertPOBuilder)
+                .mockReturnValueOnce(insertItemsBuilder)
+                .mockReturnValueOnce(rollbackDeleteBuilder);
 
             const { createPurchaseOrder } = await import('../purchaseOrderService');
 
             await expect(createPurchaseOrder(poData)).rejects.toThrow('Failed to insert items');
-            expect(mockDelete).toHaveBeenCalled(); // Verify rollback
+            expect(rollbackDeleteBuilder.delete).toHaveBeenCalled(); // Verify rollback
         });
     });
 
@@ -261,50 +228,22 @@ describe('purchaseOrderService', () => {
                 ],
             };
 
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockReturnValue({ single: mockSingle });
-            mockSingle.mockResolvedValue({ data: mockPO, error: null });
+            const builder = createQueryBuilderMock({ data: mockPO, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getPurchaseOrder } = await import('../purchaseOrderService');
             const result = await getPurchaseOrder(poId);
 
             expect(result).toEqual(mockPO);
-            expect(mockEq).toHaveBeenCalledWith('id', poId);
-            expect(mockEq).toHaveBeenCalledWith('is_deleted', false);
+            expect(builder.eq).toHaveBeenCalledWith('id', poId);
+            expect(builder.eq).toHaveBeenCalledWith('is_deleted', false);
         });
 
         it('returns null when purchase order not found', async () => {
             const poId = 'po-123';
 
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockReturnValue({ single: mockSingle });
-            mockSingle.mockResolvedValue({ data: null, error: { message: 'Not found' } });
+            const builder = createQueryBuilderMock({ data: null, error: { message: 'Not found' } });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getPurchaseOrder } = await import('../purchaseOrderService');
             const result = await getPurchaseOrder(poId);
@@ -372,57 +311,18 @@ describe('purchaseOrderService', () => {
                 ],
             };
 
-            const mockEq = vi.fn();
-            const mockSelect = vi.fn();
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-            const mockDelete = vi.fn();
+            const getExistingPOBuilder = createQueryBuilderMock({ data: existingPO, error: null });
+            const updatePOBuilder = createQueryBuilderMock({ data: mockUpdatedPO, error: null });
+            const deleteItemsBuilder = createQueryBuilderMock({ error: null });
+            const insertItemsBuilder = createQueryBuilderMock({ error: null });
+            const getUpdatedPOBuilder = createQueryBuilderMock({ data: mockPOWithUpdatedItems, error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                        update: () => ({
-                            eq: mockEq,
-                            select: () => ({ single: mockSingle }),
-                        }),
-                        eq: mockEq,
-                    };
-                }
-                if (table === 'purchase_order_items') {
-                    return {
-                        delete: () => ({ eq: mockDelete }),
-                        insert: mockInsert,
-                    };
-                }
-                return { select: mockSelect };
-            });
-
-            // getPurchaseOrder call
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === poId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: existingPO, error: null }) }) };
-                }
-                if (field === 'is_deleted') {
-                    return { single: () => Promise.resolve({ data: existingPO, error: null }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
-
-            // update call
-            mockEq.mockResolvedValue({ data: mockUpdatedPO, error: null });
-            mockSingle.mockResolvedValue({ data: mockUpdatedPO, error: null });
-
-            // delete items
-            mockDelete.mockResolvedValue({ error: null });
-
-            // insert new items
-            mockInsert.mockResolvedValue({ error: null });
-
-            // getPurchaseOrder after update
-            mockEq.mockResolvedValue({ data: mockPOWithUpdatedItems, error: null });
+            mockSupabase.from
+                .mockReturnValueOnce(getExistingPOBuilder)
+                .mockReturnValueOnce(updatePOBuilder)
+                .mockReturnValueOnce(deleteItemsBuilder)
+                .mockReturnValueOnce(insertItemsBuilder)
+                .mockReturnValueOnce(getUpdatedPOBuilder);
 
             const { updatePurchaseOrder } = await import('../purchaseOrderService');
             const result = await updatePurchaseOrder(poId, updates);
@@ -451,28 +351,8 @@ describe('purchaseOrderService', () => {
                 po_no: 'PO-001-UPDATED',
             };
 
-            const mockEq = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === poId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: existingPO, error: null }) }) };
-                }
-                if (field === 'is_deleted') {
-                    return { single: () => Promise.resolve({ data: existingPO, error: null }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
+            const builder = createQueryBuilderMock({ data: existingPO, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { updatePurchaseOrder } = await import('../purchaseOrderService');
 
@@ -485,25 +365,8 @@ describe('purchaseOrderService', () => {
             const poId = 'po-123';
             const updates = { po_no: 'PO-001-UPDATED' };
 
-            const mockEq = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === poId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
+            const builder = createQueryBuilderMock({ data: null, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { updatePurchaseOrder } = await import('../purchaseOrderService');
 
@@ -551,43 +414,14 @@ describe('purchaseOrderService', () => {
                 error: null,
             });
 
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-            const mockSelect = vi.fn();
+            const getExistingPOBuilder = createQueryBuilderMock({ data: existingPO, error: null });
+            const updatePOBuilder = createQueryBuilderMock({ data: mockDeliveredPO, error: null });
+            const getDeliveredPOBuilder = createQueryBuilderMock({ data: mockDeliveredPO, error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                        update: () => ({
-                            eq: mockEq,
-                            select: () => ({ single: mockSingle }),
-                        }),
-                        eq: mockEq,
-                    };
-                }
-                return { select: mockSelect };
-            });
-
-            // getPurchaseOrder call
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === poId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: existingPO, error: null }) }) };
-                }
-                if (field === 'is_deleted') {
-                    return { single: () => Promise.resolve({ data: existingPO, error: null }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
-
-            // update call
-            mockEq.mockResolvedValue({ data: mockDeliveredPO, error: null });
-            mockSingle.mockResolvedValue({ data: mockDeliveredPO, error: null });
-
-            // getPurchaseOrder after update
-            mockEq.mockResolvedValue({ data: mockDeliveredPO, error: null });
+            mockSupabase.from
+                .mockReturnValueOnce(getExistingPOBuilder)
+                .mockReturnValueOnce(updatePOBuilder)
+                .mockReturnValueOnce(getDeliveredPOBuilder);
 
             const { markAsDelivered } = await import('../purchaseOrderService');
             const result = await markAsDelivered(poId);
@@ -611,28 +445,8 @@ describe('purchaseOrderService', () => {
                 purchase_order_items: [],
             };
 
-            const mockEq = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === poId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: existingPO, error: null }) }) };
-                }
-                if (field === 'is_deleted') {
-                    return { single: () => Promise.resolve({ data: existingPO, error: null }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
+            const builder = createQueryBuilderMock({ data: existingPO, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { markAsDelivered } = await import('../purchaseOrderService');
 
@@ -662,28 +476,8 @@ describe('purchaseOrderService', () => {
                 error: { message: 'Not authenticated' },
             });
 
-            const mockEq = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === poId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: existingPO, error: null }) }) };
-                }
-                if (field === 'is_deleted') {
-                    return { single: () => Promise.resolve({ data: existingPO, error: null }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
+            const builder = createQueryBuilderMock({ data: existingPO, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { markAsDelivered } = await import('../purchaseOrderService');
 
@@ -716,21 +510,8 @@ describe('purchaseOrderService', () => {
                 },
             ];
 
-            const mockOrder = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: vi.fn(),
-                            order: mockOrder,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockOrder.mockResolvedValue({ data: mockPOs, error: null });
+            const builder = createQueryBuilderMock({ data: mockPOs, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getAllPurchaseOrders } = await import('../purchaseOrderService');
             const result = await getAllPurchaseOrders();
@@ -753,23 +534,8 @@ describe('purchaseOrderService', () => {
                 },
             ];
 
-            const mockEq = vi.fn();
-            const mockOrder = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                            order: mockOrder,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockReturnValue({ order: mockOrder });
-            mockOrder.mockResolvedValue({ data: mockPOs, error: null });
+            const builder = createQueryBuilderMock({ data: mockPOs, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getAllPurchaseOrders } = await import('../purchaseOrderService');
             const result = await getAllPurchaseOrders({ status: 'delivered' });
@@ -780,21 +546,8 @@ describe('purchaseOrderService', () => {
         });
 
         it('handles empty results', async () => {
-            const mockOrder = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: vi.fn(),
-                            order: mockOrder,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockOrder.mockResolvedValue({ data: null, error: null });
+            const builder = createQueryBuilderMock({ data: null, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getAllPurchaseOrders } = await import('../purchaseOrderService');
             const result = await getAllPurchaseOrders();
@@ -803,21 +556,8 @@ describe('purchaseOrderService', () => {
         });
 
         it('throws error when database query fails', async () => {
-            const mockOrder = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'purchase_orders') {
-                    return {
-                        select: () => ({
-                            eq: vi.fn(),
-                            order: mockOrder,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockOrder.mockResolvedValue({ data: null, error: { message: 'Database error' } });
+            const builder = createQueryBuilderMock({ data: null, error: new Error('Database error') });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getAllPurchaseOrders } = await import('../purchaseOrderService');
 

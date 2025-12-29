@@ -12,6 +12,28 @@ vi.mock('../../lib/supabaseClient', () => ({
     supabase: mockSupabase,
 }));
 
+vi.mock('../inventoryLogService', () => ({
+    createInventoryLogFromStockAdjustment: vi.fn().mockResolvedValue(undefined),
+}));
+
+const createQueryBuilderMock = (result: any) => {
+    const queue = [result];
+    const resolveNext = () => queue.shift() ?? { data: null, error: null };
+
+    const builder: any = {
+        insert: vi.fn(() => builder),
+        update: vi.fn(() => builder),
+        delete: vi.fn(() => builder),
+        select: vi.fn(() => builder),
+        eq: vi.fn(() => builder),
+        order: vi.fn(() => builder),
+        single: vi.fn(() => Promise.resolve(resolveNext())),
+        then: (onFulfilled: any, onRejected: any) => Promise.resolve(resolveNext()).then(onFulfilled, onRejected),
+    };
+
+    return builder;
+};
+
 describe('stockAdjustmentService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -88,52 +110,21 @@ describe('stockAdjustmentService', () => {
                 error: null,
             });
 
-            const mockSelect = vi.fn();
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-            const mockInsert = vi.fn();
-            const mockDelete = vi.fn();
+            const insertAdjustmentBuilder = createQueryBuilderMock({ data: mockCreatedAdjustment, error: null });
+            const insertItemsBuilder = createQueryBuilderMock({ error: null });
+            const getAdjustmentBuilder = createQueryBuilderMock({ data: mockAdjustmentWithItems, error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        insert: mockInsert,
-                        select: () => ({ single: mockSingle }),
-                        delete: () => ({ eq: mockDelete }),
-                        eq: mockEq,
-                    };
-                }
-                if (table === 'stock_adjustment_items') {
-                    return {
-                        insert: mockInsert,
-                        delete: () => ({ eq: mockDelete }),
-                    };
-                }
-                return { select: mockSelect };
-            });
-
-            // First insert: create adjustment
-            mockInsert.mockResolvedValueOnce({
-                data: mockCreatedAdjustment,
-                error: null,
-            });
-
-            // Second insert: create items
-            mockInsert.mockResolvedValueOnce({
-                error: null,
-            });
-
-            // getStockAdjustment call
-            mockEq.mockResolvedValue({
-                data: mockAdjustmentWithItems,
-                error: null,
-            });
+            mockSupabase.from
+                .mockReturnValueOnce(insertAdjustmentBuilder)
+                .mockReturnValueOnce(insertItemsBuilder)
+                .mockReturnValueOnce(getAdjustmentBuilder);
 
             const { createStockAdjustment } = await import('../stockAdjustmentService');
             const result = await createStockAdjustment(adjustmentData);
 
             expect(result).toEqual(mockAdjustmentWithItems);
-            expect(mockInsert).toHaveBeenCalledTimes(2);
+            expect(insertAdjustmentBuilder.insert).toHaveBeenCalledTimes(1);
+            expect(insertItemsBuilder.insert).toHaveBeenCalledTimes(1);
             expect((result as any).stock_adjustment_items[0].difference).toBe(5);
             expect((result as any).stock_adjustment_items[1].difference).toBe(-2);
         });
@@ -193,43 +184,19 @@ describe('stockAdjustmentService', () => {
                 error: null,
             });
 
-            const mockEq = vi.fn();
-            const mockInsert = vi.fn();
-            const mockDelete = vi.fn();
+            const insertAdjustmentBuilder = createQueryBuilderMock({ data: mockCreatedAdjustment, error: null });
+            const insertItemsBuilder = createQueryBuilderMock({ error: new Error('Failed to insert items') });
+            const rollbackDeleteBuilder = createQueryBuilderMock({ error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        insert: mockInsert,
-                        delete: () => ({ eq: mockDelete }),
-                    };
-                }
-                if (table === 'stock_adjustment_items') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return { eq: mockEq };
-            });
-
-            // First insert: create adjustment (success)
-            mockInsert.mockResolvedValueOnce({
-                data: mockCreatedAdjustment,
-                error: null,
-            });
-
-            // Second insert: create items (failure)
-            mockInsert.mockResolvedValueOnce({
-                error: { message: 'Failed to insert items' },
-            });
-
-            // Delete for rollback
-            mockDelete.mockResolvedValue({ error: null });
+            mockSupabase.from
+                .mockReturnValueOnce(insertAdjustmentBuilder)
+                .mockReturnValueOnce(insertItemsBuilder)
+                .mockReturnValueOnce(rollbackDeleteBuilder);
 
             const { createStockAdjustment } = await import('../stockAdjustmentService');
 
             await expect(createStockAdjustment(adjustmentData)).rejects.toThrow('Failed to insert items');
-            expect(mockDelete).toHaveBeenCalled(); // Verify rollback
+            expect(rollbackDeleteBuilder.delete).toHaveBeenCalled(); // Verify rollback
         });
     });
 
@@ -260,50 +227,22 @@ describe('stockAdjustmentService', () => {
                 ],
             };
 
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockReturnValue({ single: mockSingle });
-            mockSingle.mockResolvedValue({ data: mockAdjustment, error: null });
+            const builder = createQueryBuilderMock({ data: mockAdjustment, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getStockAdjustment } = await import('../stockAdjustmentService');
             const result = await getStockAdjustment(adjustmentId);
 
             expect(result).toEqual(mockAdjustment);
-            expect(mockEq).toHaveBeenCalledWith('id', adjustmentId);
-            expect(mockEq).toHaveBeenCalledWith('is_deleted', false);
+            expect(builder.eq).toHaveBeenCalledWith('id', adjustmentId);
+            expect(builder.eq).toHaveBeenCalledWith('is_deleted', false);
         });
 
         it('returns null when stock adjustment not found', async () => {
             const adjustmentId = 'adj-123';
 
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockReturnValue({ single: mockSingle });
-            mockSingle.mockResolvedValue({ data: null, error: { message: 'Not found' } });
+            const builder = createQueryBuilderMock({ data: null, error: { message: 'Not found' } });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getStockAdjustment } = await import('../stockAdjustmentService');
             const result = await getStockAdjustment(adjustmentId);
@@ -351,43 +290,14 @@ describe('stockAdjustmentService', () => {
                 error: null,
             });
 
-            const mockEq = vi.fn();
-            const mockSingle = vi.fn();
-            const mockSelect = vi.fn();
+            const getBeforeFinalizeBuilder = createQueryBuilderMock({ data: existingAdjustment, error: null });
+            const updateFinalizeBuilder = createQueryBuilderMock({ data: mockFinalizedAdjustment, error: null });
+            const getAfterFinalizeBuilder = createQueryBuilderMock({ data: mockFinalizedAdjustment, error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                        update: () => ({
-                            eq: mockEq,
-                            select: () => ({ single: mockSingle }),
-                        }),
-                        eq: mockEq,
-                    };
-                }
-                return { select: mockSelect };
-            });
-
-            // getStockAdjustment call
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === adjustmentId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: existingAdjustment, error: null }) }) };
-                }
-                if (field === 'is_deleted') {
-                    return { single: () => Promise.resolve({ data: existingAdjustment, error: null }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
-
-            // update call
-            mockEq.mockResolvedValue({ data: mockFinalizedAdjustment, error: null });
-            mockSingle.mockResolvedValue({ data: mockFinalizedAdjustment, error: null });
-
-            // getStockAdjustment after update
-            mockEq.mockResolvedValue({ data: mockFinalizedAdjustment, error: null });
+            mockSupabase.from
+                .mockReturnValueOnce(getBeforeFinalizeBuilder)
+                .mockReturnValueOnce(updateFinalizeBuilder)
+                .mockReturnValueOnce(getAfterFinalizeBuilder);
 
             const { finalizeAdjustment } = await import('../stockAdjustmentService');
             const result = await finalizeAdjustment(adjustmentId);
@@ -412,28 +322,9 @@ describe('stockAdjustmentService', () => {
                 stock_adjustment_items: [],
             };
 
-            const mockEq = vi.fn();
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === adjustmentId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: existingAdjustment, error: null }) }) };
-                }
-                if (field === 'is_deleted') {
-                    return { single: () => Promise.resolve({ data: existingAdjustment, error: null }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
+            const builder = createQueryBuilderMock({ data: existingAdjustment, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { finalizeAdjustment } = await import('../stockAdjustmentService');
 
@@ -463,28 +354,8 @@ describe('stockAdjustmentService', () => {
                 error: { message: 'Not authenticated' },
             });
 
-            const mockEq = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockImplementation((field, value) => {
-                if (field === 'id' && value === adjustmentId) {
-                    return { eq: () => ({ single: () => Promise.resolve({ data: existingAdjustment, error: null }) }) };
-                }
-                if (field === 'is_deleted') {
-                    return { single: () => Promise.resolve({ data: existingAdjustment, error: null }) };
-                }
-                return { single: () => Promise.resolve({ data: null, error: null }) };
-            });
+            const builder = createQueryBuilderMock({ data: existingAdjustment, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { finalizeAdjustment } = await import('../stockAdjustmentService');
 
@@ -521,21 +392,8 @@ describe('stockAdjustmentService', () => {
                 },
             ];
 
-            const mockOrder = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: vi.fn(),
-                            order: mockOrder,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockOrder.mockResolvedValue({ data: mockAdjustments, error: null });
+            const builder = createQueryBuilderMock({ data: mockAdjustments, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getAllStockAdjustments } = await import('../stockAdjustmentService');
             const result = await getAllStockAdjustments();
@@ -560,23 +418,8 @@ describe('stockAdjustmentService', () => {
                 },
             ];
 
-            const mockEq = vi.fn();
-            const mockOrder = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: mockEq,
-                            order: mockOrder,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockEq.mockReturnValue({ order: mockOrder });
-            mockOrder.mockResolvedValue({ data: mockAdjustments, error: null });
+            const builder = createQueryBuilderMock({ data: mockAdjustments, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getAllStockAdjustments } = await import('../stockAdjustmentService');
             const result = await getAllStockAdjustments({ warehouseId: 'WH1' });
@@ -587,21 +430,8 @@ describe('stockAdjustmentService', () => {
         });
 
         it('handles empty results', async () => {
-            const mockOrder = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: vi.fn(),
-                            order: mockOrder,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockOrder.mockResolvedValue({ data: null, error: null });
+            const builder = createQueryBuilderMock({ data: null, error: null });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getAllStockAdjustments } = await import('../stockAdjustmentService');
             const result = await getAllStockAdjustments();
@@ -610,21 +440,8 @@ describe('stockAdjustmentService', () => {
         });
 
         it('throws error when database query fails', async () => {
-            const mockOrder = vi.fn();
-
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        select: () => ({
-                            eq: vi.fn(),
-                            order: mockOrder,
-                        }),
-                    };
-                }
-                return {};
-            });
-
-            mockOrder.mockResolvedValue({ data: null, error: { message: 'Database error' } });
+            const builder = createQueryBuilderMock({ data: null, error: new Error('Database error') });
+            mockSupabase.from.mockReturnValue(builder);
 
             const { getAllStockAdjustments } = await import('../stockAdjustmentService');
 
@@ -683,39 +500,14 @@ describe('stockAdjustmentService', () => {
                 error: null,
             });
 
-            const mockEq = vi.fn();
-            const mockInsert = vi.fn();
-            const mockDelete = vi.fn();
+            const insertAdjustmentBuilder = createQueryBuilderMock({ data: mockCreatedAdjustment, error: null });
+            const insertItemsBuilder = createQueryBuilderMock({ error: null });
+            const getAdjustmentBuilder = createQueryBuilderMock({ data: mockAdjustmentWithItems, error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        insert: mockInsert,
-                        delete: () => ({ eq: mockDelete }),
-                        eq: mockEq,
-                    };
-                }
-                if (table === 'stock_adjustment_items') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return {};
-            });
-
-            mockInsert.mockResolvedValueOnce({
-                data: mockCreatedAdjustment,
-                error: null,
-            });
-
-            mockInsert.mockResolvedValueOnce({
-                error: null,
-            });
-
-            mockEq.mockResolvedValue({
-                data: mockAdjustmentWithItems,
-                error: null,
-            });
+            mockSupabase.from
+                .mockReturnValueOnce(insertAdjustmentBuilder)
+                .mockReturnValueOnce(insertItemsBuilder)
+                .mockReturnValueOnce(getAdjustmentBuilder);
 
             const { createStockAdjustment } = await import('../stockAdjustmentService');
             const result = await createStockAdjustment(adjustmentData);
@@ -774,39 +566,14 @@ describe('stockAdjustmentService', () => {
                 error: null,
             });
 
-            const mockEq = vi.fn();
-            const mockInsert = vi.fn();
-            const mockDelete = vi.fn();
+            const insertAdjustmentBuilder = createQueryBuilderMock({ data: mockCreatedAdjustment, error: null });
+            const insertItemsBuilder = createQueryBuilderMock({ error: null });
+            const getAdjustmentBuilder = createQueryBuilderMock({ data: mockAdjustmentWithItems, error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        insert: mockInsert,
-                        delete: () => ({ eq: mockDelete }),
-                        eq: mockEq,
-                    };
-                }
-                if (table === 'stock_adjustment_items') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return {};
-            });
-
-            mockInsert.mockResolvedValueOnce({
-                data: mockCreatedAdjustment,
-                error: null,
-            });
-
-            mockInsert.mockResolvedValueOnce({
-                error: null,
-            });
-
-            mockEq.mockResolvedValue({
-                data: mockAdjustmentWithItems,
-                error: null,
-            });
+            mockSupabase.from
+                .mockReturnValueOnce(insertAdjustmentBuilder)
+                .mockReturnValueOnce(insertItemsBuilder)
+                .mockReturnValueOnce(getAdjustmentBuilder);
 
             const { createStockAdjustment } = await import('../stockAdjustmentService');
             const result = await createStockAdjustment(adjustmentData);
@@ -865,39 +632,14 @@ describe('stockAdjustmentService', () => {
                 error: null,
             });
 
-            const mockEq = vi.fn();
-            const mockInsert = vi.fn();
-            const mockDelete = vi.fn();
+            const insertAdjustmentBuilder = createQueryBuilderMock({ data: mockCreatedAdjustment, error: null });
+            const insertItemsBuilder = createQueryBuilderMock({ error: null });
+            const getAdjustmentBuilder = createQueryBuilderMock({ data: mockAdjustmentWithItems, error: null });
 
-            mockSupabase.from.mockImplementation((table) => {
-                if (table === 'stock_adjustments') {
-                    return {
-                        insert: mockInsert,
-                        delete: () => ({ eq: mockDelete }),
-                        eq: mockEq,
-                    };
-                }
-                if (table === 'stock_adjustment_items') {
-                    return {
-                        insert: mockInsert,
-                    };
-                }
-                return {};
-            });
-
-            mockInsert.mockResolvedValueOnce({
-                data: mockCreatedAdjustment,
-                error: null,
-            });
-
-            mockInsert.mockResolvedValueOnce({
-                error: null,
-            });
-
-            mockEq.mockResolvedValue({
-                data: mockAdjustmentWithItems,
-                error: null,
-            });
+            mockSupabase.from
+                .mockReturnValueOnce(insertAdjustmentBuilder)
+                .mockReturnValueOnce(insertItemsBuilder)
+                .mockReturnValueOnce(getAdjustmentBuilder);
 
             const { createStockAdjustment } = await import('../stockAdjustmentService');
             const result = await createStockAdjustment(adjustmentData);
