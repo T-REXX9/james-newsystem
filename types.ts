@@ -78,6 +78,7 @@ export interface UserProfile {
   avatar_url?: string;
   role?: string;
   access_rights?: string[]; // List of module IDs allowed
+  team?: string;
   birthday?: string;
   mobile?: string;
   monthly_quota?: number;
@@ -344,6 +345,11 @@ export interface PipelineDeal {
   currency: string;
   stageId: string;
   ownerName?: string;
+  ownerId?: string;
+  team?: string;
+  customerType?: 'VIP1' | 'VIP2' | 'Regular';
+  createdAt?: string;
+  updatedAt?: string;
   daysInStage?: number;
   isOverdue?: boolean;
   isWarning?: boolean; // For pink background
