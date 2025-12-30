@@ -167,16 +167,6 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
   const shortcuts = useMemo(
     () => [
       {
-        key: 'k',
-        meta: true,
-        handler: () => {
-          const input = document.querySelector<HTMLInputElement>('[data-topnav-search]');
-          input?.focus();
-        },
-        description: 'Search navigation',
-        allowInInput: true,
-      },
-      {
         key: '?',
         handler: () => setShowHelp(true),
         description: 'Show keyboard shortcuts',
@@ -200,7 +190,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
 
 
   return (
-    <nav className="flex items-center" aria-label="Topbar Navigation">
+    <nav className="flex items-center min-w-0 flex-1" aria-label="Topbar Navigation">
       <div className="md:hidden mr-3">
         <button
           onClick={() => setIsMobileMenuOpen((prev) => !prev)}
@@ -211,7 +201,7 @@ const TopbarNavigation: React.FC<TopbarNavigationProps> = ({ activeTab, onNaviga
         </button>
       </div>
 
-      <ul className="hidden md:flex items-center space-x-4 text-sm font-semibold">
+      <ul className="hidden md:flex items-center space-x-4 text-[12px] lg:text-sm font-semibold max-w-full pr-2">
         {filteredMenus.map((menu, index) => {
           const isActive = isMenuActive(menu);
           const isOpen = openMenuId === menu.id;

@@ -263,7 +263,7 @@ const App: React.FC = () => {
       }
       case 'pipelines':
       case 'sales-pipeline-board':
-        return <PipelineView />;
+        return <PipelineView currentUser={userProfile} />;
       case 'staff':
       case 'maintenance-profile-staff':
         return <StaffView />;
