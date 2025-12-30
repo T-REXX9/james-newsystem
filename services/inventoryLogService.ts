@@ -1,11 +1,14 @@
 import { supabase } from '../lib/supabaseClient';
 import type { InventoryLog, InventoryLogFilters, InventoryLogWithProduct, PurchaseOrder, StockAdjustment, Invoice, OrderSlip } from '../types';
 
+// Helper type for Supabase query results when table is not in generated types
+type SupabaseAnyTable = ReturnType<typeof supabase.from>;
+
 /**
  * Fetch inventory logs with optional filters
  */
 export async function fetchInventoryLogs(filters?: InventoryLogFilters): Promise<InventoryLog[]> {
-  let query = supabase
+  let query = (supabase as any)
     .from('inventory_logs')
     .select(`
       *,
@@ -53,7 +56,7 @@ export async function fetchInventoryLogs(filters?: InventoryLogFilters): Promise
     throw error;
   }
 
-  return data || [];
+  return (data as InventoryLog[]) || [];
 }
 
 /**
@@ -69,7 +72,7 @@ export async function createInventoryLog(
     throw new Error('User not authenticated');
   }
 
-  const { data: newLog, error } = await supabase
+  const { data: newLog, error } = await (supabase as any)
     .from('inventory_logs')
     .insert({
       ...data,
@@ -83,7 +86,7 @@ export async function createInventoryLog(
     throw error;
   }
 
-  return newLog;
+  return newLog as InventoryLog;
 }
 
 /**
@@ -93,7 +96,7 @@ export async function updateInventoryLog(
   id: string,
   updates: Partial<InventoryLog>
 ): Promise<InventoryLog | null> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('inventory_logs')
     .update({
       ...updates,
@@ -108,14 +111,14 @@ export async function updateInventoryLog(
     throw error;
   }
 
-  return data;
+  return data as InventoryLog;
 }
 
 /**
  * Soft delete an inventory log (set is_deleted = true)
  */
 export async function deleteInventoryLog(id: string): Promise<boolean> {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from('inventory_logs')
     .update({
       is_deleted: true,
@@ -138,7 +141,7 @@ export async function getInventoryLogsByItem(
   itemId: string,
   warehouseId?: string
 ): Promise<InventoryLog[]> {
-  let query = supabase
+  let query = (supabase as any)
     .from('inventory_logs')
     .select(`
       *,
@@ -171,7 +174,7 @@ export async function getInventoryLogsByItem(
     throw error;
   }
 
-  return data || [];
+  return (data as InventoryLog[]) || [];
 }
 
 /**
@@ -179,7 +182,7 @@ export async function getInventoryLogsByItem(
  */
 export async function createInventoryLogFromPO(poId: string, userId: string): Promise<InventoryLog[]> {
   // Fetch PO and items
-  const { data: po, error: poError } = await supabase
+  const { data: po, error: poError } = await (supabase as any)
     .from('purchase_orders')
     .select(`
       *,
@@ -262,7 +265,8 @@ export async function createInventoryLogFromInvoice(invoiceId: string, userId: s
 
   // Create inventory log for each item
   const logs: InventoryLog[] = [];
-  for (const item of invoice.invoice_items || []) {
+  const invoiceItems = (invoice as any).invoice_items || [];
+  for (const item of invoiceItems) {
     const log = await createInventoryLog({
       item_id: item.item_id,
       date: invoice.sales_date,
@@ -351,7 +355,7 @@ export async function createInventoryLogFromOrderSlip(slipOrId: string | OrderSl
  */
 export async function createInventoryLogFromStockAdjustment(adjustmentId: string, userId: string): Promise<InventoryLog[]> {
   // Fetch adjustment and items
-  const { data: adjustment, error: adjustmentError } = await supabase
+  const { data: adjustment, error: adjustmentError } = await (supabase as any)
     .from('stock_adjustments')
     .select(`
       *,
@@ -446,7 +450,7 @@ export async function createInventoryLogFromReturn(returnId: string, userId: str
     if (productData) {
       const log = await createInventoryLog({
         item_id: productData.id,
-        date: returnRecord.returnDate,
+        date: returnRecord.return_date, // Fixed: using correct column name
         transaction_type: 'Credit Memo',
         reference_no: `RET-${returnId}`,
         partner: customerName,
