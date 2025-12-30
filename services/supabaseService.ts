@@ -4,7 +4,13 @@
 
 import { supabase } from '../lib/supabaseClient';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STAFF_ROLES } from '../constants';
-import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput } from '../types';
+import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer } from '../types';
+
+// Helper to generate restore token and expiry for recycle bin items
+const generateRecycleBinMeta = () => ({
+  restore_token: crypto.randomUUID(),
+  expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+});
 
 // With our local mock DB, we can just query directly.
 // The Mock DB handles the seeding from constants, so we trust it returns data.
@@ -16,7 +22,7 @@ export const fetchContacts = async (): Promise<Contact[]> => {
       .select('*')
       .eq('is_deleted', false);
     if (error) throw error;
-    return (data as Contact[]) || [];
+    return (data as unknown as Contact[]) || [];
   } catch (err) {
     console.error("Error fetching contacts:", err);
     return [];
@@ -25,7 +31,7 @@ export const fetchContacts = async (): Promise<Contact[]> => {
 
 export const createContact = async (contact: Omit<Contact, 'id'>): Promise<void> => {
   try {
-    const { error } = await supabase.from('contacts').insert(contact);
+    const { error } = await supabase.from('contacts').insert(contact as any);
     if (error) throw error;
   } catch (err) {
     console.error("Error creating contact:", err);
@@ -35,7 +41,7 @@ export const createContact = async (contact: Omit<Contact, 'id'>): Promise<void>
 
 export const updateContact = async (id: string, updates: Partial<Contact>): Promise<void> => {
   try {
-    const { error } = await supabase.from('contacts').update(updates).eq('id', id);
+    const { error } = await supabase.from('contacts').update(updates as any).eq('id', id);
     if (error) throw error;
   } catch (err) {
     console.error("Error updating contact:", err);
@@ -140,6 +146,7 @@ export const deleteProduct = async (id: string): Promise<void> => {
         original_data: product,
         deleted_by: user.id,
         deleted_at: new Date().toISOString(),
+        ...generateRecycleBinMeta(),
       });
 
     if (recycleError) throw recycleError;
@@ -497,6 +504,7 @@ export const deleteTask = async (id: string): Promise<void> => {
         original_data: task,
         deleted_by: user.id,
         deleted_at: new Date().toISOString(),
+        ...generateRecycleBinMeta(),
       });
 
     if (recycleError) throw recycleError;
@@ -567,8 +575,8 @@ export const restoreTask = async (id: string): Promise<void> => {
 
 export const fetchTeamMessages = async (): Promise<TeamMessage[]> => {
   try {
-    const { data, error } = await supabase
-      .from('team_messages')
+    const { data, error } = await (supabase
+      .from('team_messages') as any)
       .select('*')
       .eq('is_deleted', false)
       .order('created_at', { ascending: true });
@@ -625,18 +633,18 @@ export const deleteTeamMessage = async (id: string): Promise<void> => {
         original_data: teamMessage,
         deleted_by: user.id,
         deleted_at: new Date().toISOString(),
+        ...generateRecycleBinMeta(),
       });
 
     if (recycleError) throw recycleError;
 
-    // Soft delete the team message
+    // Soft delete the team message (using type assertion as table may not have soft delete columns)
     const { error } = await supabase
       .from('team_messages')
       .update({
         is_deleted: true,
         deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      } as any)
       .eq('id', id);
 
     if (error) throw error;
@@ -674,14 +682,13 @@ export const restoreTeamMessage = async (id: string): Promise<void> => {
       .eq('item_id', id)
       .eq('item_type', RecycleBinItemType.TEAM_MESSAGE);
 
-    // Restore the team message
+    // Restore the team message (using type assertion as table may not have soft delete columns)
     const { error } = await supabase
       .from('team_messages')
       .update({
         is_deleted: false,
         deleted_at: null,
-        updated_at: new Date().toISOString(),
-      })
+      } as any)
       .eq('id', id);
 
     if (error) throw error;
@@ -1437,10 +1444,10 @@ export const fetchMonthlySalesPerformanceBySalesperson = async (year: number, mo
       for (const purchase of purchases) {
         const purchaseDate = new Date(purchase.purchase_date);
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
-          monthSales += parseFloat(purchase.total_amount) || 0;
+          monthSales += (purchase.total_amount as number) || 0;
         }
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === (month === 1 ? 12 : month - 1)) {
-          prevMonthSales += parseFloat(purchase.total_amount) || 0;
+          prevMonthSales += (purchase.total_amount as number) || 0;
         }
       }
 
@@ -1498,10 +1505,10 @@ export const fetchMonthlySalesPerformanceByCity = async (year: number, month: nu
       for (const purchase of purchases) {
         const purchaseDate = new Date(purchase.purchase_date);
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
-          monthSales += parseFloat(purchase.total_amount) || 0;
+          monthSales += (purchase.total_amount as number) || 0;
         }
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === (month === 1 ? 12 : month - 1)) {
-          prevMonthSales += parseFloat(purchase.total_amount) || 0;
+          prevMonthSales += (purchase.total_amount as number) || 0;
         }
       }
 
@@ -1558,10 +1565,10 @@ export const fetchSalesPerformanceByCustomerStatus = async (year: number, month:
       for (const purchase of purchases) {
         const purchaseDate = new Date(purchase.purchase_date);
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === month) {
-          monthSales += parseFloat(purchase.total_amount) || 0;
+          monthSales += (purchase.total_amount as number) || 0;
         }
         if (purchaseDate.getFullYear() === year && purchaseDate.getMonth() + 1 === (month === 1 ? 12 : month - 1)) {
-          prevMonthSales += parseFloat(purchase.total_amount) || 0;
+          prevMonthSales += (purchase.total_amount as number) || 0;
         }
       }
 
@@ -1785,6 +1792,7 @@ export const deleteNotification = async (notificationId: string): Promise<boolea
         original_data: notification,
         deleted_by: user.id,
         deleted_at: new Date().toISOString(),
+        ...generateRecycleBinMeta(),
       });
 
     if (recycleError) throw recycleError;
@@ -2158,6 +2166,7 @@ export const deleteContact = async (id: string): Promise<void> => {
         original_data: contact,
         deleted_by: user.id,
         deleted_at: new Date().toISOString(),
+        ...generateRecycleBinMeta(),
       });
 
     if (recycleError) throw recycleError;
