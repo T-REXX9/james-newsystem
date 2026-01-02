@@ -1318,3 +1318,85 @@ export enum StockAdjustmentType {
   DAMAGE = 'damage',
   CORRECTION = 'correction'
 }
+
+// Sales Report Page Types
+export type SalesReportSourceType = 'sales_report' | 'sales_order' | 'invoice';
+export type SalesReportViewType = 'company' | 'agent';
+
+export interface SalesReportFilters {
+  dateFrom: string;
+  dateTo: string;
+  agentId?: string;
+  status?: string[];
+  sourceType?: SalesReportSourceType[];
+  viewType: SalesReportViewType;
+  customerId?: string;
+}
+
+export interface SalesReportProductItem {
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+export interface SalesReportTransaction {
+  id: string;
+  source_type: SalesReportSourceType;
+  contact_id: string;
+  customer_name: string;
+  customer_company?: string;
+  transaction_date: string;
+  total_amount: number;
+  currency: string;
+  agent_name: string;
+  agent_id?: string;
+  status: string;
+  products: SalesReportProductItem[];
+  notes?: string;
+  created_at: string;
+}
+
+export interface SalesReportKPI {
+  totalRevenue: number;
+  transactionCount: number;
+  avgTransactionValue: number;
+  uniqueCustomers: number;
+  prevTotalRevenue: number;
+  prevTransactionCount: number;
+  prevAvgTransactionValue: number;
+  prevUniqueCustomers: number;
+  revenueGrowthPct: number;
+  transactionGrowthPct: number;
+}
+
+export interface SalesReportDailySummary {
+  date: string;
+  transactionCount: number;
+  totalRevenue: number;
+  avgTransactionValue: number;
+  uniqueCustomers: number;
+}
+
+export interface SalesReportAgentSummary {
+  agentName: string;
+  agentId?: string;
+  transactionCount: number;
+  totalRevenue: number;
+  avgTransactionValue: number;
+  uniqueCustomers: number;
+}
+
+export interface SalesReportProductSummary {
+  productName: string;
+  totalQuantity: number;
+  totalRevenue: number;
+  transactionCount: number;
+}
+
+export interface SalesReportData {
+  transactions: SalesReportTransaction[];
+  kpis: SalesReportKPI;
+  dailySummary: SalesReportDailySummary[];
+  agentSummary: SalesReportAgentSummary[];
+  productSummary: SalesReportProductSummary[];
+}
