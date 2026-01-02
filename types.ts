@@ -357,6 +357,8 @@ export interface PipelineDeal {
   entryEvidence?: string;
   exitEvidence?: string;
   riskFlag?: string;
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 export interface PipelineColumn {
@@ -1214,7 +1216,8 @@ export enum RecycleBinItemType {
   PRODUCT = 'product',
   TEAM_MESSAGE = 'team_message',
   COMMENT = 'comment',
-  NOTIFICATION = 'notification'
+  NOTIFICATION = 'notification',
+  DEAL = 'deal'
 }
 
 export interface RecycleBinItem {

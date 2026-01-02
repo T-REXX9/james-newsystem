@@ -66,10 +66,158 @@ export const fetchDeals = async (): Promise<PipelineDeal[]> => {
   try {
     const { data, error } = await supabase.from('deals').select('*');
     if (error) throw error;
-    return (data as PipelineDeal[]) || [];
+    const deals = (data as PipelineDeal[]) || [];
+    return deals.filter(d => !d.is_deleted);
   } catch (err) {
     console.error("Error fetching deals:", err);
     return [];
+  }
+};
+
+export const createDeal = async (
+  deal: Omit<PipelineDeal, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<PipelineDeal> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const now = new Date().toISOString();
+    const payload = {
+      ...deal,
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      daysInStage: 0,
+      is_deleted: false,
+      created_by: user?.id || null,
+    };
+    const { data, error } = await supabase
+      .from('deals')
+      .insert(payload)
+      .select()
+      .single();
+    if (error || !data) throw error || new Error('Failed to create deal');
+    return data as PipelineDeal;
+  } catch (err) {
+    console.error('Error creating deal:', err);
+    throw err;
+  }
+};
+
+export const updateDeal = async (
+  id: string,
+  updates: Partial<PipelineDeal>
+): Promise<PipelineDeal | null> => {
+  try {
+    const payload: Record<string, unknown> = { ...updates, updatedAt: new Date().toISOString() };
+    delete payload.id;
+    delete payload.createdAt;
+    const { data, error } = await supabase
+      .from('deals')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as PipelineDeal;
+  } catch (err) {
+    console.error('Error updating deal:', err);
+    return null;
+  }
+};
+
+export const moveDealToStage = async (
+  id: string,
+  stageId: string
+): Promise<PipelineDeal | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('deals')
+      .update({ stageId, daysInStage: 0, updatedAt: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as PipelineDeal;
+  } catch (err) {
+    console.error('Error moving deal to stage:', err);
+    return null;
+  }
+};
+
+export const deleteDeal = async (id: string): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { data: deal } = await supabase
+      .from('deals')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (!deal) throw new Error('Deal not found');
+
+    const { error: recycleError } = await supabase.from('recycle_bin_items').insert({
+      item_type: RecycleBinItemType.DEAL,
+      item_id: id,
+      original_data: deal,
+      deleted_by: user.id,
+      deleted_at: new Date().toISOString(),
+      ...generateRecycleBinMeta(),
+    });
+
+    if (recycleError) throw recycleError;
+
+    const { error } = await supabase
+      .from('deals')
+      .update({ is_deleted: true, deleted_at: new Date().toISOString(), updatedAt: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error deleting deal:', err);
+    return false;
+  }
+};
+
+export const restoreDeal = async (id: string): Promise<PipelineDeal | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    await supabase
+      .from('recycle_bin_items')
+      .update({ is_restored: true, restored_at: new Date().toISOString(), restored_by: user.id })
+      .eq('item_id', id)
+      .eq('item_type', RecycleBinItemType.DEAL);
+
+    const { data, error } = await supabase
+      .from('deals')
+      .update({ is_deleted: false, deleted_at: null, updatedAt: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as PipelineDeal;
+  } catch (err) {
+    console.error('Error restoring deal:', err);
+    return null;
+  }
+};
+
+export const bulkUpdateDeals = async (
+  ids: string[],
+  updates: Partial<PipelineDeal>
+): Promise<boolean> => {
+  try {
+    for (const id of ids) {
+      await updateDeal(id, updates);
+    }
+    return true;
+  } catch (err) {
+    console.error('Error bulk updating deals:', err);
+    return false;
   }
 };
 
