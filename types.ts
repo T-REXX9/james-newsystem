@@ -1318,3 +1318,44 @@ export enum StockAdjustmentType {
   DAMAGE = 'damage',
   CORRECTION = 'correction'
 }
+
+export interface TransferStockItem {
+  id: string;
+  transfer_id: string;
+  item_id: string;
+  from_warehouse_id: string;
+  to_warehouse_id: string;
+  transfer_qty: number;
+  notes?: string;
+  created_at: string;
+}
+
+export interface TransferStock {
+  id: string;
+  transfer_no: string;
+  transfer_date: string;
+  status: 'pending' | 'submitted' | 'approved' | 'deleted';
+  notes?: string;
+  processed_by?: string;
+  approved_by?: string;
+  approved_at?: string;
+  created_at: string;
+  updated_at: string;
+  is_deleted: boolean;
+  deleted_at?: string;
+  items?: TransferStockItem[];
+}
+
+export interface TransferStockDTO {
+  transfer_no: string;
+  transfer_date: string;
+  notes?: string;
+  items: Omit<TransferStockItem, 'id' | 'transfer_id' | 'created_at'>[];
+}
+
+export enum TransferStockStatus {
+  PENDING = 'pending',
+  SUBMITTED = 'submitted',
+  APPROVED = 'approved',
+  DELETED = 'deleted'
+}
