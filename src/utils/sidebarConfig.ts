@@ -187,23 +187,6 @@ const SALES_CATEGORY: MenuCategory = {
   isExpandable: true,
   children: [
     {
-      id: 'sales-pipeline',
-      label: 'Pipeline',
-      icon: Columns,
-      level: 2,
-      parentId: 'sales',
-      isExpandable: true,
-      children: [
-        createLeaf(
-          'sales-pipeline-board',
-          'Pipelines',
-          'sales-pipeline',
-          'sales-pipeline-board',
-          Columns,
-        ),
-      ],
-    } satisfies MenuSubCategory,
-    {
       id: 'sales-database',
       label: 'Database',
       icon: Users,

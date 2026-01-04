@@ -366,3 +366,135 @@ export const getInquiryReportSummary = async (dateFrom: string, dateTo: string, 
     return [];
   }
 };
+
+/**
+ * Get sales development report data - Inquiry details grouped by category
+ * Category: 'not_purchase' (On Stock but no SO) or 'no_stock' (Out of Stock)
+ */
+export const getSalesDevelopmentReportData = async (
+  dateFrom: string,
+  dateTo: string,
+  category: 'not_purchase' | 'no_stock'
+): Promise<any[]> => {
+  try {
+    let query = supabase
+      .from('sales_inquiry_items')
+      .select(`
+        id,
+        inquiry_id,
+        qty,
+        part_no,
+        item_code,
+        description,
+        unit_price,
+        amount,
+        remark,
+        sales_inquiries (
+          inquiry_no,
+          sales_date,
+          sales_person,
+          grand_total,
+          contact_id,
+          contacts (
+            company
+          )
+        )
+      `)
+      .eq('sales_inquiries.is_deleted', false)
+      .gte('sales_inquiries.sales_date', dateFrom)
+      .lte('sales_inquiries.sales_date', dateTo);
+
+    if (category === 'not_purchase') {
+      query = query.eq('remark', 'On Stock');
+    } else if (category === 'no_stock') {
+      query = query.eq('remark', 'OutStock');
+    }
+
+    const { data: items, error } = await query.order('sales_inquiries.sales_date', { ascending: false });
+
+    if (error || !items) return [];
+
+    return items.map(item => ({
+      id: item.id,
+      inquiry_id: item.inquiry_id,
+      inquiry_no: (item.sales_inquiries as any)?.inquiry_no,
+      customer_company: (item.sales_inquiries as any)?.contacts?.company || 'N/A',
+      sales_person: (item.sales_inquiries as any)?.sales_person,
+      sales_date: (item.sales_inquiries as any)?.sales_date,
+      part_no: item.part_no,
+      item_code: item.item_code,
+      description: item.description,
+      qty: item.qty,
+      unit_price: item.unit_price,
+      amount: item.amount,
+      remark: item.remark,
+    }));
+  } catch (err) {
+    console.error('Error fetching sales development report data:', err);
+    return [];
+  }
+};
+
+/**
+ * Get demand summary - aggregated by part number
+ */
+export const getSalesDevelopmentDemandSummary = async (
+  dateFrom: string,
+  dateTo: string,
+  category: 'not_purchase' | 'no_stock'
+): Promise<any[]> => {
+  try {
+    let query = supabase
+      .from('sales_inquiry_items')
+      .select(`
+        part_no,
+        item_code,
+        description,
+        qty,
+        unit_price
+      `)
+      .eq('sales_inquiries.is_deleted', false)
+      .gte('sales_inquiries.sales_date', dateFrom)
+      .lte('sales_inquiries.sales_date', dateTo);
+
+    if (category === 'not_purchase') {
+      query = query.eq('remark', 'On Stock');
+    } else if (category === 'no_stock') {
+      query = query.eq('remark', 'OutStock');
+    }
+
+    const { data: items, error } = await query;
+
+    if (error || !items) return [];
+
+    const grouped = new Map<string, any>();
+
+    items.forEach(item => {
+      const key = item.part_no;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          part_no: item.part_no,
+          item_code: item.item_code,
+          description: item.description,
+          total_quantity: 0,
+          customer_count: 0,
+          customers: new Set<string>(),
+          average_price: item.unit_price,
+        });
+      }
+
+      const summary = grouped.get(key);
+      summary.total_quantity += item.qty || 0;
+      summary.customers.add(item.part_no);
+    });
+
+    return Array.from(grouped.values()).map(item => ({
+      ...item,
+      customer_count: item.customers.size,
+      customers: undefined,
+    }));
+  } catch (err) {
+    console.error('Error fetching demand summary:', err);
+    return [];
+  }
+};
