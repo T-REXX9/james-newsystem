@@ -23,6 +23,7 @@ import SalesOrderView from './components/SalesOrderView';
 import OrderSlipView from './components/OrderSlipView';
 import InvoiceView from './components/InvoiceView';
 import InquiryReportFilter from './components/InquiryReportFilter';
+import SalesDevelopmentReport from './components/SalesDevelopmentReport';
 import StockMovementView from './components/StockMovementView';
 
 import AccessControlSettings from './components/AccessControlSettings';
@@ -371,7 +372,11 @@ const App: React.FC = () => {
       case 'sales-reports-sales-report':
         return renderComingSoon('Sales Report');
       case 'sales-reports-sales-development-report':
-        return renderComingSoon('Sales Development Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <SalesDevelopmentReport currentUser={userProfile} />
+          </div>
+        );
       case 'accounting-reports-accounting-overview':
         return (
           <div className="h-full overflow-y-auto">

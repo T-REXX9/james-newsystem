@@ -8,7 +8,6 @@ import {
   Settings,
   Users,
   MessageSquare,
-  GitBranch,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -343,12 +342,6 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             label: 'Customer Group',
             route: 'maintenance-customer-customer-group',
             icon: Users,
-          },
-          {
-            id: 'maintenance-customer-pipeline',
-            label: 'Pipeline',
-            route: 'maintenance-customer-pipeline',
-            icon: GitBranch,
           },
         ],
       },
