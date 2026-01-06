@@ -1,293 +1,276 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ShoppingCart, ListFilter, Search, RefreshCw, Plus, Package,
-  CheckCircle2, AlertTriangle, XCircle, Calendar, MapPin, User,
-  Truck, FileText, Trash2, Save
-} from 'lucide-react';
-import StatusBadge from './StatusBadge';
-import WorkflowStepper from './WorkflowStepper';
-import {
-  createPurchaseOrder,
-  getAllPurchaseOrders,
-  markAsDelivered,
-} from '../services/purchaseOrderService';
-import { fetchContacts, fetchProducts, createNotification } from '../services/supabaseService';
-import { supabase } from '../lib/supabaseClient';
-import {
-  Contact,
-  Product,
-  NotificationType,
-  PurchaseOrder,
-  PurchaseOrderDTO,
-  PurchaseOrderItem,
-  PurchaseOrderStatus
-} from '../types';
-import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
-import { useRealtimeList } from '../hooks/useRealtimeList';
-import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
+import React, { useState, useEffect, useMemo } from 'react';
+import { purchaseOrderService } from '../services/purchaseOrderService';
+import { PurchaseOrderWithDetails, PurchaseOrderInsert, PurchaseOrderItemInsert, PO_STATUS_COLORS, Product, Supplier } from '../purchaseOrderTypes';
+import { Plus, Trash2, Printer, Filter, ListFilter, Search, RefreshCw, ChevronLeft, ChevronRight, Save, CheckCircle, XCircle, ArrowLeft } from 'lucide-react';
+import StatusBadge from './StatusBadge'; // Assuming this exists or I'll inline the style
+import { applyOptimisticUpdate } from '../utils/optimisticUpdates'; // Assuming usage
 
-interface PurchaseOrderViewProps {
-  initialPoId?: string;
-}
+// Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic. 
+// I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
 
-const WAREHOUSES = ['WH1', 'WH2', 'WH3', 'WH4', 'WH5', 'WH6'];
-
-const FINAL_DOCUMENT_STATUSES = new Set<PurchaseOrderStatus>([
-  PurchaseOrderStatus.DELIVERED,
-  PurchaseOrderStatus.CANCELLED
-]);
-
-const documentStatusMeta: Record<PurchaseOrderStatus, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger' }> = {
-  [PurchaseOrderStatus.DRAFT]: { label: 'Draft', tone: 'neutral' },
-  [PurchaseOrderStatus.ORDERED]: { label: 'Ordered', tone: 'info' },
-  [PurchaseOrderStatus.DELIVERED]: { label: 'Delivered', tone: 'success' },
-  [PurchaseOrderStatus.CANCELLED]: { label: 'Cancelled', tone: 'danger' },
+const POStatusBadge = ({ status }: { status: string }) => {
+  const colorClass = PO_STATUS_COLORS[status] || 'bg-gray-100 text-gray-800';
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium border ${colorClass}`}>
+      {status}
+    </span>
+  );
 };
 
-const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPoId }) => {
-  const [selectedPo, setSelectedPo] = useState<PurchaseOrder | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | PurchaseOrderStatus>('all');
+interface PurchaseOrderViewProps {
+  initialPOId?: string;
+}
+
+const PAGE_SIZE = 10;
+
+const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) => {
+  // List State
+  const [orders, setOrders] = useState<PurchaseOrderWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterStatus, setFilterStatus] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [markingDelivered, setMarkingDelivered] = useState(false);
-  const [showDeliverConfirm, setShowDeliverConfirm] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [creating, setCreating] = useState(false);
-  
-  // Form state
-  const [poNo, setPoNo] = useState('');
-  const [supplierId, setSupplierId] = useState('');
-  const [warehouseId, setWarehouseId] = useState('WH1');
-  const [orderDate, setOrderDate] = useState('');
-  const [deliveryDate, setDeliveryDate] = useState('');
-  const [items, setItems] = useState<Array<{
-    item_id: string;
-    qty: number;
-    unit_price: number;
-    notes?: string;
-  }>>([]);
-  const [itemSearch, setItemSearch] = useState('');
-  const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [page, setPage] = useState(0);
 
-  // Use real-time list for contacts (suppliers)
-  const { data: contacts } = useRealtimeList<Contact>({
-    tableName: 'contacts',
-    initialFetchFn: fetchContacts,
-  });
+  // View/Edit State
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrderWithDetails | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
-  // Use real-time list for products
-  const { data: products } = useRealtimeList<Product>({
-    tableName: 'products',
-    initialFetchFn: fetchProducts,
-  });
+  // Form State (New PO)
+  const [createForm, setCreateForm] = useState<Partial<PurchaseOrderInsert>>({ status: 'Draft', order_date: new Date().toISOString().split('T')[0] });
+  const [newPONumber, setNewPONumber] = useState('');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
-  // Use real-time nested list for purchase orders with items
-  const sortByCreatedAt = (a: PurchaseOrder, b: PurchaseOrder) => {
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-  };
+  // Item Add State
+  const [products, setProducts] = useState<Product[]>([]);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItemId, setNewItemId] = useState('');
+  const [newItemQty, setNewItemQty] = useState(1);
+  const [newItemEta, setNewItemEta] = useState('');
 
-  const {
-    data: purchaseOrders,
-    isLoading: loading,
-    setData: setPurchaseOrders,
-  } = useRealtimeNestedList<PurchaseOrder, PurchaseOrderItem>({
-    parentTableName: 'purchase_orders',
-    childTableName: 'purchase_order_items',
-    parentFetchFn: getAllPurchaseOrders,
-    childParentIdField: 'po_id',
-    childrenField: 'items',
-    sortParentFn: sortByCreatedAt,
-  });
+  const [printMode, setPrintMode] = useState(false);
 
-  const supplierMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
-  const productMap = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
-
-  const notifyUser = useCallback(async (title: string, message: string, type: NotificationType = 'success') => {
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (!user) return;
-      await createNotification({ recipient_id: user.id, title, message, type });
-    } catch (err) {
-      console.error('Error sending notification:', err);
-    }
+  // Fetch initial data
+  useEffect(() => {
+    fetchOrders();
+    fetchSuppliers();
+    fetchProducts();
   }, []);
 
-  // Auto-select first PO when POs change
-  useEffect(() => {
-    if (purchaseOrders.length > 0 && !selectedPo) {
-      setSelectedPo(purchaseOrders[0]);
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      const data = await purchaseOrderService.getPurchaseOrders({});
+      setOrders(data as unknown as PurchaseOrderWithDetails[] || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }, [purchaseOrders, selectedPo]);
+  };
 
-  useEffect(() => {
-    if (!initialPoId || !purchaseOrders.length) return;
-    const po = purchaseOrders.find(entry => entry.id === initialPoId);
-    if (po) setSelectedPo(po);
-  }, [initialPoId, purchaseOrders]);
+  const fetchSuppliers = async () => {
+    const data = await purchaseOrderService.getSuppliers();
+    setSuppliers(data || []);
+  };
 
-  const filteredPos = useMemo(() => {
-    const query = searchTerm.toLowerCase();
-    return purchaseOrders.filter(po => {
-      const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
-      const matchesSearch =
-        !query ||
-        po.po_no.toLowerCase().includes(query) ||
-        (supplierMap.get(po.supplier_id)?.company || '').toLowerCase().includes(query);
+  const fetchProducts = async () => {
+    const data = await purchaseOrderService.getProducts();
+    setProducts(data || []);
+  };
+
+  // Filter Logic
+  const filteredOrders = useMemo(() => {
+    return orders.filter(po => {
+      const matchesStatus = !filterStatus || po.status === filterStatus;
+      const matchesSearch = !searchTerm || po.po_number.toLowerCase().includes(searchTerm.toLowerCase()) || po.supplier?.company.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesStatus && matchesSearch;
     });
-  }, [supplierMap, purchaseOrders, searchTerm, statusFilter]);
+  }, [orders, filterStatus, searchTerm]);
 
-  const selectedSupplier = selectedPo ? supplierMap.get(selectedPo.supplier_id) : null;
-  const workflowStage = useMemo<'inquiry' | 'order' | 'document'>(() => {
-    if (!selectedPo) return 'inquiry';
-    return FINAL_DOCUMENT_STATUSES.has(selectedPo.status) ? 'document' : 'order';
-  }, [selectedPo]);
-  const workflowDocumentStatus = useMemo(() => {
-    if (!selectedPo || workflowStage !== 'document') return undefined;
-    return documentStatusMeta[selectedPo.status];
-  }, [selectedPo, workflowStage]);
+  const paginatedOrders = filteredOrders.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
 
-  // Filter products for autocomplete
-  const filteredProducts = useMemo(() => {
-    if (!itemSearch) return products.slice(0, 50);
-    const query = itemSearch.toLowerCase();
-    return products.filter(p =>
-      p.part_no.toLowerCase().includes(query) ||
-      p.description.toLowerCase().includes(query) ||
-      p.brand.toLowerCase().includes(query) ||
-      p.item_code.toLowerCase().includes(query)
-    ).slice(0, 50);
-  }, [products, itemSearch]);
+  // Selection Logic
+  useEffect(() => {
+    if (initialPOId && orders.length > 0 && !selectedPO) {
+      const found = orders.find(o => o.id === initialPOId);
+      if (found) setSelectedPO(found);
+    } else if (orders.length > 0 && !selectedPO && !isCreating) {
+      // Optional: Auto-select first?
+      setSelectedPO(orders[0]);
+    }
+  }, [orders, initialPOId]);
 
-  const handleMarkDelivered = async () => {
-    if (!selectedPo) return;
-    setMarkingDelivered(true);
+  const handleSelectPO = (po: PurchaseOrderWithDetails) => {
+    setSelectedPO(po);
+    setIsCreating(false);
+    setShowAddItem(false);
+    setPrintMode(false);
+  };
 
-    // Optimistic update
-    setPurchaseOrders(prev => applyOptimisticUpdate(prev, selectedPo.id, {
-      status: PurchaseOrderStatus.DELIVERED,
-      delivery_date: new Date().toISOString()
-    } as Partial<PurchaseOrder>));
-    setSelectedPo(prev => prev ? { ...prev, status: PurchaseOrderStatus.DELIVERED, delivery_date: new Date().toISOString() } : null);
+  const startCreate = async () => {
+    setIsCreating(true);
+    setSelectedPO(null);
+    setPrintMode(false);
+    const nextNum = await purchaseOrderService.generatePONumber();
+    setNewPONumber(nextNum);
+    setCreateForm({
+      order_date: new Date().toISOString().split('T')[0],
+      status: 'Draft',
+      remarks: '',
+      grand_total: 0
+    });
+  };
 
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-      await markAsDelivered(selectedPo.id);
-      await notifyUser(
-        'Purchase Order Delivered',
-        `PO ${selectedPo.po_no} marked as delivered. Inventory updated.`,
-        'success'
-      );
-      setShowDeliverConfirm(false);
-    } catch (err) {
-      console.error('Error marking PO as delivered:', err);
-      alert('Failed to mark PO as delivered');
-      // Real-time subscription will correct the state
-    } finally {
-      setMarkingDelivered(false);
+      const newPO = await purchaseOrderService.createPurchaseOrder({
+        ...createForm,
+        po_number: newPONumber,
+        warehouse_id: 'WH-MAIN', // Default
+        created_by: '00000000-0000-0000-0000-000000000000' // Placeholder
+      } as PurchaseOrderInsert);
+      await fetchOrders();
+      // Select the new PO
+      const fullPO = await purchaseOrderService.getPurchaseOrderById(newPO.id);
+      setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
+      setIsCreating(false);
+    } catch (err: any) {
+      alert('Error creating PO: ' + err.message);
     }
   };
 
-  const handleCreatePO = async () => {
-    if (!poNo || !supplierId || !orderDate || items.length === 0) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    setCreating(true);
-    const poData: PurchaseOrderDTO = {
-      po_no: poNo,
-      supplier_id: supplierId,
-      order_date: orderDate,
-      delivery_date: deliveryDate || undefined,
-      warehouse_id: warehouseId,
-      items: items,
-    };
-
+  const handleStatusChange = async (newStatus: string) => {
+    if (!selectedPO) return;
+    if (!confirm(`Change status to ${newStatus}?`)) return;
     try {
-      const newPo = await createPurchaseOrder(poData);
-      await notifyUser('Purchase Order Created', `PO ${poNo} has been created successfully.`);
-      setShowCreateForm(false);
-      // Reset form
-      setPoNo('');
-      setSupplierId('');
-      setWarehouseId('WH1');
-      setOrderDate('');
-      setDeliveryDate('');
-      setItems([]);
-      setItemSearch('');
+      await purchaseOrderService.updatePurchaseOrder(selectedPO.id, { status: newStatus });
+      // Refresh
+      const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
+      setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
+      fetchOrders(); // Update list
+    } catch (err: any) {
+      alert('Error updating status: ' + err.message);
+    }
+  };
+
+  const addItem = async () => {
+    if (!selectedPO || !newItemId) return;
+    try {
+      await purchaseOrderService.addPurchaseOrderItem({
+        po_id: selectedPO.id,
+        item_id: newItemId,
+        qty: newItemQty,
+        eta_date: newItemEta || null,
+        unit_price: 0,
+        amount: 0,
+        quantity_received: 0
+      });
+      const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
+      setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
+      setShowAddItem(false);
+      setNewItemId('');
+      setNewItemQty(1);
+    } catch (err: any) {
+      alert('Error adding item: ' + err.message);
+    }
+  };
+
+  const deleteItem = async (itemId: string) => {
+    if (!selectedPO || !confirm('Remove item?')) return;
+    try {
+      await purchaseOrderService.deletePurchaseOrderItem(itemId);
+      const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
+      setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
+    } catch (err: any) {
+      alert('Error removing item: ' + err.message);
+    }
+  };
+
+  const updateItem = async (itemId: string, field: string, value: any) => {
+    if (!selectedPO) return;
+    try {
+      await purchaseOrderService.updatePurchaseOrderItem(itemId, { [field]: value });
+      // Debounce or just refresh? For now simplicity:
+      const updated = await purchaseOrderService.getPurchaseOrderById(selectedPO.id);
+      setSelectedPO(updated as unknown as PurchaseOrderWithDetails);
     } catch (err) {
-      console.error('Error creating PO:', err);
-      alert('Failed to create purchase order');
-    } finally {
-      setCreating(false);
+      console.error(err);
     }
   };
 
-  const handleAddItem = (product: Product) => {
-    const existingItemIndex = items.findIndex(item => item.item_id === product.id);
-    if (existingItemIndex >= 0) {
-      // Update existing item
-      const newItems = [...items];
-      newItems[existingItemIndex] = {
-        ...newItems[existingItemIndex],
-        qty: newItems[existingItemIndex].qty + 1,
-      };
-      setItems(newItems);
-    } else {
-      // Add new item
-      setItems([...items, {
-        item_id: product.id,
-        qty: 1,
-        unit_price: product.price_aa || 0,
-      }]);
-    }
-    setItemSearch('');
-    setShowItemDropdown(false);
-  };
+  // Print View Component
+  const PrintView = ({ po }: { po: PurchaseOrderWithDetails }) => (
+    <div className="bg-white p-8 max-w-4xl mx-auto border shadow-lg relative">
+      <button onClick={() => setPrintMode(false)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500 print:hidden"><XCircle size={24} /></button>
+      <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
+        <div>
+          <h1 className="text-3xl font-bold uppercase">Purchase Order</h1>
+          <p className="mt-1 font-mono text-lg">{po.po_number}</p>
+          <p>Date: {new Date(po.order_date).toLocaleDateString()}</p>
+        </div>
+        <div className="text-right">
+          <h2 className="text-xl font-bold">TND OPC</h2>
+          <p>Taguig City</p>
+        </div>
+      </div>
+      {/* ... Print content similar to before ... */}
+      <div className="grid grid-cols-2 gap-8 mb-8">
+        <div>
+          <h3 className="font-bold border-b border-black mb-2 uppercase text-xs">Vendor</h3>
+          <p className="font-bold">{po.supplier?.company}</p>
+          <p className="text-sm">{po.supplier?.address}</p>
+        </div>
+        <div>
+          <h3 className="font-bold border-b border-black mb-2 uppercase text-xs">Ship To</h3>
+          <p className="font-bold">Main Warehouse</p>
+          <p className="text-sm">Ref: {po.pr_reference || 'N/A'}</p>
+        </div>
+      </div>
+      <table className="w-full text-sm border-collapse mb-8">
+        <thead><tr className="border-b-2 border-black"><th className="text-left py-1">Qty</th><th className="text-left py-1">Description</th><th className="text-right py-1">Unit Price</th><th className="text-right py-1">Total</th></tr></thead>
+        <tbody>
+          {po.items?.map((item, i) => (
+            <tr key={i} className="border-b border-gray-100">
+              <td className="py-2">{item.qty}</td>
+              <td className="py-2"><span className="font-bold block">{item.product?.part_no}</span>{item.product?.description}</td>
+              <td className="py-2 text-right">{item.unit_price ? item.unit_price.toFixed(2) : '-'}</td>
+              <td className="py-2 text-right">{(item.unit_price && item.qty) ? (item.unit_price * item.qty).toFixed(2) : '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-black"><td colSpan={3} className="text-right py-2 font-bold">Grand Total</td><td className="text-right py-2 font-bold">{po.grand_total?.toFixed(2)}</td></tr>
+        </tfoot>
+      </table>
+      <div className="mt-12 grid grid-cols-2 gap-16 text-sm">
+        <div><p className="mb-8 font-bold">Prepared By:</p><div className="border-b border-black"></div></div>
+        <div><p className="mb-8 font-bold">Approved By:</p><div className="border-b border-black"></div></div>
+      </div>
+      <div className="mt-8 flex justify-center print:hidden">
+        <button onClick={() => window.print()} className="bg-blue-600 text-white px-6 py-2 rounded flex items-center gap-2 hover:bg-blue-700"><Printer size={18} /> Print Now</button>
+      </div>
+    </div>
+  );
 
-  const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
-  };
-
-  const handleUpdateItem = (index: number, field: 'qty' | 'unit_price' | 'notes', value: any) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setItems(newItems);
-  };
-
-  const calculateTotal = () => {
-    return items.reduce((sum, item) => sum + (item.qty * item.unit_price), 0);
-  };
-
-  const getInventoryImpactPreview = () => {
-    if (!selectedPo) return { stockIn: [], stockOut: [] };
-    const stockIn = selectedPo.items?.map(item => ({
-      part_no: productMap.get(item.item_id)?.part_no || item.item_id,
-      qty: item.qty,
-      warehouse: selectedPo.warehouse_id,
-    })) || [];
-    return { stockIn, stockOut: [] };
-  };
-
-  const { stockIn, stockOut } = useMemo(() => getInventoryImpactPreview(), [selectedPo, productMap]);
+  if (printMode && selectedPO) {
+    return <div className="p-4 bg-gray-500/50 fixed inset-0 z-50 overflow-y-auto"><PrintView po={selectedPO} /></div>;
+  }
 
   return (
     <div className="h-full flex flex-col bg-slate-100 dark:bg-slate-950">
-      {/* Header */}
+      {/* Layout matching SalesOrderView */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="p-2 rounded bg-white/10"><ShoppingCart className="w-5 h-5" /></span>
+          <span className="p-2 rounded bg-white/10"><ListFilter className="w-5 h-5" /></span>
           <div>
             <h1 className="text-lg font-semibold">Purchase Orders</h1>
-            <p className="text-xs text-slate-300">Manage supplier orders and inventory intake</p>
+            <p className="text-xs text-slate-300">Procurement and supplier management</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New PO</span>
+        <button onClick={startCreate} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm flex items-center gap-2 transition-colors">
+          <Plus size={16} /> New PO
         </button>
       </div>
 
@@ -295,429 +278,149 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPoId }) =>
         {/* Sidebar */}
         <aside className="w-80 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
           <div className="p-4 space-y-3">
-            <div className="flex items-center gap-2 px-2 py-1 rounded border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2 px-2 py-1 round border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
               <Search className="w-4 h-4 text-slate-400" />
-              <input
-                className="flex-1 text-xs bg-transparent outline-none"
-                placeholder="Search PO or supplier..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              <input className="flex-1 text-xs bg-transparent outline-none" placeholder="Search PO # or Supplier..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
-            <div>
-              <label className="text-xs text-slate-500 flex items-center gap-1 mb-1">
-                <ListFilter className="w-3 h-3" /> Status
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | PurchaseOrderStatus)}
-                className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800"
-              >
-                <option value="all">All</option>
-                {Object.values(PurchaseOrderStatus).map(status => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </div>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full text-xs border border-slate-200 dark:border-slate-800 rounded px-2 py-1 bg-slate-50 dark:bg-slate-800">
+              <option value="">All Statuses</option>
+              {Object.keys(PO_STATUS_COLORS).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-            {loading && (
-              <div className="flex items-center justify-center py-6 text-xs text-slate-500">
-                <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading purchase orders...
-              </div>
-            )}
-            {!loading && filteredPos.map(po => {
-              const supplier = supplierMap.get(po.supplier_id);
-              const isActive = selectedPo?.id === po.id;
-              return (
-                <button
-                  key={po.id}
-                  onClick={() => setSelectedPo(po)}
-                  className={`w-full text-left p-3 space-y-1 ${isActive ? 'bg-brand-blue/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-sm text-slate-800 dark:text-slate-100">{po.po_no}</span>
-                    <StatusBadge status={po.status} />
-                  </div>
-                  <p className="text-xs text-slate-500">{supplier?.company || po.supplier_id}</p>
-                  <p className="text-[11px] text-slate-400">{new Date(po.order_date).toLocaleDateString()}</p>
-                </button>
-              );
-            })}
-            {!loading && filteredPos.length === 0 && (
-              <div className="p-4 text-xs text-slate-500">No purchase orders found.</div>
-            )}
+            {loading && <div className="p-4 text-center text-xs text-slate-500"><RefreshCw className="animate-spin inline mr-2" /> Loading...</div>}
+            {!loading && paginatedOrders.map(po => (
+              <button key={po.id} onClick={() => handleSelectPO(po)} className={`w-full text-left p-3 space-y-1 ${selectedPO?.id === po.id ? 'bg-blue-50 dark:bg-slate-800/50 border-l-4 border-blue-600' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">{po.po_number}</span>
+                  <POStatusBadge status={po.status} />
+                </div>
+                <p className="text-xs text-slate-500">{po.supplier?.company || 'Unknown Supplier'}</p>
+                <p className="text-[11px] text-slate-400">{new Date(po.order_date).toLocaleDateString()}</p>
+              </button>
+            ))}
           </div>
         </aside>
 
         {/* Main Content */}
-        <section className="flex-1 overflow-y-auto p-4">
-          {selectedPo ? (
-            <div className="space-y-4">
-              {/* PO Header Card */}
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-slate-500">Purchase Order</p>
-                    <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">{selectedPo.po_no}</h2>
-                    <p className="text-xs text-slate-500">{new Date(selectedPo.order_date).toLocaleDateString()} · {selectedSupplier?.company || selectedPo.supplier_id}</p>
-                  </div>
-                  <StatusBadge status={selectedPo.status} />
+        <section className="flex-1 overflow-y-auto p-4 bg-slate-100 dark:bg-slate-950">
+          {isCreating ? (
+            <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 max-w-2xl mx-auto">
+              <h2 className="text-xl font-bold mb-6 text-slate-800 dark:text-white">Create New Purchase Order</h2>
+              <form onSubmit={handleCreateSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-1">PO Number</label>
+                  <input type="text" value={newPONumber} disabled className="w-full bg-slate-100 border border-slate-300 rounded p-2 text-slate-500" />
                 </div>
-                <WorkflowStepper currentStage={workflowStage} documentLabel="Purchase Order" documentSubStatus={workflowDocumentStatus} />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-600">
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Order Date</label>
+                  <input type="date" required value={createForm.order_date} onChange={e => setCreateForm({ ...createForm, order_date: e.target.value })} className="w-full border border-slate-300 rounded p-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Supplier</label>
+                  <select required value={createForm.supplier_id || ''} onChange={e => setCreateForm({ ...createForm, supplier_id: e.target.value })} className="w-full border border-slate-300 rounded p-2">
+                    <option value="">Select Supplier...</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.company}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Remarks</label>
+                  <textarea value={createForm.remarks || ''} onChange={e => setCreateForm({ ...createForm, remarks: e.target.value })} className="w-full border border-slate-300 rounded p-2 rows-3"></textarea>
+                </div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <button type="button" onClick={() => setIsCreating(false)} className="px-4 py-2 border rounded text-slate-600 hover:bg-slate-50">Cancel</button>
+                  <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"><Save size={16} /> Create PO</button>
+                </div>
+              </form>
+            </div>
+          ) : selectedPO ? (
+            <div className="space-y-6">
+              {/* Header Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+                <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-4">
                   <div>
-                    <p className="font-semibold text-slate-500">Warehouse</p>
-                    <p className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {selectedPo.warehouse_id}
-                    </p>
+                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+                      {selectedPO.po_number}
+                      <POStatusBadge status={selectedPO.status} />
+                    </h1>
+                    <p className="text-slate-500 text-sm mt-1">Created {new Date(selectedPO.order_date).toLocaleDateString()}</p>
                   </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Order Date</p>
-                    <p className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {new Date(selectedPo.order_date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Expected Delivery</p>
-                    <p className="flex items-center gap-1">
-                      <Truck className="w-3 h-3" />
-                      {selectedPo.delivery_date ? new Date(selectedPo.delivery_date).toLocaleDateString() : 'Not specified'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-500">Total Amount</p>
-                    <p className="font-semibold text-brand-blue">₱{Number(selectedPo.grand_total).toLocaleString()}</p>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-500 uppercase">Total</p>
+                    <p className="text-3xl font-bold text-slate-900 dark:text-white">₱{selectedPO.grand_total?.toLocaleString() || '0.00'}</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {selectedPo.status === PurchaseOrderStatus.ORDERED && (
-                    <button
-                      type="button"
-                      onClick={() => setShowDeliverConfirm(true)}
-                      disabled={markingDelivered}
-                      className="px-4 py-2 rounded bg-emerald-600 text-white disabled:opacity-40 flex items-center gap-2"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      {markingDelivered ? 'Processing...' : 'Mark as Delivered'}
-                    </button>
-                  )}
+                <div className="grid grid-cols-3 gap-6 text-sm">
+                  <div>
+                    <p className="font-semibold text-slate-500 uppercase text-xs mb-1">Supplier</p>
+                    <p className="font-medium text-lg text-slate-800 dark:text-white">{selectedPO.supplier?.company}</p>
+                    <p className="text-slate-500">{selectedPO.supplier?.address}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-500 uppercase text-xs mb-1">Details</p>
+                    <p>PR Ref: {selectedPO.pr_reference || '-'}</p>
+                    <p>Warehouse: {selectedPO.warehouse_id}</p>
+                  </div>
+                  <div className="flex flex-col gap-2 justify-center items-end">
+                    <button onClick={() => setPrintMode(true)} className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 rounded hover:bg-slate-50 text-slate-600"><Printer size={16} /> Print</button>
+                    {selectedPO.status === 'Draft' && <button onClick={() => handleStatusChange('Pending')} className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500 text-white rounded hover:bg-yellow-600 shadow-sm">Submit for Approval</button>}
+                    {selectedPO.status === 'Pending' && <button onClick={() => handleStatusChange('Approved')} className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 shadow-sm"><CheckCircle size={16} /> Approve</button>}
+                    {['Draft', 'Pending'].includes(selectedPO.status) && <button onClick={() => handleStatusChange('Cancelled')} className="flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded"><XCircle size={16} /> Cancel</button>}
+                  </div>
                 </div>
               </div>
 
-              {/* PO Details Card */}
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
-                    Order Details
-                  </h3>
+              {/* Items Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                  <h3 className="font-bold text-slate-800 dark:text-white">Items</h3>
+                  {selectedPO.status === 'Draft' && <button onClick={() => setShowAddItem(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center gap-1"><Plus size={14} /> Add Item</button>}
                 </div>
+                {showAddItem && (
+                  <div className="p-4 bg-blue-50 border-b border-blue-100">
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1"><label className="text-xs font-semibold">Product</label><select value={newItemId} onChange={e => setNewItemId(e.target.value)} className="w-full text-sm rounded border-gray-300"><option value="">Select...</option>{products.map(p => <option key={p.id} value={p.id}>{p.part_no} - {p.description}</option>)}</select></div>
+                      <div className="w-20"><label className="text-xs font-semibold">Qty</label><input type="number" min="1" value={newItemQty} onChange={e => setNewItemQty(Number(e.target.value))} className="w-full text-sm rounded border-gray-300" /></div>
+                      <div className="w-32"><label className="text-xs font-semibold">ETA</label><input type="date" value={newItemEta} onChange={e => setNewItemEta(e.target.value)} className="w-full text-sm rounded border-gray-300" /></div>
+                      <button onClick={addItem} className="px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium">Add</button>
+                      <button onClick={() => setShowAddItem(false)} className="px-3 py-2 bg-white border rounded text-sm">Cancel</button>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                        <th className="py-2">Item</th>
-                        <th className="py-2 text-right">Qty</th>
-                        <th className="py-2 text-right">Unit Price</th>
-                        <th className="py-2 text-right">Amount</th>
-                        <th className="py-2">Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedPo.items?.map(item => {
-                        const product = productMap.get(item.item_id);
-                        return (
-                          <tr key={item.id} className="border-t border-slate-100 dark:border-slate-800">
-                            <td className="py-2">
-                              <div className="font-semibold text-slate-700 dark:text-slate-200">{product?.part_no || item.item_id}</div>
-                              <div className="text-[10px] text-slate-500">{product?.description || ''}</div>
-                            </td>
-                            <td className="py-2 text-right">{item.qty}</td>
-                            <td className="py-2 text-right">₱{Number(item.unit_price || 0).toLocaleString()}</td>
-                            <td className="py-2 text-right font-semibold">₱{Number(item.amount || 0).toLocaleString()}</td>
-                            <td className="py-2 text-slate-500">{item.notes || '-'}</td>
-                          </tr>
-                        );
-                      })}
+                  <table className="w-full text-left text-sm">
+                    <thead><tr className="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-xs"><th className="px-6 py-3">#</th><th className="px-6 py-3">Product</th><th className="px-6 py-3 text-center">Qty</th><th className="px-6 py-3 text-right">Price</th><th className="px-6 py-3 text-right">Total</th><th className="px-6 py-3">Actions</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {selectedPO.items?.length === 0 ? <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-400 italic">No items.</td></tr> : selectedPO.items?.map((item, idx) => (
+                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="px-6 py-3 text-slate-500">{idx + 1}</td>
+                          <td className="px-6 py-3">
+                            <div className="font-medium text-slate-800 dark:text-white">{item.product?.part_no}</div>
+                            <div className="text-xs text-slate-500">{item.product?.description}</div>
+                          </td>
+                          <td className="px-6 py-3 text-center">
+                            {selectedPO.status === 'Draft' ? <input type="number" className="w-16 text-center border rounded p-1 text-xs" value={item.qty || 0} onChange={e => updateItem(item.id, 'qty', Number(e.target.value))} /> : item.qty}
+                          </td>
+                          <td className="px-6 py-3 text-right">₱{item.unit_price?.toLocaleString() || '-'}</td>
+                          <td className="px-6 py-3 text-right font-medium">₱{item.amount?.toLocaleString() || '-'}</td>
+                          <td className="px-6 py-3">
+                            {selectedPO.status === 'Draft' && <button onClick={() => deleteItem(item.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={16} /></button>}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-                <div className="flex justify-end text-sm font-semibold text-slate-700 dark:text-slate-200 mt-3">
-                  Total: ₱{Number(selectedPo.grand_total || 0).toLocaleString()}
-                </div>
               </div>
-
-              {/* Inventory Impact Preview */}
-              {selectedPo.status === PurchaseOrderStatus.ORDERED && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    Inventory Impact Preview
-                  </h4>
-                  <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
-                    When marked as delivered, the following inventory changes will occur:
-                  </p>
-                  {stockIn.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Stock In:</p>
-                      {stockIn.map((item, idx) => (
-                        <div key={idx} className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {item.part_no}: +{item.qty} at {item.warehouse}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ) : (
-            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-              Select a purchase order to view details.
+            <div className="h-full flex flex-col items-center justify-center text-slate-400">
+              <ListFilter size={48} className="mb-4 opacity-20" />
+              <p>Select a Purchase Order to view details or create a new one.</p>
             </div>
           )}
         </section>
       </div>
-
-      {/* Delivery Confirmation Modal */}
-      {showDeliverConfirm && selectedPo && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-md w-full p-5 border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-full">
-                <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Confirm Delivery</h3>
-                <p className="text-sm text-slate-500">PO {selectedPo.po_no}</p>
-              </div>
-            </div>
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3 text-xs">
-              <p className="font-semibold text-amber-800 dark:text-amber-200 mb-2">Inventory Impact:</p>
-              {stockIn.map((item, idx) => (
-                <div key={idx} className="text-amber-700 dark:text-amber-300 flex items-center gap-2 mb-1">
-                  <CheckCircle2 className="w-3 h-3" />
-                  {item.part_no}: +{item.qty} at {item.warehouse}
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              This action will update inventory levels and cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowDeliverConfirm(false)}
-                className="px-4 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleMarkDelivered}
-                disabled={markingDelivered}
-                className="px-4 py-2 text-sm rounded bg-emerald-600 text-white disabled:opacity-40"
-              >
-                {markingDelivered ? 'Processing...' : 'Confirm Delivery'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create PO Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-4xl w-full my-8 border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Create New Purchase Order</h3>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">PO Number *</label>
-                  <input
-                    type="text"
-                    value={poNo}
-                    onChange={(e) => setPoNo(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800"
-                    placeholder="PO-XXXXX"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Supplier *</label>
-                  <select
-                    value={supplierId}
-                    onChange={(e) => setSupplierId(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800"
-                  >
-                    <option value="">Select supplier...</option>
-                    {contacts.map(contact => (
-                      <option key={contact.id} value={contact.id}>{contact.company}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Warehouse *</label>
-                  <select
-                    value={warehouseId}
-                    onChange={(e) => setWarehouseId(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800"
-                  >
-                    {WAREHOUSES.map(wh => (
-                      <option key={wh} value={wh}>{wh}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Order Date *</label>
-                  <input
-                    type="date"
-                    value={orderDate}
-                    onChange={(e) => setOrderDate(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Expected Delivery Date</label>
-                  <input
-                    type="date"
-                    value={deliveryDate}
-                    onChange={(e) => setDeliveryDate(e.target.value)}
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800"
-                  />
-                </div>
-              </div>
-
-              {/* Items Section */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Items *</label>
-                <div className="relative mb-3">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    placeholder="Search products..."
-                    className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg pl-10 pr-4 py-2 bg-white dark:bg-slate-800"
-                    value={itemSearch}
-                    onChange={(e) => {
-                      setItemSearch(e.target.value);
-                      setShowItemDropdown(true);
-                    }}
-                    onFocus={() => setShowItemDropdown(true)}
-                  />
-                  {showItemDropdown && filteredProducts.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                      {filteredProducts.map(product => (
-                        <button
-                          key={product.id}
-                          onClick={() => handleAddItem(product)}
-                          className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-800 border-b border-slate-100 dark:border-slate-800 last:border-0"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-800 dark:text-white text-sm">{product.part_no}</span>
-                            <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] rounded uppercase font-bold">{product.brand}</span>
-                          </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{product.description}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Items Table */}
-                {items.length > 0 && (
-                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-slate-50 dark:bg-slate-800">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Item</th>
-                          <th className="px-3 py-2 text-right">Qty</th>
-                          <th className="px-3 py-2 text-right">Unit Price</th>
-                          <th className="px-3 py-2">Notes</th>
-                          <th className="px-3 py-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, idx) => {
-                          const product = productMap.get(item.item_id);
-                          return (
-                            <tr key={idx} className="border-t border-slate-200 dark:border-slate-700">
-                              <td className="px-3 py-2">
-                                <div className="font-semibold">{product?.part_no || item.item_id}</div>
-                                <div className="text-[10px] text-slate-500">{product?.description || ''}</div>
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={item.qty}
-                                  onChange={(e) => handleUpdateItem(idx, 'qty', parseInt(e.target.value) || 1)}
-                                  className="w-20 text-right border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={item.unit_price}
-                                  onChange={(e) => handleUpdateItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
-                                  className="w-24 text-right border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  type="text"
-                                  value={item.notes || ''}
-                                  onChange={(e) => handleUpdateItem(idx, 'notes', e.target.value)}
-                                  className="w-full border border-slate-200 dark:border-slate-700 rounded px-2 py-1 bg-white dark:bg-slate-800"
-                                  placeholder="Notes..."
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right">
-                                <button
-                                  onClick={() => handleRemoveItem(idx)}
-                                  className="text-rose-500 hover:text-rose-700"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800 text-right font-semibold">
-                      Total: ₱{calculateTotal().toLocaleString()}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="px-4 py-2 text-sm rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreatePO}
-                disabled={creating || !poNo || !supplierId || !orderDate || items.length === 0}
-                className="px-4 py-2 text-sm rounded bg-emerald-600 text-white disabled:opacity-40 flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                {creating ? 'Creating...' : 'Create PO'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

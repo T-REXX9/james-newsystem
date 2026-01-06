@@ -33,6 +33,7 @@ import SalesAgentDashboard from './components/SalesAgentDashboard';
 import ManagementView from './components/ManagementView';
 import RecycleBinView from './components/RecycleBinView';
 import ReportsView from './components/ReportsView';
+import PurchaseOrderView from './components/PurchaseOrderView';
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
@@ -300,7 +301,16 @@ const App: React.FC = () => {
       case 'warehouse-purchasing-purchase-request':
         return renderComingSoon('Purchase Request');
       case 'warehouse-purchasing-purchase-order':
-        return renderComingSoon('Purchase Order');
+        return (
+          <div className="h-full overflow-y-auto">
+            <PurchaseOrderView
+              initialPOId={
+                moduleContext['warehouse-purchasing-purchase-order']?.poId ||
+                moduleContext.purchaseorder?.poId
+              }
+            />
+          </div>
+        );
       case 'warehouse-purchasing-receiving-stock':
         return renderComingSoon('Receiving Stock');
       case 'warehouse-purchasing-return-to-supplier':

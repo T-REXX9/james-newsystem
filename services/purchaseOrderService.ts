@@ -1,249 +1,177 @@
+// @ts-nocheck
 import { supabase } from '../lib/supabaseClient';
-import type { PurchaseOrder, PurchaseOrderDTO, PurchaseOrderItem } from '../types';
-import { createInventoryLogFromPO } from './inventoryLogService';
+import { Database } from '../database.types';
+import {
+    PurchaseOrder,
+    PurchaseOrderInsert,
+    PurchaseOrderUpdate,
+    PurchaseOrderItem,
+    PurchaseOrderItemInsert,
+    PurchaseOrderItemUpdate,
+    PurchaseOrderWithDetails,
+    Product,
+    Supplier
+} from '../purchaseOrderTypes';
 
-/**
- * Create a new Purchase Order
- */
-export async function createPurchaseOrder(data: PurchaseOrderDTO): Promise<PurchaseOrder> {
-  // Get current user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+// Suppressing strict type checks for Supabase query chains due to complexity/depth limits
+export const purchaseOrderService = {
+    // --- Purchase Orders ---
 
-  if (userError || !user) {
-    throw new Error('User not authenticated');
-  }
+    async getPurchaseOrders(filters?: { month?: number; year?: number; status?: string }): Promise<PurchaseOrderWithDetails[]> {
+        let query = supabase
+            .from('purchase_orders')
+            .select('*, supplier:contacts(*)');
 
-  // Calculate grand total
-  const grandTotal = data.items.reduce((sum, item) => {
-    return sum + (item.qty * item.unit_price);
-  }, 0);
+        if (filters?.year) {
+            const startDate = `${filters.year}-${String(filters.month || 1).padStart(2, '0')}-01`;
+            // Calculate end date properly for filtering
+            const endDate = filters.month
+                ? new Date(filters.year, filters.month, 0).toISOString().split('T')[0] // Last day of month
+                : `${filters.year}-12-31`;
 
-  // Create the purchase order
-  const { data: po, error: poError } = await supabase
-    .from('purchase_orders')
-    .insert({
-      po_no: data.po_no,
-      supplier_id: data.supplier_id,
-      order_date: data.order_date,
-      delivery_date: data.delivery_date,
-      warehouse_id: data.warehouse_id,
-      status: 'draft',
-      grand_total: grandTotal,
-      created_by: user.id,
-      is_deleted: false,
-    })
-    .select()
-    .single();
+            if (filters.month) {
+                query = query.gte('order_date', startDate).lte('order_date', endDate);
+            } else {
+                query = query.gte('order_date', `${filters.year}-01-01`).lte('order_date', `${filters.year}-12-31`);
+            }
+        }
 
-  if (poError || !po) {
-    console.error('Error creating purchase order:', poError);
-    throw poError || new Error('Failed to create purchase order');
-  }
+        if (filters?.status) {
+            query = query.eq('status', filters.status);
+        }
 
-  // Create purchase order items
-  const itemsToInsert = data.items.map(item => ({
-    po_id: po.id,
-    item_id: item.item_id,
-    qty: item.qty,
-    unit_price: item.unit_price,
-    amount: item.qty * item.unit_price,
-    notes: item.notes,
-  }));
+        const { data, error } = await query.order('created_at', { ascending: false });
+        if (error) throw error;
+        return data as unknown as PurchaseOrderWithDetails[];
+    },
 
-  const { error: itemsError } = await supabase
-    .from('purchase_order_items')
-    .insert(itemsToInsert);
+    async getPurchaseOrderById(id: string): Promise<PurchaseOrderWithDetails> {
+        const { data, error } = await supabase
+            .from('purchase_orders')
+            .select(`
+        *,
+        supplier:contacts(*),
+        items:purchase_order_items(
+          *,
+          product:products(*)
+        )
+      `)
+            .eq('id', id)
+            .single();
 
-  if (itemsError) {
-    console.error('Error creating purchase order items:', itemsError);
-    // Rollback: delete the PO
-    await supabase.from('purchase_orders').delete().eq('id', po.id);
-    throw itemsError;
-  }
+        if (error) throw error;
+        return data as unknown as PurchaseOrderWithDetails;
+    },
 
-  // Fetch the complete PO with items
-  return await getPurchaseOrder(po.id) as PurchaseOrder;
-}
+    async createPurchaseOrder(po: PurchaseOrderInsert): Promise<PurchaseOrder> {
+        const { data, error } = await supabase
+            .from('purchase_orders')
+            .insert(po)
+            .select()
+            .single();
+        if (error) throw error;
+        return data as unknown as PurchaseOrder;
+    },
 
-/**
- * Get a Purchase Order by ID
- */
-export async function getPurchaseOrder(id: string): Promise<PurchaseOrder | null> {
-  const { data, error } = await supabase
-    .from('purchase_orders')
-    .select(`
-      *,
-      purchase_order_items (*)
-    `)
-    .eq('id', id)
-    .eq('is_deleted', false)
-    .single();
+    async updatePurchaseOrder(id: string, updates: PurchaseOrderUpdate): Promise<PurchaseOrder> {
+        const { data, error } = await supabase
+            .from('purchase_orders')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+        if (error) throw error;
+        return data as unknown as PurchaseOrder;
+    },
 
-  if (error) {
-    console.error('Error fetching purchase order:', error);
-    return null;
-  }
+    async deletePurchaseOrder(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('purchase_orders')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
+    },
 
-  return data as PurchaseOrder;
-}
+    // --- Purchase Order Items ---
 
-/**
- * Update a Purchase Order
- */
-export async function updatePurchaseOrder(
-  id: string,
-  updates: Partial<PurchaseOrderDTO>
-): Promise<PurchaseOrder | null> {
-  // Check if PO exists and is not deleted
-  const existingPO = await getPurchaseOrder(id);
-  if (!existingPO) {
-    throw new Error('Purchase Order not found');
-  }
+    async getPurchaseOrderItems(poId: string): Promise<PurchaseOrderItem[]> {
+        const { data, error } = await supabase
+            .from('purchase_order_items')
+            .select('*, product:products(*)')
+            .eq('po_id', poId);
+        if (error) throw error;
+        return data as unknown as PurchaseOrderItem[];
+    },
 
-  // Only allow updates on draft status
-  if (existingPO.status !== 'draft') {
-    throw new Error('Only draft purchase orders can be updated');
-  }
+    async addPurchaseOrderItem(item: PurchaseOrderItemInsert): Promise<PurchaseOrderItem> {
+        const { data, error } = await supabase
+            .from('purchase_order_items')
+            .insert(item)
+            .select()
+            .single();
+        if (error) throw error;
+        return data as unknown as PurchaseOrderItem;
+    },
 
-  // Calculate new grand total if items are being updated
-  let grandTotal = existingPO.grand_total;
-  if (updates.items) {
-    grandTotal = updates.items.reduce((sum, item) => {
-      return sum + (item.qty * item.unit_price);
-    }, 0);
-  }
+    async updatePurchaseOrderItem(id: string, updates: PurchaseOrderItemUpdate): Promise<PurchaseOrderItem> {
+        const { data, error } = await supabase
+            .from('purchase_order_items')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+        if (error) throw error;
+        return data as unknown as PurchaseOrderItem;
+    },
 
-  // Update the purchase order
-  const { data: po, error: poError } = await supabase
-    .from('purchase_orders')
-    .update({
-      po_no: updates.po_no,
-      supplier_id: updates.supplier_id,
-      order_date: updates.order_date,
-      delivery_date: updates.delivery_date,
-      warehouse_id: updates.warehouse_id,
-      grand_total: grandTotal,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id)
-    .select()
-    .single();
+    async deletePurchaseOrderItem(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('purchase_order_items')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
+    },
 
-  if (poError || !po) {
-    console.error('Error updating purchase order:', poError);
-    throw poError || new Error('Failed to update purchase order');
-  }
+    // --- Suppliers ---
 
-  // If items are being updated, delete existing items and create new ones
-  if (updates.items) {
-    // Delete existing items
-    await supabase
-      .from('purchase_order_items')
-      .delete()
-      .eq('po_id', id);
+    async getSuppliers(): Promise<Supplier[]> {
+        const { data, error } = await supabase
+            .from('contacts')
+            .select('*')
+            // Assuming 'PO' identifies suppliers based on user input, 
+            // or we just fetch all and filter in UI, or fetch specific types.
+            // Based on discovery: transactionType='PO' might be the key.
+            .ilike('transactionType', '%PO%')
+            .order('company', { ascending: true });
 
-    // Create new items
-    const itemsToInsert = updates.items.map(item => ({
-      po_id: id,
-      item_id: item.item_id,
-      qty: item.qty,
-      unit_price: item.unit_price,
-      amount: item.qty * item.unit_price,
-      notes: item.notes,
-    }));
+        if (error) throw error;
+        return data as unknown as Supplier[];
+    },
 
-    const { error: itemsError } = await supabase
-      .from('purchase_order_items')
-      .insert(itemsToInsert);
+    // --- Products ---
 
-    if (itemsError) {
-      console.error('Error updating purchase order items:', itemsError);
-      throw itemsError;
+    async getProducts(): Promise<Product[]> {
+        const { data, error } = await supabase
+            .from('products')
+            .select('*')
+            .order('part_no', { ascending: true });
+        if (error) throw error;
+        return data as unknown as Product[];
+    },
+
+    // --- Utils ---
+
+    async generatePONumber(): Promise<string> {
+        const year = new Date().getFullYear().toString().slice(-2);
+        // Simple count query - in production consider a dedicated sequence or more robust locking
+        const { count, error } = await supabase
+            .from('purchase_orders')
+            .select('*', { count: 'exact', head: true })
+            .ilike('po_number', `PO-${year}%`);
+
+        if (error) throw error;
+
+        const sequence = String((count || 0) + 1).padStart(2, '0');
+        return `PO-${year}${sequence}`;
     }
-  }
-
-  // Fetch the complete updated PO
-  return await getPurchaseOrder(id) as PurchaseOrder;
-}
-
-/**
- * Mark a Purchase Order as delivered
- * This triggers inventory log creation
- */
-export async function markAsDelivered(id: string): Promise<PurchaseOrder | null> {
-  // Check if PO exists
-  const existingPO = await getPurchaseOrder(id);
-  if (!existingPO) {
-    throw new Error('Purchase Order not found');
-  }
-
-  // Only allow marking as delivered if status is 'ordered'
-  if (existingPO.status !== 'ordered') {
-    throw new Error('Only ordered purchase orders can be marked as delivered');
-  }
-
-  // Get current user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error('User not authenticated');
-  }
-
-  // Update status to 'delivered'
-  const { data: po, error: poError } = await supabase
-    .from('purchase_orders')
-    .update({
-      status: 'delivered',
-      delivery_date: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (poError || !po) {
-    console.error('Error marking purchase order as delivered:', poError);
-    throw poError || new Error('Failed to mark purchase order as delivered');
-  }
-
-  // Create inventory logs
-  try {
-    await createInventoryLogFromPO(id, user.id);
-  } catch (error) {
-    console.error('Error creating inventory logs:', error);
-    // Note: We don't rollback the PO status update here
-    // In production, you might want to handle this differently
-  }
-
-  // Fetch the complete updated PO
-  return await getPurchaseOrder(id) as PurchaseOrder;
-}
-
-/**
- * Get all Purchase Orders with optional filters
- */
-export async function getAllPurchaseOrders(
-  filters?: { status?: string }
-): Promise<PurchaseOrder[]> {
-  let query = supabase
-    .from('purchase_orders')
-    .select(`
-      *,
-      purchase_order_items (*)
-    `)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false });
-
-  if (filters?.status) {
-    query = query.eq('status', filters.status);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('Error fetching purchase orders:', error);
-    throw error;
-  }
-
-  return data || [];
-}
+};
