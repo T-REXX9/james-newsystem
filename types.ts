@@ -1497,3 +1497,72 @@ export interface CustomerOption {
   id: string;
   company: string;
 }
+
+export type MovementCategory = 'fast' | 'slow';
+
+export interface FastSlowMovementItem {
+  item_id: string;
+  part_no: string;
+  item_code: string;
+  description: string;
+  first_arrival_date: string | null;
+  total_purchased: number;
+  total_sold: number;
+  month1_sales: number;
+  month2_sales: number;
+  month3_sales: number;
+  month1_label: string;
+  month2_label: string;
+  month3_label: string;
+  category: MovementCategory;
+}
+
+export interface FastSlowReportFilters {
+  sortBy: 'sales_volume' | 'part_no';
+  sortDirection: 'asc' | 'desc';
+}
+
+export interface FastSlowReportData {
+  fastMovingItems: FastSlowMovementItem[];
+  slowMovingItems: FastSlowMovementItem[];
+  generatedAt: string;
+}
+
+export type InventoryAuditTimePeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+export interface InventoryAuditFilters {
+  timePeriod: InventoryAuditTimePeriod;
+  dateFrom?: string;
+  dateTo?: string;
+  partNo?: string;
+  itemCode?: string;
+}
+
+export interface InventoryAuditRecord {
+  id: string;
+  item_id: string;
+  item_code: string;
+  part_no: string;
+  description: string;
+  brand: string;
+  adjustment_date: string;
+  adjustment_type: 'physical_count' | 'damage' | 'correction';
+  adjustment_no: string;
+  warehouse_id: string;
+  system_qty: number;
+  physical_qty: number;
+  difference: number;
+  reason: string;
+  processed_by: string;
+  processor_name?: string;
+  notes?: string;
+}
+
+export interface InventoryAuditReportData {
+  records: InventoryAuditRecord[];
+  totalAdjustments: number;
+  totalPositive: number;
+  totalNegative: number;
+  generatedAt: string;
+  filters: InventoryAuditFilters;
+}

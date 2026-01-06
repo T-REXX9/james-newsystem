@@ -27,6 +27,8 @@ import SalesDevelopmentReport from './components/SalesDevelopmentReport';
 import StockMovementView from './components/StockMovementView';
 import TransferStockView from './components/TransferStockView';
 import SalesReport from './components/SalesReport';
+import FastSlowInventoryReport from './components/FastSlowInventoryReport';
+import InventoryAuditReport from './components/InventoryAuditReport';
 
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
@@ -297,7 +299,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'warehouse-inventory-inventory-audit':
-        return renderComingSoon('Inventory Audit');
+        return (
+          <div className="h-full overflow-y-auto">
+            <InventoryAuditReport />
+          </div>
+        );
       case 'warehouse-purchasing-purchase-request':
         return renderComingSoon('Purchase Request');
       case 'warehouse-purchasing-purchase-order':
@@ -311,7 +317,11 @@ const App: React.FC = () => {
       case 'warehouse-reports-item-suggested-for-stock-report':
         return renderComingSoon('Item Suggested for Stock Report');
       case 'warehouse-reports-fast-slow-inventory-report':
-        return renderComingSoon('Fast/Slow Inventory Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <FastSlowInventoryReport />
+          </div>
+        );
       case 'customers':
       case 'sales-database-customer-database':
         return (
