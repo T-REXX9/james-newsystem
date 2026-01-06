@@ -1359,3 +1359,141 @@ export enum TransferStockStatus {
   APPROVED = 'approved',
   DELETED = 'deleted'
 }
+
+export enum DeliveryReceiptStatus {
+  DRAFT = 'draft',
+  DELIVERED = 'delivered',
+  CANCELLED = 'cancelled',
+}
+
+export interface DeliveryReceiptItem {
+  id: string;
+  dr_id: string;
+  item_id?: string;
+  qty: number;
+  part_no?: string;
+  item_code?: string;
+  location?: string;
+  description?: string;
+  unit_price: number;
+  amount: number;
+  remark?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DeliveryReceipt {
+  id: string;
+  dr_no: string;
+  order_id?: string;
+  contact_id?: string;
+  sales_date: string;
+  sales_person?: string;
+  delivery_address?: string;
+  reference_no?: string;
+  customer_reference?: string;
+  send_by?: string;
+  price_group?: string;
+  credit_limit?: number;
+  terms?: string;
+  promise_to_pay?: string;
+  po_number?: string;
+  remarks?: string;
+  inquiry_type?: string;
+  urgency?: string;
+  urgency_date?: string;
+  grand_total: number;
+  status: DeliveryReceiptStatus;
+  printed_at?: string;
+  printed_by?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  is_deleted: boolean;
+  deleted_at?: string;
+  items?: DeliveryReceiptItem[];
+  contact?: { company: string };
+  sales_order?: { order_no: string };
+}
+
+export interface DeliveryReceiptDTO {
+  order_id?: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person?: string;
+  delivery_address?: string;
+  reference_no?: string;
+  customer_reference?: string;
+  send_by?: string;
+  price_group?: string;
+  credit_limit?: number;
+  terms?: string;
+  promise_to_pay?: string;
+  po_number?: string;
+  remarks?: string;
+  inquiry_type?: string;
+  urgency?: string;
+  urgency_date?: string;
+  status?: DeliveryReceiptStatus;
+  items: Omit<DeliveryReceiptItem, 'id' | 'dr_id' | 'created_at' | 'updated_at'>[];
+}
+
+export interface SalesReportFilters {
+  dateFrom: string;
+  dateTo: string;
+  customerId: string | 'all';
+}
+
+export interface SalesReportTransaction {
+  id: string;
+  date: string;
+  customer: string;
+  customerId: string;
+  terms: string;
+  refNo: string;
+  soNo: string;
+  soAmount: number;
+  drAmount: number;
+  invoiceAmount: number;
+  salesperson: string;
+  category: string;
+  vatType: 'exclusive' | 'inclusive' | null;
+  type: 'invoice' | 'dr';
+  orderSlipAmount?: number;
+}
+
+export interface CategoryTotal {
+  category: string;
+  soAmount: number;
+  drAmount: number;
+  invoiceAmount: number;
+}
+
+export interface SalespersonTotal {
+  salesperson: string;
+  categories: CategoryTotal[];
+  total: number;
+}
+
+export interface GrandTotal {
+  soAmount: number;
+  drAmount: number;
+  invoiceAmount: number;
+  total: number;
+}
+
+export interface SalesReportSummary {
+  categoryTotals: CategoryTotal[];
+  salespersonTotals: SalespersonTotal[];
+  grandTotal: GrandTotal;
+}
+
+export interface SalesReportData {
+  transactions: SalesReportTransaction[];
+  summary: SalesReportSummary;
+}
+
+export interface CustomerOption {
+  id: string;
+  company: string;
+}
