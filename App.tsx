@@ -30,6 +30,7 @@ import SalesReport from './components/SalesReport';
 import FastSlowInventoryReport from './components/FastSlowInventoryReport';
 import InventoryAuditReport from './components/InventoryAuditReport';
 import InventoryReport from './components/InventoryReport';
+import SuggestedStockReport from './components/SuggestedStockReport';
 
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
@@ -320,7 +321,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'warehouse-reports-item-suggested-for-stock-report':
-        return renderComingSoon('Item Suggested for Stock Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <SuggestedStockReport currentUser={userProfile} />
+          </div>
+        );
       case 'warehouse-reports-fast-slow-inventory-report':
         return (
           <div className="h-full overflow-y-auto">
