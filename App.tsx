@@ -26,6 +26,11 @@ import InquiryReportFilter from './components/InquiryReportFilter';
 import SalesDevelopmentReport from './components/SalesDevelopmentReport';
 import StockMovementView from './components/StockMovementView';
 import TransferStockView from './components/TransferStockView';
+import SalesReport from './components/SalesReport';
+import FastSlowInventoryReport from './components/FastSlowInventoryReport';
+import InventoryAuditReport from './components/InventoryAuditReport';
+import InventoryReport from './components/InventoryReport';
+import SuggestedStockReport from './components/SuggestedStockReport';
 
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
@@ -297,7 +302,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'warehouse-inventory-inventory-audit':
-        return renderComingSoon('Inventory Audit');
+        return (
+          <div className="h-full overflow-y-auto">
+            <InventoryAuditReport />
+          </div>
+        );
       case 'warehouse-purchasing-purchase-request':
         return renderComingSoon('Purchase Request');
       case 'warehouse-purchasing-purchase-order':
@@ -316,11 +325,23 @@ const App: React.FC = () => {
       case 'warehouse-purchasing-return-to-supplier':
         return renderComingSoon('Return to Supplier');
       case 'warehouse-reports-inventory-report':
-        return renderComingSoon('Inventory Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <InventoryReport />
+          </div>
+        );
       case 'warehouse-reports-item-suggested-for-stock-report':
-        return renderComingSoon('Item Suggested for Stock Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <SuggestedStockReport currentUser={userProfile} />
+          </div>
+        );
       case 'warehouse-reports-fast-slow-inventory-report':
-        return renderComingSoon('Fast/Slow Inventory Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <FastSlowInventoryReport />
+          </div>
+        );
       case 'customers':
       case 'sales-database-customer-database':
         return (
@@ -385,7 +406,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'sales-reports-sales-report':
-        return renderComingSoon('Sales Report');
+        return (
+          <div className="h-full overflow-y-auto">
+            <SalesReport currentUser={userProfile} />
+          </div>
+        );
       case 'sales-reports-sales-development-report':
         return (
           <div className="h-full overflow-y-auto">

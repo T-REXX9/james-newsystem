@@ -1359,3 +1359,210 @@ export enum TransferStockStatus {
   APPROVED = 'approved',
   DELETED = 'deleted'
 }
+
+export enum DeliveryReceiptStatus {
+  DRAFT = 'draft',
+  DELIVERED = 'delivered',
+  CANCELLED = 'cancelled',
+}
+
+export interface DeliveryReceiptItem {
+  id: string;
+  dr_id: string;
+  item_id?: string;
+  qty: number;
+  part_no?: string;
+  item_code?: string;
+  location?: string;
+  description?: string;
+  unit_price: number;
+  amount: number;
+  remark?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DeliveryReceipt {
+  id: string;
+  dr_no: string;
+  order_id?: string;
+  contact_id?: string;
+  sales_date: string;
+  sales_person?: string;
+  delivery_address?: string;
+  reference_no?: string;
+  customer_reference?: string;
+  send_by?: string;
+  price_group?: string;
+  credit_limit?: number;
+  terms?: string;
+  promise_to_pay?: string;
+  po_number?: string;
+  remarks?: string;
+  inquiry_type?: string;
+  urgency?: string;
+  urgency_date?: string;
+  grand_total: number;
+  status: DeliveryReceiptStatus;
+  printed_at?: string;
+  printed_by?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  is_deleted: boolean;
+  deleted_at?: string;
+  items?: DeliveryReceiptItem[];
+  contact?: { company: string };
+  sales_order?: { order_no: string };
+}
+
+export interface DeliveryReceiptDTO {
+  order_id?: string;
+  contact_id: string;
+  sales_date: string;
+  sales_person?: string;
+  delivery_address?: string;
+  reference_no?: string;
+  customer_reference?: string;
+  send_by?: string;
+  price_group?: string;
+  credit_limit?: number;
+  terms?: string;
+  promise_to_pay?: string;
+  po_number?: string;
+  remarks?: string;
+  inquiry_type?: string;
+  urgency?: string;
+  urgency_date?: string;
+  status?: DeliveryReceiptStatus;
+  items: Omit<DeliveryReceiptItem, 'id' | 'dr_id' | 'created_at' | 'updated_at'>[];
+}
+
+export interface SalesReportFilters {
+  dateFrom: string;
+  dateTo: string;
+  customerId: string | 'all';
+}
+
+export interface SalesReportTransaction {
+  id: string;
+  date: string;
+  customer: string;
+  customerId: string;
+  terms: string;
+  refNo: string;
+  soNo: string;
+  soAmount: number;
+  drAmount: number;
+  invoiceAmount: number;
+  salesperson: string;
+  category: string;
+  vatType: 'exclusive' | 'inclusive' | null;
+  type: 'invoice' | 'dr';
+  orderSlipAmount?: number;
+}
+
+export interface CategoryTotal {
+  category: string;
+  soAmount: number;
+  drAmount: number;
+  invoiceAmount: number;
+}
+
+export interface SalespersonTotal {
+  salesperson: string;
+  categories: CategoryTotal[];
+  total: number;
+}
+
+export interface GrandTotal {
+  soAmount: number;
+  drAmount: number;
+  invoiceAmount: number;
+  total: number;
+}
+
+export interface SalesReportSummary {
+  categoryTotals: CategoryTotal[];
+  salespersonTotals: SalespersonTotal[];
+  grandTotal: GrandTotal;
+}
+
+export interface SalesReportData {
+  transactions: SalesReportTransaction[];
+  summary: SalesReportSummary;
+}
+
+export interface CustomerOption {
+  id: string;
+  company: string;
+}
+
+export type MovementCategory = 'fast' | 'slow';
+
+export interface FastSlowMovementItem {
+  item_id: string;
+  part_no: string;
+  item_code: string;
+  description: string;
+  first_arrival_date: string | null;
+  total_purchased: number;
+  total_sold: number;
+  month1_sales: number;
+  month2_sales: number;
+  month3_sales: number;
+  month1_label: string;
+  month2_label: string;
+  month3_label: string;
+  category: MovementCategory;
+}
+
+export interface FastSlowReportFilters {
+  sortBy: 'sales_volume' | 'part_no';
+  sortDirection: 'asc' | 'desc';
+}
+
+export interface FastSlowReportData {
+  fastMovingItems: FastSlowMovementItem[];
+  slowMovingItems: FastSlowMovementItem[];
+  generatedAt: string;
+}
+
+export type InventoryAuditTimePeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+export interface InventoryAuditFilters {
+  timePeriod: InventoryAuditTimePeriod;
+  dateFrom?: string;
+  dateTo?: string;
+  partNo?: string;
+  itemCode?: string;
+}
+
+export interface InventoryAuditRecord {
+  id: string;
+  item_id: string;
+  item_code: string;
+  part_no: string;
+  description: string;
+  brand: string;
+  adjustment_date: string;
+  adjustment_type: 'physical_count' | 'damage' | 'correction';
+  adjustment_no: string;
+  warehouse_id: string;
+  system_qty: number;
+  physical_qty: number;
+  difference: number;
+  reason: string;
+  processed_by: string;
+  processor_name?: string;
+  notes?: string;
+}
+
+export interface InventoryAuditReportData {
+  records: InventoryAuditRecord[];
+  totalAdjustments: number;
+  totalPositive: number;
+  totalNegative: number;
+  generatedAt: string;
+  filters: InventoryAuditFilters;
+}
