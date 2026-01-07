@@ -401,6 +401,7 @@ export interface Product {
   price_dd: number;
   price_vip1: number;
   price_vip2: number;
+  cost?: number;
 
   // Warehouse Stocks
   stock_wh1: number;

@@ -39,6 +39,7 @@ import ManagementView from './components/ManagementView';
 import RecycleBinView from './components/RecycleBinView';
 import ReportsView from './components/ReportsView';
 import PurchaseOrderView from './components/PurchaseOrderView';
+import ReceivingStock from './components/ReceivingStock';
 import PurchaseRequestModule from './components/PurchaseRequest';
 
 import { supabase } from './lib/supabaseClient';
@@ -323,7 +324,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'warehouse-purchasing-receiving-stock':
-        return renderComingSoon('Receiving Stock');
+        return (
+          <div className="h-full overflow-y-auto">
+            <ReceivingStock />
+          </div>
+        );
       case 'warehouse-purchasing-return-to-supplier':
         return renderComingSoon('Return to Supplier');
       case 'warehouse-reports-inventory-report':
