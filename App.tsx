@@ -41,6 +41,7 @@ import ReportsView from './components/ReportsView';
 import PurchaseOrderView from './components/PurchaseOrderView';
 import ReceivingStock from './components/ReceivingStock';
 import PurchaseRequestModule from './components/PurchaseRequest';
+import ReturnToSupplier from './components/ReturnToSupplier';
 
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
@@ -330,7 +331,11 @@ const App: React.FC = () => {
           </div>
         );
       case 'warehouse-purchasing-return-to-supplier':
-        return renderComingSoon('Return to Supplier');
+        return (
+          <div className="h-full overflow-y-auto">
+            <ReturnToSupplier />
+          </div>
+        );
       case 'warehouse-reports-inventory-report':
         return (
           <div className="h-full overflow-y-auto">
