@@ -39,6 +39,8 @@ import ManagementView from './components/ManagementView';
 import RecycleBinView from './components/RecycleBinView';
 import ReportsView from './components/ReportsView';
 import PurchaseOrderView from './components/PurchaseOrderView';
+import PurchaseRequestModule from './components/PurchaseRequest';
+
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
@@ -308,7 +310,7 @@ const App: React.FC = () => {
           </div>
         );
       case 'warehouse-purchasing-purchase-request':
-        return renderComingSoon('Purchase Request');
+        return <PurchaseRequestModule />;
       case 'warehouse-purchasing-purchase-order':
         return (
           <div className="h-full overflow-y-auto">
