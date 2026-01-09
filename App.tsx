@@ -43,6 +43,20 @@ import ReceivingStock from './components/ReceivingStock';
 import PurchaseRequestModule from './components/PurchaseRequest';
 import ReturnToSupplier from './components/ReturnToSupplier';
 
+// Maintenance Modules
+import Suppliers from './components/Maintenance/Product/Suppliers';
+import Categories from './components/Maintenance/Product/Categories';
+import Couriers from './components/Maintenance/Product/Couriers';
+import RemarkTemplates from './components/Maintenance/Product/RemarkTemplates';
+import Teams from './components/Maintenance/Profile/Teams';
+import Approvers from './components/Maintenance/Profile/Approvers';
+import Staff from './components/Maintenance/Profile/Staff';
+import CustomerGroups from './components/Maintenance/Customer/CustomerGroups';
+import { CustomerData } from './components/Maintenance/Customer/CustomerData';
+import { Pipeline } from './components/Maintenance/Customer/Pipeline';
+import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
+import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
+
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
@@ -278,7 +292,7 @@ const App: React.FC = () => {
         return <PipelineView currentUser={userProfile} />;
       case 'staff':
       case 'maintenance-profile-staff':
-        return <StaffView />;
+        return <Staff />;
       case 'products':
       case 'warehouse-inventory-product-database':
         return (
@@ -478,7 +492,7 @@ const App: React.FC = () => {
       case 'maintenance-customer-customer-data':
         return (
           <div className="h-full overflow-y-auto">
-            <CustomerDatabase />
+            <CustomerData />
           </div>
         );
       case 'maintenance-customer-daily-call-monitoring': {
@@ -490,29 +504,29 @@ const App: React.FC = () => {
         );
       }
       case 'maintenance-customer-customer-group':
-        return renderComingSoon('Customer Group');
+        return <CustomerGroups />;
       case 'maintenance-customer-pipeline':
-        return <PipelineView currentUser={userProfile} />;
+        return <Pipeline />;
       case 'maintenance-product-suppliers':
-        return renderComingSoon('Suppliers');
+        return <Suppliers />;
       case 'maintenance-product-special-price':
-        return renderComingSoon('Special Price');
+        return <SpecialPrice />;
       case 'maintenance-product-category-management':
-        return renderComingSoon('Category Management');
+        return <Categories />;
       case 'maintenance-product-courier-management':
-        return renderComingSoon('Courier Management');
+        return <Couriers />;
       case 'maintenance-product-remark-templates':
-        return renderComingSoon('Remark Templates');
+        return <RemarkTemplates />;
       case 'maintenance-profile-team':
         return (
           <div className="h-full overflow-y-auto">
-            <ManagementView currentUser={userProfile} />
+            <Teams />
           </div>
         );
       case 'maintenance-profile-approver':
-        return renderComingSoon('Approver');
+        return <Approvers />;
       case 'maintenance-profile-activity-logs':
-        return renderComingSoon('Activity Logs');
+        return <ActivityLogs />;
       case 'recyclebin':
       case 'maintenance-profile-server-maintenance':
         return (
