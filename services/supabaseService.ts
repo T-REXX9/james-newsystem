@@ -1138,7 +1138,7 @@ export const createIncidentReport = async (report: CreateIncidentReportInput) =>
   }
 };
 
-// Fetch all transactions for a contact (for incident report attachment)
+// Fetch all transactions for a contact (for incident report attachment and customer history)
 export const fetchContactTransactions = async (contactId: string) => {
   try {
     const transactions: any[] = [];
@@ -1146,7 +1146,7 @@ export const fetchContactTransactions = async (contactId: string) => {
     // Fetch Sales Inquiries
     const { data: inquiries } = await supabase
       .from('sales_inquiries')
-      .select('id, inquiry_no, sales_date, grand_total')
+      .select('id, inquiry_no, sales_date, grand_total, status')
       .eq('contact_id', contactId)
       .eq('is_deleted', false)
       .order('sales_date', { ascending: false });
@@ -1158,6 +1158,7 @@ export const fetchContactTransactions = async (contactId: string) => {
         number: inq.inquiry_no,
         date: inq.sales_date,
         amount: inq.grand_total,
+        status: inq.status, // e.g. 'Draft', 'Converted'
         label: `Inquiry ${inq.inquiry_no}`
       })));
     }
@@ -1165,7 +1166,7 @@ export const fetchContactTransactions = async (contactId: string) => {
     // Fetch Sales Orders
     const { data: orders } = await supabase
       .from('sales_orders')
-      .select('id, order_no, sales_date, grand_total')
+      .select('id, order_no, sales_date, grand_total, status')
       .eq('contact_id', contactId)
       .eq('is_deleted', false)
       .order('sales_date', { ascending: false });
@@ -1177,52 +1178,56 @@ export const fetchContactTransactions = async (contactId: string) => {
         number: order.order_no,
         date: order.sales_date,
         amount: order.grand_total,
+        status: order.status,
         label: `Order ${order.order_no}`
       })));
     }
 
     // Fetch Order Slips
-    const { data: slips } = await supabase
+    const { data: slips } = await (supabase
       .from('order_slips')
-      .select('id, slip_no, sales_date, grand_total')
-      .eq('contact_id', contactId)
+      .select('id, os_number, date, grand_total, status') as any) // Type assertion to bypass incorrect schema inference
+      .eq('customer_id', contactId)
       .eq('is_deleted', false)
-      .order('sales_date', { ascending: false });
+      .order('date', { ascending: false });
 
     if (slips) {
-      transactions.push(...slips.map(slip => ({
+      transactions.push(...(slips as any[]).map(slip => ({
         id: slip.id,
         type: 'order_slip',
-        number: slip.slip_no,
-        date: slip.sales_date,
+        number: slip.os_number,
+        date: slip.date,
         amount: slip.grand_total,
-        label: `Order Slip ${slip.slip_no}`
+        status: slip.status,
+        label: `Order Slip ${slip.os_number}`
       })));
     }
 
     // Fetch Invoices
-    const { data: invoices } = await supabase
+    const { data: invoices } = await (supabase
       .from('invoices')
-      .select('id, invoice_no, sales_date, grand_total')
+      .select('id, invoice_number, invoice_date, total_amount, status, amount_paid, balance') as any) // Type assertion to bypass incorrect schema inference
       .eq('contact_id', contactId)
       .eq('is_deleted', false)
-      .order('sales_date', { ascending: false });
+      .order('invoice_date', { ascending: false });
 
     if (invoices) {
-      transactions.push(...invoices.map(inv => ({
+      transactions.push(...(invoices as any[]).map(inv => ({
         id: inv.id,
         type: 'invoice',
-        number: inv.invoice_no,
-        date: inv.sales_date,
-        amount: inv.grand_total,
-        label: `Invoice ${inv.invoice_no}`
+        number: inv.invoice_number,
+        date: inv.invoice_date,
+        amount: inv.total_amount,
+        status: inv.status,
+        balance: inv.balance,
+        label: `Invoice ${inv.invoice_number}`
       })));
     }
 
-    // Fetch Purchase History
+    // Fetch Purchase History (Legacy/Manual entries)
     const { data: purchases } = await supabase
       .from('purchase_history')
-      .select('id, invoice_number, purchase_date, total_amount')
+      .select('id, invoice_number, purchase_date, total_amount, payment_status')
       .eq('contact_id', contactId)
       .order('purchase_date', { ascending: false });
 
@@ -1233,6 +1238,7 @@ export const fetchContactTransactions = async (contactId: string) => {
         number: purchase.invoice_number || `PH-${purchase.id.substring(0, 8)}`,
         date: purchase.purchase_date,
         amount: purchase.total_amount,
+        status: purchase.payment_status,
         label: `Purchase ${purchase.invoice_number || purchase.id.substring(0, 8)}`
       })));
     }
@@ -2198,6 +2204,18 @@ export const fetchAgentPerformanceSummary = async (agentId: string, startDate: s
 
     if (purchaseError) throw purchaseError;
 
+    // Fetch sales returns
+    const { data: returnsData, error: returnsError } = await supabase
+      .from('supplier_returns' as any)
+      .select('*')
+      .select('*')
+      .eq('supplier_id', agentId); // Assuming agent ID might be used, or we need another way to link returns to agents if needed.
+    // However, for the agent summary, we usually focus on sales.
+    // If we need returns for the agent, we might need to look at returns linked to their customers.
+
+    // For now, let's stick to the purchase data for sales.
+
+
     // Filter purchases by agent (salesman field)
     const agentPurchases = (purchaseData || []).filter((p: any) => {
       const contact = Array.isArray(p.contacts) ? p.contacts[0] : p.contacts;
@@ -2454,5 +2472,53 @@ export function subscribeToTeamMessages(callbacks: TableSubscriptionCallbacks<Te
 export function subscribeToDeals(callbacks: TableSubscriptionCallbacks<PipelineDeal>): () => void {
   return subscribeToTable<PipelineDeal>('deals', callbacks);
 }
+
+export const createCallLog = async (log: Omit<CallLogEntry, 'id'>): Promise<CallLogEntry | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('call_logs')
+      .insert([log])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as CallLogEntry;
+  } catch (error) {
+    console.error('Error creating call log:', error);
+    return null;
+  }
+};
+
+export const fetchCallLogsByContact = async (contactId: string): Promise<CallLogEntry[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('call_logs')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('occurred_at', { ascending: false });
+
+    if (error) throw error;
+    return (data as unknown as CallLogEntry[]) || [];
+  } catch (error) {
+    console.error('Error fetching call logs for contact:', error);
+    return [];
+  }
+};
+
+export const fetchInquiriesByContact = async (contactId: string): Promise<Inquiry[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('inquiries')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('occurred_at', { ascending: false });
+
+    if (error) throw error;
+    return (data as unknown as Inquiry[]) || [];
+  } catch (error) {
+    console.error('Error fetching inquiries for contact:', error);
+    return [];
+  }
+};
 
 export { supabase };

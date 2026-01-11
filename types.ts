@@ -469,7 +469,7 @@ export interface ReorderReportEntry {
 }
 
 // --- Daily Call Monitoring Types ---
-export type CallOutcome = 'follow_up' | 'positive' | 'negative' | 'other';
+export type CallOutcome = 'follow_up' | 'positive' | 'negative' | 'note' | 'other';
 
 export interface CallLogEntry {
   id: string;

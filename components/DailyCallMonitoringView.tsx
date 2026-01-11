@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
+import PatientChartModal from './PatientChartModal';
 import {
   countCallLogsByChannelInRange,
   countCallLogsInRange,
@@ -213,6 +214,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     inactivePositive: false,
     prospectivePositive: false
   });
+  const [showPatientChart, setShowPatientChart] = useState(false);
+
+  const handleOpenPatientChart = (contactId: string) => {
+    setSelectedClientId(contactId);
+    setShowPatientChart(true);
+  };
 
   const agentDataName = currentUser?.full_name?.trim() || null;
   const agentDisplayName = useMemo(() => {
@@ -1042,7 +1049,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                         <div className="flex flex-wrap gap-2">
                           <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-brand-blue/10 text-brand-blue">Call</button>
                           <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-600">SMS</button>
-                          <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenPatientChart(row.contact.id);
+                            }}
+                            className="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-blue hover:text-white transition-colors"
+                          >
                             Details
                           </button>
                         </div>
@@ -1285,13 +1298,23 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                         <p className="text-xs text-slate-500 dark:text-slate-400">{selectedClient.province}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setSelectedClientId(null)}
-                      className="p-1 rounded-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
-                      aria-label="Close client panel"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowPatientChart(true)}
+                        className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-brand-blue transition-colors"
+                        title="Open Patient Chart"
+                      >
+                        <ClipboardList className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => setSelectedClientId(null)}
+                        className="p-1 rounded-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
+                        aria-label="Close client panel"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-3 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                     <span className={`px-2 py-0.5 rounded-full font-semibold ${statusBadgeClasses(selectedClient.status)}`}>
@@ -1419,6 +1442,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </div>
         </div>
       </section>
+
+      {showPatientChart && selectedClient && (
+        <PatientChartModal
+          contact={selectedClient}
+          currentUser={currentUser}
+          onClose={() => setShowPatientChart(false)}
+        />
+      )}
     </div>
   );
 };
