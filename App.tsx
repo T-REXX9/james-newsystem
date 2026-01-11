@@ -465,7 +465,8 @@ const App: React.FC = () => {
         return renderComingSoon('Inactive/Active Customers');
       case 'accounting-reports-old-new-customers':
         return renderComingSoon('Old/New Customers');
-      case 'accounting-reports-daily-calls-monitoring': {
+
+      case 'sales-transaction-daily-call-monitoring': {
         const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
         return isSalesAgent ? (
           <DailyCallMonitoringView currentUser={userProfile} />
@@ -495,14 +496,7 @@ const App: React.FC = () => {
             <CustomerData />
           </div>
         );
-      case 'maintenance-customer-daily-call-monitoring': {
-        const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
-        return isSalesAgent ? (
-          <DailyCallMonitoringView currentUser={userProfile} />
-        ) : (
-          <OwnerLiveCallMonitoringView currentUser={userProfile} />
-        );
-      }
+
       case 'maintenance-customer-customer-group':
         return <CustomerGroups />;
       case 'maintenance-customer-pipeline':

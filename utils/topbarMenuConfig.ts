@@ -174,6 +174,12 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             route: 'sales-transaction-invoice',
             icon: FileText,
           },
+          {
+            id: 'sales-transaction-daily-call-monitoring',
+            label: 'Daily Call Monitoring',
+            route: 'sales-transaction-daily-call-monitoring',
+            icon: Users,
+          },
         ],
       },
       {
@@ -305,12 +311,7 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             route: 'accounting-reports-old-new-customers',
             icon: FileText,
           },
-          {
-            id: 'accounting-reports-daily-calls-monitoring',
-            label: 'Daily Calls Monitoring',
-            route: 'accounting-reports-daily-calls-monitoring',
-            icon: FileText,
-          },
+
         ],
       },
     ],
@@ -331,12 +332,7 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             route: 'maintenance-customer-customer-data',
             icon: Users,
           },
-          {
-            id: 'maintenance-customer-daily-call-monitoring',
-            label: 'Daily Call Monitoring',
-            route: 'maintenance-customer-daily-call-monitoring',
-            icon: Users,
-          },
+
           {
             id: 'maintenance-customer-customer-group',
             label: 'Customer Group',

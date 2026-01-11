@@ -43,7 +43,8 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'accounting-reports-purchase-history',
   'accounting-reports-inactive-active-customers',
   'accounting-reports-old-new-customers',
-  'accounting-reports-daily-calls-monitoring',
+  'accounting-reports-old-new-customers',
+  'sales-transaction-daily-call-monitoring',
   'communication-messaging-inbox',
   'communication-text-menu-text-messages',
   'communication-text-menu-inbox',
@@ -55,7 +56,7 @@ export const DEFAULT_STAFF_ACCESS_RIGHTS = [
   'communication-productivity-daily-call-monitoring',
   'communication-productivity-tasks',
   'maintenance-customer-customer-data',
-  'maintenance-customer-daily-call-monitoring',
+
   'maintenance-customer-customer-group',
   'maintenance-customer-pipeline',
   'maintenance-product-suppliers',
@@ -122,9 +123,9 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'accounting-reports-purchase-history', label: 'Purchase History' },
   { id: 'accounting-reports-inactive-active-customers', label: 'Inactive/Active Customers' },
   { id: 'accounting-reports-old-new-customers', label: 'Old/New Customers' },
-  { id: 'accounting-reports-daily-calls-monitoring', label: 'Daily Calls Monitoring' },
+  { id: 'sales-transaction-daily-call-monitoring', label: 'Daily Call Monitoring' },
   { id: 'maintenance-customer-customer-data', label: 'Customer Data' },
-  { id: 'maintenance-customer-daily-call-monitoring', label: 'Daily Call Monitoring' },
+
   { id: 'maintenance-customer-customer-group', label: 'Customer Group' },
   { id: 'maintenance-customer-pipeline', label: 'Pipeline' },
   { id: 'maintenance-product-suppliers', label: 'Suppliers' },
@@ -168,7 +169,7 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   management: 'sales-performance-management-dashboard',
   mail: 'communication-messaging-inbox',
   calendar: 'communication-productivity-calendar',
-  calls: 'communication-productivity-daily-call-monitoring',
+  calls: 'sales-transaction-daily-call-monitoring',
   tasks: 'communication-productivity-tasks',
   recyclebin: 'maintenance-profile-server-maintenance',
   settings: 'maintenance-profile-system-access',
@@ -177,7 +178,9 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   'maintenance-system-recycle-bin': 'maintenance-profile-server-maintenance',
   'maintenance-system-settings-permissions': 'maintenance-profile-system-access',
   'accounting-reports-overview': 'accounting-reports-accounting-overview',
-  'accounting-reports-daily-calls-monitoring': 'accounting-reports-daily-calls-monitoring',
+
+  'accounting-reports-daily-calls-monitoring': 'sales-transaction-daily-call-monitoring',
+  'maintenance-customer-daily-call-monitoring': 'sales-transaction-daily-call-monitoring',
 };
 
 // Sidebar keyboard shortcuts
@@ -501,7 +504,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Bad',
     comment: 'Consistent orders but slow pay.',
     contactPersons: [
-        { id: 'cp1', enabled: true, name: 'Geraldine Concepcion', position: 'Owner', birthday: '1985-05-12', telephone: '', mobile: '0917-8869038', email: 'geraldine@3jds.com' }
+      { id: 'cp1', enabled: true, name: 'Geraldine Concepcion', position: 'Owner', birthday: '1985-05-12', telephone: '', mobile: '0917-8869038', email: 'geraldine@3jds.com' }
     ],
     // Legacy mapping
     name: 'Geraldine Concepcion',
@@ -551,7 +554,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'Top tier client.',
     contactPersons: [
-        { id: 'cp2', enabled: true, name: 'Glorian Iniego Cabana', position: 'Owner', birthday: '', telephone: '', mobile: '09176587765', email: '' }
+      { id: 'cp2', enabled: true, name: 'Glorian Iniego Cabana', position: 'Owner', birthday: '', telephone: '', mobile: '09176587765', email: '' }
     ],
     // Legacy
     name: 'GLORIAN INIEGO CABANA',
@@ -601,7 +604,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'Seasonal buyer',
     contactPersons: [
-        { id: 'cp3', enabled: true, name: 'Richard A. Penaflor', position: 'Manager', birthday: '', telephone: '0917-1271456', mobile: '0950-4145 264', email: '' }
+      { id: 'cp3', enabled: true, name: 'Richard A. Penaflor', position: 'Manager', birthday: '', telephone: '0917-1271456', mobile: '0950-4145 264', email: '' }
     ],
     // Legacy
     name: 'RICHARD A. PENAFLOR',
@@ -650,7 +653,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Bad',
     comment: 'Do not sell until balance paid',
     contactPersons: [
-        { id: 'cp4', enabled: true, name: 'Mohatmen Sultan', position: 'Owner', birthday: '', telephone: '', mobile: '09464377575', email: '' }
+      { id: 'cp4', enabled: true, name: 'Mohatmen Sultan', position: 'Owner', birthday: '', telephone: '', mobile: '09464377575', email: '' }
     ],
     // Legacy
     name: 'MOHATMEN SULTAN',
@@ -700,7 +703,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'Potential for high volume',
     contactPersons: [
-        { id: 'cp5', enabled: true, name: 'Rafael Amboy', position: 'Owner', birthday: '', telephone: '', mobile: '09175183332', email: '' }
+      { id: 'cp5', enabled: true, name: 'Rafael Amboy', position: 'Owner', birthday: '', telephone: '', mobile: '09175183332', email: '' }
     ],
     // Legacy
     name: 'RAFAEL AMBOY',
@@ -750,7 +753,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'High volume buyer for consumables.',
     contactPersons: [
-        { id: 'cp6', enabled: true, name: 'Lorenzo Tan', position: 'Owner', birthday: '1978-04-02', telephone: '02-8123456', mobile: '0917-100-0200', email: 'lorenzo@banaweauto.com' }
+      { id: 'cp6', enabled: true, name: 'Lorenzo Tan', position: 'Owner', birthday: '1978-04-02', telephone: '02-8123456', mobile: '0917-100-0200', email: 'lorenzo@banaweauto.com' }
     ],
     name: 'Lorenzo Tan',
     title: 'Owner',
@@ -800,7 +803,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'Strong seasonal purchases for festivals.',
     contactPersons: [
-        { id: 'cp7', enabled: true, name: 'Elena Cruz', position: 'General Manager', birthday: '', telephone: '', mobile: '0917-555-2010', email: 'elena@cebucarcare.ph' }
+      { id: 'cp7', enabled: true, name: 'Elena Cruz', position: 'General Manager', birthday: '', telephone: '', mobile: '0917-555-2010', email: 'elena@cebucarcare.ph' }
     ],
     name: 'Elena Cruz',
     title: 'General Manager',
@@ -850,7 +853,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'Buys high-margin suspension kits monthly.',
     contactPersons: [
-        { id: 'cp8', enabled: true, name: 'Dennis Uy', position: 'Owner', birthday: '', telephone: '', mobile: '0919-991-1221', email: 'dennis@davao4x4.ph' }
+      { id: 'cp8', enabled: true, name: 'Dennis Uy', position: 'Owner', birthday: '', telephone: '', mobile: '0919-991-1221', email: 'dennis@davao4x4.ph' }
     ],
     name: 'Dennis Uy',
     title: 'Owner',
@@ -900,7 +903,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'Requires SLA compliance for urgent deliveries.',
     contactPersons: [
-        { id: 'cp9', enabled: true, name: 'Vico Sotto', position: 'Managing Partner', birthday: '1989-06-17', telephone: '', mobile: '0917-454-8899', email: 'vico@pasigrapid.com' }
+      { id: 'cp9', enabled: true, name: 'Vico Sotto', position: 'Managing Partner', birthday: '1989-06-17', telephone: '', mobile: '0917-454-8899', email: 'vico@pasigrapid.com' }
     ],
     name: 'Vico Sotto',
     title: 'Managing Partner',
@@ -950,7 +953,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'New account ramping up ceramic coating kits.',
     contactPersons: [
-        { id: 'cp10', enabled: true, name: 'Mara Laurel', position: 'Owner', birthday: '', telephone: '', mobile: '0918-884-5123', email: 'mara@qcautohub.ph' }
+      { id: 'cp10', enabled: true, name: 'Mara Laurel', position: 'Owner', birthday: '', telephone: '', mobile: '0918-884-5123', email: 'mara@qcautohub.ph' }
     ],
     name: 'Mara Laurel',
     title: 'Owner',
@@ -1000,7 +1003,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'Paused while facility renovates.',
     contactPersons: [
-        { id: 'cp11', enabled: true, name: 'Rafael Dizon', position: 'Owner', birthday: '', telephone: '', mobile: '0917-611-8899', email: 'rafael@iloilodiesel.ph' }
+      { id: 'cp11', enabled: true, name: 'Rafael Dizon', position: 'Owner', birthday: '', telephone: '', mobile: '0917-611-8899', email: 'rafael@iloilodiesel.ph' }
     ],
     name: 'Rafael Dizon',
     title: 'Owner',
@@ -1050,7 +1053,7 @@ export const MOCK_CONTACTS: Contact[] = [
     debtType: 'Good',
     comment: 'Handles provincial government units.',
     contactPersons: [
-        { id: 'cp12', enabled: true, name: 'Gerard Ramos', position: 'Operations Head', birthday: '', telephone: '', mobile: '0917-881-4433', email: 'gerard@bulacanfleet.ph' }
+      { id: 'cp12', enabled: true, name: 'Gerard Ramos', position: 'Operations Head', birthday: '', telephone: '', mobile: '0917-881-4433', email: 'gerard@bulacanfleet.ph' }
     ],
     name: 'Gerard Ramos',
     title: 'Operations Head',
@@ -1074,152 +1077,152 @@ export const MOCK_CONTACTS: Contact[] = [
 ];
 
 export const MOCK_AGENTS = [
-  { 
-    id: 'a1', 
-    name: 'James Quek', 
-    role: 'Owner', 
-    avatar: 'https://i.pravatar.cc/150?u=james', 
-    activeClients: 12, 
+  {
+    id: 'a1',
+    name: 'James Quek',
+    role: 'Owner',
+    avatar: 'https://i.pravatar.cc/150?u=james',
+    activeClients: 12,
     salesThisMonth: 5600000,
     callsThisWeek: 45,
     conversionRate: 68
   },
-  { 
-    id: 'a2', 
-    name: 'Sarah Sales', 
-    role: 'Senior Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=sarah', 
-    activeClients: 28, 
+  {
+    id: 'a2',
+    name: 'Sarah Sales',
+    role: 'Senior Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=sarah',
+    activeClients: 28,
     salesThisMonth: 2100000,
     callsThisWeek: 112,
     conversionRate: 42
   },
-  { 
-    id: 'a3', 
-    name: 'Esther Van', 
-    role: 'Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=esther', 
-    activeClients: 15, 
+  {
+    id: 'a3',
+    name: 'Esther Van',
+    role: 'Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=esther',
+    activeClients: 15,
     salesThisMonth: 950000,
     callsThisWeek: 88,
     conversionRate: 35
   },
-  { 
-    id: 'a4', 
-    name: 'Corbin Dallas', 
-    role: 'Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=corbin', 
-    activeClients: 9, 
+  {
+    id: 'a4',
+    name: 'Corbin Dallas',
+    role: 'Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=corbin',
+    activeClients: 9,
     salesThisMonth: 150000,
     callsThisWeek: 120,
     conversionRate: 12
   },
-  { 
-    id: 'a5', 
-    name: 'Anna Smith', 
-    role: 'Junior Associate', 
-    avatar: 'https://i.pravatar.cc/150?u=anna', 
-    activeClients: 5, 
+  {
+    id: 'a5',
+    name: 'Anna Smith',
+    role: 'Junior Associate',
+    avatar: 'https://i.pravatar.cc/150?u=anna',
+    activeClients: 5,
     salesThisMonth: 0,
     callsThisWeek: 150,
     conversionRate: 5
   },
-  { 
-    id: 'a6', 
-    name: 'Miguel Santos', 
-    role: 'Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=miguel', 
-    activeClients: 18, 
+  {
+    id: 'a6',
+    name: 'Miguel Santos',
+    role: 'Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=miguel',
+    activeClients: 18,
     salesThisMonth: 1250000,
     callsThisWeek: 95,
     conversionRate: 28
   },
-  { 
-    id: 'a7', 
-    name: 'Sofia Reyes', 
-    role: 'Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=sofia', 
-    activeClients: 22, 
+  {
+    id: 'a7',
+    name: 'Sofia Reyes',
+    role: 'Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=sofia',
+    activeClients: 22,
     salesThisMonth: 1800000,
     callsThisWeek: 105,
     conversionRate: 33
   },
-  { 
-    id: 'a8', 
-    name: 'Luis Rivera', 
-    role: 'Junior Associate', 
-    avatar: 'https://i.pravatar.cc/150?u=luis', 
-    activeClients: 8, 
+  {
+    id: 'a8',
+    name: 'Luis Rivera',
+    role: 'Junior Associate',
+    avatar: 'https://i.pravatar.cc/150?u=luis',
+    activeClients: 8,
     salesThisMonth: 350000,
     callsThisWeek: 140,
     conversionRate: 15
   },
-  { 
-    id: 'a9', 
-    name: 'Carmen Luna', 
-    role: 'Senior Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=carmen', 
-    activeClients: 35, 
+  {
+    id: 'a9',
+    name: 'Carmen Luna',
+    role: 'Senior Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=carmen',
+    activeClients: 35,
     salesThisMonth: 2900000,
     callsThisWeek: 80,
     conversionRate: 55
   },
-  { 
-    id: 'a10', 
-    name: 'Diego Garcia', 
-    role: 'Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=diego', 
-    activeClients: 14, 
+  {
+    id: 'a10',
+    name: 'Diego Garcia',
+    role: 'Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=diego',
+    activeClients: 14,
     salesThisMonth: 850000,
     callsThisWeek: 110,
     conversionRate: 22
   },
-  { 
-    id: 'a11', 
-    name: 'Isabella Cruz', 
-    role: 'Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=isabella', 
-    activeClients: 19, 
+  {
+    id: 'a11',
+    name: 'Isabella Cruz',
+    role: 'Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=isabella',
+    activeClients: 19,
     salesThisMonth: 1450000,
     callsThisWeek: 92,
     conversionRate: 30
   },
-  { 
-    id: 'a12', 
-    name: 'Rafael Torres', 
-    role: 'Junior Associate', 
-    avatar: 'https://i.pravatar.cc/150?u=rafael', 
-    activeClients: 6, 
+  {
+    id: 'a12',
+    name: 'Rafael Torres',
+    role: 'Junior Associate',
+    avatar: 'https://i.pravatar.cc/150?u=rafael',
+    activeClients: 6,
     salesThisMonth: 120000,
     callsThisWeek: 160,
     conversionRate: 8
   },
-  { 
-    id: 'a13', 
-    name: 'Maria Fernandez', 
-    role: 'Senior Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=maria_f', 
-    activeClients: 42, 
+  {
+    id: 'a13',
+    name: 'Maria Fernandez',
+    role: 'Senior Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=maria_f',
+    activeClients: 42,
     salesThisMonth: 3200000,
     callsThisWeek: 75,
     conversionRate: 62
   },
-  { 
-    id: 'a14', 
-    name: 'Antonio Mendoza', 
-    role: 'Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=antonio', 
-    activeClients: 16, 
+  {
+    id: 'a14',
+    name: 'Antonio Mendoza',
+    role: 'Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=antonio',
+    activeClients: 16,
     salesThisMonth: 980000,
     callsThisWeek: 100,
     conversionRate: 25
   },
-  { 
-    id: 'a15', 
-    name: 'Gabriela Diaz', 
-    role: 'Sales Agent', 
-    avatar: 'https://i.pravatar.cc/150?u=gabriela', 
-    activeClients: 25, 
+  {
+    id: 'a15',
+    name: 'Gabriela Diaz',
+    role: 'Sales Agent',
+    avatar: 'https://i.pravatar.cc/150?u=gabriela',
+    activeClients: 25,
     salesThisMonth: 2100000,
     callsThisWeek: 98,
     conversionRate: 38
@@ -1250,10 +1253,10 @@ export const MOCK_CALL_LOGS: CallLog[] = [
 ];
 
 export const REPORT_PIE_DATA = [
-  { name: 'Metro Manila Shops', value: 45.0, color: '#0F5298' }, 
-  { name: 'Luzon Provincial', value: 25.0, color: '#3b82f6' }, 
-  { name: 'Visayas Dealers', value: 18.0, color: '#60a5fa' }, 
-  { name: 'Mindanao Dealers', value: 12.0, color: '#93c5fd' }, 
+  { name: 'Metro Manila Shops', value: 45.0, color: '#0F5298' },
+  { name: 'Luzon Provincial', value: 25.0, color: '#3b82f6' },
+  { name: 'Visayas Dealers', value: 18.0, color: '#60a5fa' },
+  { name: 'Mindanao Dealers', value: 12.0, color: '#93c5fd' },
 ];
 
 export const REPORT_BAR_DATA = [
@@ -1276,10 +1279,10 @@ export const TOP_PRODUCTS_DATA = [
 ];
 
 export const PIPELINE_COLUMNS: PipelineColumn[] = [
-  { 
-    id: 'prospective', 
-    title: 'Qualification', 
-    color: 'text-amber-600', 
+  {
+    id: 'prospective',
+    title: 'Qualification',
+    color: 'text-amber-600',
     accentColor: '#d97706',
     probability: 0.1,
     entryCriteria: 'Intent captured / inbound signal',
@@ -1287,10 +1290,10 @@ export const PIPELINE_COLUMNS: PipelineColumn[] = [
     keyActivities: ['Document pain points', 'Map stakeholders', 'Confirm budget & timeline'],
     rootingDays: 5
   },
-  { 
-    id: 'active', 
-    title: 'Proposal', 
-    color: 'text-emerald-600', 
+  {
+    id: 'active',
+    title: 'Proposal',
+    color: 'text-emerald-600',
     accentColor: '#059669',
     probability: 0.6,
     entryCriteria: 'Solution validated with buyer',
@@ -1298,10 +1301,10 @@ export const PIPELINE_COLUMNS: PipelineColumn[] = [
     keyActivities: ['Customize proposal', 'Align value to metrics', 'Secure EB review'],
     rootingDays: 10
   },
-  { 
-    id: 'inactive', 
-    title: 'Negotiation', 
-    color: 'text-slate-500', 
+  {
+    id: 'inactive',
+    title: 'Negotiation',
+    color: 'text-slate-500',
     accentColor: '#64748b',
     probability: 0.8,
     entryCriteria: 'Buyer in pricing/legal review',
@@ -1309,10 +1312,10 @@ export const PIPELINE_COLUMNS: PipelineColumn[] = [
     keyActivities: ['Handle objections', 'Align legal/procurement', 'Reconfirm ROI'],
     rootingDays: 7
   },
-  { 
-    id: 'blacklisted', 
-    title: 'Closed Lost / Blocked', 
-    color: 'text-rose-600', 
+  {
+    id: 'blacklisted',
+    title: 'Closed Lost / Blocked',
+    color: 'text-rose-600',
     accentColor: '#e11d48',
     probability: 0,
     entryCriteria: 'Deal disqualified or blacklisted',
