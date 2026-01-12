@@ -8,6 +8,7 @@ import {
   Settings,
   Users,
   MessageSquare,
+  Map,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -204,6 +205,12 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             label: 'Sales Development Report',
             route: 'sales-reports-sales-development-report',
             icon: FileText,
+          },
+          {
+            id: 'sales-reports-sales-map',
+            label: 'Sales Map',
+            route: 'sales-reports-sales-map',
+            icon: Map,
           },
         ],
       },
