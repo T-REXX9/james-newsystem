@@ -42,6 +42,7 @@ import PurchaseOrderView from './components/PurchaseOrderView';
 import ReceivingStock from './components/ReceivingStock';
 import PurchaseRequestModule from './components/PurchaseRequest';
 import ReturnToSupplier from './components/ReturnToSupplier';
+import SalesMap from './components/SalesMap';
 
 // Maintenance Modules
 import Suppliers from './components/Maintenance/Product/Suppliers';
@@ -441,6 +442,12 @@ const App: React.FC = () => {
         return (
           <div className="h-full overflow-y-auto">
             <SalesDevelopmentReport currentUser={userProfile} />
+          </div>
+        );
+      case 'sales-reports-sales-map':
+        return (
+          <div className="h-full overflow-y-auto">
+            <SalesMap />
           </div>
         );
       case 'accounting-reports-accounting-overview':
