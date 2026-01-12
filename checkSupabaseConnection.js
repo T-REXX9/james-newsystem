@@ -1,8 +1,48 @@
 import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Real Supabase project credentials
-const SUPABASE_URL = 'https://fevdccbmjejkzyofzwpx.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZldmRjY2JtamVqa3p5b2Z6d3B4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwNzk3OTEsImV4cCI6MjA3OTY1NTc5MX0.FMUbzthMJ1H8325kHcPWPlkAxkdfKTuJkR-_WAUM3t4';
+// Helper to load env vars manually to avoid adding dotenv dependency
+function loadEnv() {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const envFiles = ['.env.local', '.env'];
+  const envVars = {};
+
+  for (const file of envFiles) {
+    const envPath = path.join(__dirname, file);
+    if (fs.existsSync(envPath)) {
+      console.log(`Loading config from ${file}...`);
+      const content = fs.readFileSync(envPath, 'utf-8');
+      const lines = content.split('\n');
+      for (const line of lines) {
+        const match = line.match(/^([^=]+)=(.*)$/);
+        if (match) {
+          const key = match[1].trim();
+          let value = match[2].trim();
+          // Remove quotes if present
+          if ((value.startsWith('"') && value.endsWith('"')) || 
+              (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+          }
+          if (!envVars[key]) {
+            envVars[key] = value;
+          }
+        }
+      }
+    }
+  }
+  return envVars;
+}
+
+const env = loadEnv();
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ Error: Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env.local or .env');
+  process.exit(1);
+}
 
 // Create the real Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
