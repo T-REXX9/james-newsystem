@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
     Building2, User, Phone, Mail, MapPin, Calendar, CreditCard,
     TrendingUp, AlertCircle, ShoppingBag, MessageSquare, RotateCcw,
-    FileText, DollarSign, Activity, Clock
+    FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon
 } from 'lucide-react';
-import { Contact, CustomerStatus } from '../types';
-import { fetchContactTransactions, fetchCustomerMetrics } from '../services/supabaseService';
+import { Contact, CustomerStatus, UserProfile } from '../types';
+import { fetchContactTransactions, fetchCustomerMetrics, fetchSalesAgents, updateContact } from '../services/supabaseService';
 import CompanyName from './CompanyName';
+import { toast } from 'sonner';
 
 interface CustomerDetailPanelProps {
     contactId: string;
@@ -38,9 +39,16 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [metrics, setMetrics] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [contact, setContact] = useState<Contact | undefined>(initialData);
+    const [salesAgents, setSalesAgents] = useState<UserProfile[]>([]);
+    const [isEditingSalesAgent, setIsEditingSalesAgent] = useState(false);
+    const [selectedSalesAgent, setSelectedSalesAgent] = useState<string>('');
+    const [isSaving, setIsSaving] = useState(false);
 
     // Sync prop data
-    useEffect(() => { setContact(initialData); }, [initialData]);
+    useEffect(() => {
+        setContact(initialData);
+        setSelectedSalesAgent(initialData?.salesman || '');
+    }, [initialData]);
 
     // Fetch Deep Data
     useEffect(() => {
@@ -49,12 +57,14 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         const loadData = async () => {
             setLoading(true);
             try {
-                const [txs, mets] = await Promise.all([
+                const [txs, mets, agents] = await Promise.all([
                     fetchContactTransactions(contactId),
-                    fetchCustomerMetrics(contactId)
+                    fetchCustomerMetrics(contactId),
+                    fetchSalesAgents()
                 ]);
                 setTransactions(txs);
                 setMetrics(mets);
+                setSalesAgents(agents);
             } catch (err) {
                 console.error("Failed to load customer details", err);
             } finally {
@@ -64,6 +74,31 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
         loadData();
     }, [contactId]);
+
+    // Handler for saving sales agent assignment
+    const handleSaveSalesAgent = async () => {
+        if (!contact || !contactId) return;
+
+        setIsSaving(true);
+        try {
+            await updateContact(contactId, { salesman: selectedSalesAgent });
+            const updatedContact = { ...contact, salesman: selectedSalesAgent };
+            setContact(updatedContact);
+            onUpdate(updatedContact);
+            setIsEditingSalesAgent(false);
+            toast.success('Sales agent updated successfully');
+        } catch (err) {
+            console.error('Failed to update sales agent:', err);
+            toast.error('Failed to update sales agent');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCancelEditSalesAgent = () => {
+        setSelectedSalesAgent(contact?.salesman || '');
+        setIsEditingSalesAgent(false);
+    };
 
     if (!contact) return <div className="p-8 text-center text-slate-400">Select a customer</div>;
 
@@ -97,6 +132,15 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                     <MapPin className="w-3.5 h-3.5" />
                                     {contact.city || contact.area || 'Unknown Location'}
                                 </span>
+                                {contact.salesman && (
+                                    <>
+                                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                        <span className="flex items-center gap-1.5">
+                                            <UserCog className="w-3.5 h-3.5" />
+                                            {contact.salesman}
+                                        </span>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -345,6 +389,75 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                     <div className="font-mono font-bold text-brand-blue mt-1">₱{(contact.creditLimit || 0).toLocaleString()}</div>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Sales Agent Assignment Card */}
+                        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm md:col-span-2">
+                            <div className="flex items-center justify-between mb-6 border-b pb-2">
+                                <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                    <UserCog className="w-4 h-4 text-brand-blue" />
+                                    Sales Agent Assignment
+                                </h3>
+                                {!isEditingSalesAgent && (
+                                    <button
+                                        onClick={() => setIsEditingSalesAgent(true)}
+                                        className="text-xs font-bold text-brand-blue hover:text-blue-700 transition-colors px-3 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    >
+                                        Change Agent
+                                    </button>
+                                )}
+                            </div>
+
+                            {!isEditingSalesAgent ? (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-400 uppercase">Assigned Sales Agent</label>
+                                        <div className="flex items-center gap-3 mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                                            <UserCog className="w-5 h-5 text-brand-blue" />
+                                            <span className="font-medium text-slate-800 dark:text-slate-200">
+                                                {contact.salesman || 'No agent assigned'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Select Sales Agent</label>
+                                        <select
+                                            value={selectedSalesAgent}
+                                            onChange={(e) => setSelectedSalesAgent(e.target.value)}
+                                            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all"
+                                            disabled={isSaving}
+                                        >
+                                            <option value="">-- No Agent --</option>
+                                            {salesAgents.map((agent) => (
+                                                <option key={agent.id} value={agent.full_name}>
+                                                    {agent.full_name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={handleSaveSalesAgent}
+                                            disabled={isSaving}
+                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <Save className="w-4 h-4" />
+                                            {isSaving ? 'Saving...' : 'Save'}
+                                        </button>
+                                        <button
+                                            onClick={handleCancelEditSalesAgent}
+                                            disabled={isSaving}
+                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <XIcon className="w-4 h-4" />
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
