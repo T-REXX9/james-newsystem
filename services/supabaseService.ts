@@ -241,14 +241,79 @@ export const fetchProducts = async (): Promise<Product[]> => {
 
 export const fetchReorderReportEntries = async (): Promise<ReorderReportEntry[]> => {
   try {
+    // Fetch base reorder report data
     const { data, error } = await supabase.from('reorder-report').select('*');
     if (error) throw error;
-    return (data as ReorderReportEntry[]) || [];
+
+    const entries = (data as ReorderReportEntry[]) || [];
+
+    // If no entries, return empty
+    if (entries.length === 0) return [];
+
+    // Get all product IDs to fetch related data
+    const productIds = entries.map(e => e.product_id).filter(Boolean);
+
+    // Fetch complaint counts from incident_reports where issue_type is product_quality
+    // We'll join via part_no matching in description or a related_transactions lookup
+    const { data: incidentData } = await supabase
+      .from('incident_reports')
+      .select('description, notes')
+      .eq('issue_type', 'product_quality');
+
+    // Build a map of part_no -> complaint count by searching descriptions
+    const complaintMap: Record<string, number> = {};
+    if (incidentData) {
+      entries.forEach(entry => {
+        const partNo = entry.part_no?.toLowerCase() || '';
+        const matchCount = incidentData.filter(incident => {
+          const desc = (incident.description || '').toLowerCase();
+          const notes = (incident.notes || '').toLowerCase();
+          return desc.includes(partNo) || notes.includes(partNo);
+        }).length;
+        if (matchCount > 0) {
+          complaintMap[entry.part_no] = matchCount;
+        }
+      });
+    }
+
+    // Calculate movement classification based on stock_snapshot changes
+    // For now, we'll use a heuristic: if replenish qty is high relative to reorder point = fast moving
+    // If total_stock is consistently at or above reorder_point = slow moving
+    const enrichedEntries = entries.map(entry => {
+      // Movement classification heuristic:
+      // Fast: replenish_quantity > reorder_point * 1.5 (high turnover)
+      // Slow: total_stock >= reorder_point * 0.8 AND replenish_quantity < reorder_point * 0.5
+      // Normal: everything else
+      const replenishRatio = entry.replenish_quantity / Math.max(entry.reorder_point, 1);
+      const stockRatio = entry.total_stock / Math.max(entry.reorder_point, 1);
+
+      let movement_classification: 'fast' | 'slow' | 'normal' = 'normal';
+
+      if (replenishRatio > 1.5) {
+        movement_classification = 'fast';
+      } else if (stockRatio >= 0.8 && replenishRatio < 0.5) {
+        movement_classification = 'slow';
+      }
+
+      // If marked critical with very low stock, likely fast-moving
+      if (entry.status === 'critical' && entry.total_stock < entry.reorder_point * 0.3) {
+        movement_classification = 'fast';
+      }
+
+      return {
+        ...entry,
+        movement_classification,
+        complaint_count: complaintMap[entry.part_no] || 0,
+      };
+    });
+
+    return enrichedEntries;
   } catch (err) {
     console.error('Error fetching reorder report entries:', err);
     return [];
   }
 };
+
 
 export const createProduct = async (product: Omit<Product, 'id'>): Promise<void> => {
   try {
