@@ -29,12 +29,17 @@ export const fetchContacts = async (): Promise<Contact[]> => {
   }
 };
 
-export const createContact = async (contact: Omit<Contact, 'id'>): Promise<void> => {
+export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Contact> => {
   try {
-    const { error } = await supabase.from('contacts').insert(contact as any);
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert(contact as any)
+      .select('*')
+      .single();
     if (error) throw error;
+    return data as unknown as Contact;
   } catch (err) {
-    console.error("Error creating contact:", err);
+    console.error('Error creating contact:', err);
     throw err;
   }
 };
