@@ -381,8 +381,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             </div>
             <Filter className="w-4 h-4 text-slate-400 cursor-pointer hover:text-brand-blue transition-colors" />
           </div>
-          <div className="flex-1 min-h-0 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+	        <div className="flex-1 min-h-0 w-full">
+	          <ResponsiveContainer width="100%" height="100%" minHeight={180} minWidth={200}>
               <AreaChart data={data} margin={{ top: 5, right: 0, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -419,7 +419,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         <div className="flex flex-col h-full">
           <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-2 shrink-0">Deal Distribution</h3>
           <div className="flex-1 min-h-0 relative">
-            <ResponsiveContainer width="100%" height="100%">
+	            <ResponsiveContainer width="100%" height="100%" minHeight={180} minWidth={200}>
               <PieChart>
                 <Pie
                   data={REPORT_PIE_DATA}
@@ -463,7 +463,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">By Revenue</span>
           </div>
           <div className="flex-1 min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
+	            <ResponsiveContainer width="100%" height="100%" minHeight={180} minWidth={200}>
               <BarChart data={TOP_PRODUCTS_DATA} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barSize={16}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#475569" opacity={0.1} />
                 <XAxis
