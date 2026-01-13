@@ -452,6 +452,8 @@ export interface InventoryLogFilters {
 
 export type ReorderStatus = 'critical' | 'low' | 'healthy';
 
+export type MovementClassification = 'fast' | 'slow' | 'normal';
+
 export interface ReorderReportEntry {
   id: string;
   product_id?: string;
@@ -466,6 +468,9 @@ export interface ReorderReportEntry {
   notes?: string;
   created_at: string;
   updated_at: string;
+  // New fields for badges
+  movement_classification?: MovementClassification;
+  complaint_count?: number;
 }
 
 // --- Daily Call Monitoring Types ---
