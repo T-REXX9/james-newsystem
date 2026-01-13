@@ -34,7 +34,7 @@ import SuggestedStockReport from './components/SuggestedStockReport';
 
 import AccessControlSettings from './components/AccessControlSettings';
 import TasksView from './components/TasksView';
-import SalesAgentDashboard from './components/SalesAgentDashboard';
+import SalespersonDashboardView from './components/SalespersonDashboardView';
 import ManagementView from './components/ManagementView';
 import RecycleBinView from './components/RecycleBinView';
 import ReportsView from './components/ReportsView';
@@ -92,7 +92,7 @@ const App: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [appLoading, setAppLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>({});
 
   // 1. Auth Logic
@@ -277,7 +277,7 @@ const App: React.FC = () => {
         if (isSalesAgent) {
           return (
             <div className="p-4 h-full overflow-y-auto bg-slate-100 dark:bg-slate-950">
-              <SalesAgentDashboard currentUser={userProfile} />
+              <SalespersonDashboardView currentUser={userProfile} onNavigate={handleSetActiveTab} />
             </div>
           );
         }
