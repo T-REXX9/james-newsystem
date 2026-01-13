@@ -51,11 +51,13 @@ export const updateContact = async (id: string, updates: Partial<Contact>): Prom
 
 export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact>): Promise<void> => {
   try {
-    // Mock query builder update isn't sophisticated for "IN" clauses in this demo
-    // so we loop. In real Supabase: .in('id', ids).update(updates)
-    for (const id of ids) {
-      await updateContact(id, updates);
-    }
+    // Use Supabase's .in() method for efficient bulk updates
+    const { error } = await supabase
+      .from('contacts')
+      .update(updates as any)
+      .in('id', ids);
+
+    if (error) throw error;
   } catch (err) {
     console.error("Error bulk updating contacts:", err);
     throw err;
@@ -435,6 +437,21 @@ export const fetchProfiles = async (): Promise<UserProfile[]> => {
     return (data as UserProfile[]) || [];
   } catch (err) {
     console.error("Error fetching profiles:", err);
+    return [];
+  }
+};
+
+export const fetchSalesAgents = async (): Promise<UserProfile[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'Sales Agent')
+      .order('full_name', { ascending: true });
+    if (error) throw error;
+    return (data as UserProfile[]) || [];
+  } catch (err) {
+    console.error("Error fetching sales agents:", err);
     return [];
   }
 };
@@ -1251,20 +1268,20 @@ export const fetchContactTransactions = async (contactId: string) => {
     // Fetch Order Slips
     const { data: slips } = await (supabase
       .from('order_slips')
-      .select('id, os_number, date, grand_total, status') as any) // Type assertion to bypass incorrect schema inference
-      .eq('customer_id', contactId)
+      .select('id, slip_no, sales_date, grand_total, status') as any) // Type assertion to bypass incorrect schema inference
+      .eq('contact_id', contactId)
       .eq('is_deleted', false)
-      .order('date', { ascending: false });
+      .order('sales_date', { ascending: false });
 
     if (slips) {
       transactions.push(...(slips as any[]).map(slip => ({
         id: slip.id,
         type: 'order_slip',
-        number: slip.os_number,
-        date: slip.date,
+        number: slip.slip_no,
+        date: slip.sales_date,
         amount: slip.grand_total,
         status: slip.status,
-        label: `Order Slip ${slip.os_number}`
+        label: `Order Slip ${slip.slip_no}`
       })));
     }
 

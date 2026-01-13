@@ -4,12 +4,13 @@ import { fetchContacts, bulkUpdateContacts } from '../services/supabaseService';
 import { Contact } from '../types';
 import CustomerListSidebar from './CustomerListSidebar';
 import CustomerDetailPanel from './CustomerDetailPanel';
+import BulkAssignAgentModal from './BulkAssignAgentModal';
 import { Users, UserPlus, EyeOff, Tag, CheckSquare, X } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 
 const CustomerDatabase: React.FC = () => {
   // Data Fetching
-  const { data: customers, setData: setCustomers, reload } = useRealtimeList<Contact>({
+  const { data: customers, setData: setCustomers, refetch: reload } = useRealtimeList<Contact>({
     tableName: 'contacts',
     initialFetchFn: fetchContacts,
     sortFn: (a, b) => (a.company || a.name || '').localeCompare(b.company || b.name || '')
@@ -23,6 +24,7 @@ const CustomerDatabase: React.FC = () => {
 
   // Selection State (Multi-select)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showAssignAgentModal, setShowAssignAgentModal] = useState(false);
 
   // Handlers
   const handleSelectCustomer = (id: string) => {
@@ -64,17 +66,18 @@ const CustomerDatabase: React.FC = () => {
     }
   };
 
-  const handleBulkAssignAgent = async () => {
-    const agent = prompt("Enter Agent Name to assign:");
-    if (!agent || selectedIds.size === 0) return;
+  const handleBulkAssignAgent = async (agentName: string) => {
+    if (!agentName || selectedIds.size === 0) return;
 
     try {
-      await bulkUpdateContacts(Array.from(selectedIds), { assignedAgent: agent, salesman: agent });
-      toast.success(`Assigned ${agent} to ${selectedIds.size} customers`);
+      await bulkUpdateContacts(Array.from(selectedIds), { assignedAgent: agentName, salesman: agentName });
+      toast.success(`Assigned ${agentName} to ${selectedIds.size} customers`);
       reload();
       setSelectedIds(new Set());
     } catch (e) {
-      toast.error('Failed to assign agent');
+      console.error('Bulk assign agent error:', e);
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      toast.error(`Failed to assign agent: ${errorMessage}`);
     }
   };
 
@@ -149,7 +152,7 @@ const CustomerDatabase: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              <button onClick={() => handleBulkAssignAgent()} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Assign Agent">
+              <button onClick={() => setShowAssignAgentModal(true)} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Assign Agent">
                 <UserPlus className="w-4 h-4" />
               </button>
               <button onClick={() => handleBulkSetPriceGroup()} className="p-2 hover:bg-slate-800 rounded-lg tooltip" title="Set Price Group">
@@ -165,6 +168,14 @@ const CustomerDatabase: React.FC = () => {
             </button>
           </div>
         )}
+
+        {/* Bulk Assign Agent Modal */}
+        <BulkAssignAgentModal
+          isOpen={showAssignAgentModal}
+          onClose={() => setShowAssignAgentModal(false)}
+          onAssign={handleBulkAssignAgent}
+          selectedCount={selectedIds.size}
+        />
       </main>
     </div>
   );
