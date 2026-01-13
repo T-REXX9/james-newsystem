@@ -29,12 +29,17 @@ export const fetchContacts = async (): Promise<Contact[]> => {
   }
 };
 
-export const createContact = async (contact: Omit<Contact, 'id'>): Promise<void> => {
+export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Contact> => {
   try {
-    const { error } = await supabase.from('contacts').insert(contact as any);
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert(contact as any)
+      .select('*')
+      .single();
     if (error) throw error;
+    return data as unknown as Contact;
   } catch (err) {
-    console.error("Error creating contact:", err);
+    console.error('Error creating contact:', err);
     throw err;
   }
 };
@@ -1286,25 +1291,25 @@ export const fetchContactTransactions = async (contactId: string) => {
     }
 
     // Fetch Invoices
-    const { data: invoices } = await (supabase
-      .from('invoices')
-      .select('id, invoice_number, invoice_date, total_amount, status, amount_paid, balance') as any) // Type assertion to bypass incorrect schema inference
-      .eq('contact_id', contactId)
-      .eq('is_deleted', false)
-      .order('invoice_date', { ascending: false });
+	    // Note: invoices schema uses invoice_no, sales_date, grand_total (see supabase migrations)
+	    const { data: invoices } = await (supabase
+	      .from('invoices')
+	      .select('id, invoice_no, sales_date, grand_total, status') as any) // Type assertion to bypass incorrect schema inference
+	      .eq('contact_id', contactId)
+	      .eq('is_deleted', false)
+	      .order('sales_date', { ascending: false });
 
-    if (invoices) {
-      transactions.push(...(invoices as any[]).map(inv => ({
-        id: inv.id,
-        type: 'invoice',
-        number: inv.invoice_number,
-        date: inv.invoice_date,
-        amount: inv.total_amount,
-        status: inv.status,
-        balance: inv.balance,
-        label: `Invoice ${inv.invoice_number}`
-      })));
-    }
+	    if (invoices) {
+	      transactions.push(...(invoices as any[]).map(inv => ({
+	        id: inv.id,
+	        type: 'invoice',
+	        number: inv.invoice_no,
+	        date: inv.sales_date,
+	        amount: inv.grand_total,
+	        status: inv.status,
+	        label: `Invoice ${inv.invoice_no}`
+	      })));
+	    }
 
     // Fetch Purchase History (Legacy/Manual entries)
     const { data: purchases } = await supabase
@@ -1533,9 +1538,9 @@ export const fetchCustomerMetrics = async (contactId: string) => {
       .from('customer_metrics')
       .select('*')
       .eq('contact_id', contactId)
-      .single();
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
-    return data || null;
+			.maybeSingle();
+		if (error) throw error;
+		return data ?? null;
   } catch (err) {
     console.error('Error fetching customer metrics:', err);
     return null;
@@ -1548,7 +1553,7 @@ export const updateCustomerMetrics = async (contactId: string, metrics: any) => 
       .from('customer_metrics')
       .select('id')
       .eq('contact_id', contactId)
-      .single();
+			.maybeSingle();
 
     if (existing) {
       const { error } = await supabase

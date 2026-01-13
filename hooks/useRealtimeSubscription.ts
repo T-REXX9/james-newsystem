@@ -23,22 +23,66 @@ export function useRealtimeSubscription<T = any>({
   enabled = true,
 }: UseRealtimeSubscriptionOptions<T>) {
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const callbacksRef = useRef<RealtimeCallbacks<T>>(callbacks);
   const retryCountRef = useRef(0);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const instanceIdRef = useRef<string>(`${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const maxRetries = 5;
+
+  // Keep latest callbacks without forcing a resubscription.
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  }, [callbacks]);
 
   useEffect(() => {
     if (!enabled) return;
 
+    let isCancelled = false;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimeoutRef.current !== null) {
+        window.clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
+
+    const teardown = () => {
+      clearReconnectTimer();
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+
+    const handleReconnect = () => {
+      if (isCancelled) return;
+
+      if (retryCountRef.current < maxRetries) {
+        retryCountRef.current++;
+        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000);
+        clearReconnectTimer();
+        reconnectTimeoutRef.current = window.setTimeout(() => {
+          if (!isCancelled) setupSubscription();
+        }, delay);
+      } else {
+        callbacksRef.current.onError?.(
+          new Error(`Failed to subscribe to ${tableName} after ${maxRetries} attempts`)
+        );
+      }
+    };
+
     const setupSubscription = () => {
+      if (isCancelled) return;
+
       try {
-        // Create unique channel name
-        const channelName = `${tableName}-realtime-${Date.now()}-${Math.random()}`;
-        
-        // Create channel
+        // Ensure we don't leak multiple channels (reconnects, re-renders, strict-mode).
+        teardown();
+
+        // Stable per-hook-instance channel name (helps debugging, avoids infinite unique channels).
+        const channelName = `${tableName}-realtime-${instanceIdRef.current}`;
         const channel = supabase.channel(channelName);
 
-        // Subscribe to postgres changes
-        let subscription = channel.on(
+        channel.on(
           'postgres_changes',
           {
             event: '*',
@@ -46,38 +90,34 @@ export function useRealtimeSubscription<T = any>({
             table: tableName,
             ...(filter && { filter }),
           },
-          (payload) => {
+          (payload: any) => {
             try {
               switch (payload.eventType) {
                 case 'INSERT':
-                  callbacks.onInsert?.(payload.new as T);
+                  callbacksRef.current.onInsert?.(payload.new as T);
                   break;
                 case 'UPDATE':
-                  callbacks.onUpdate?.(payload.new as T);
+                  callbacksRef.current.onUpdate?.(payload.new as T);
                   break;
                 case 'DELETE':
-                  callbacks.onDelete?.({ id: (payload.old as any).id });
+                  callbacksRef.current.onDelete?.({ id: (payload.old as any).id });
                   break;
               }
-              // Reset retry count on successful event
               retryCountRef.current = 0;
             } catch (error) {
               console.error(`Error handling ${payload.eventType} event:`, error);
-              callbacks.onError?.(error as Error);
+              callbacksRef.current.onError?.(error as Error);
             }
           }
         );
 
-        // Subscribe to channel
-        subscription.subscribe((status) => {
+        channel.subscribe((status) => {
+          if (isCancelled) return;
+
           if (status === 'SUBSCRIBED') {
-            console.log(`✓ Subscribed to ${tableName}`);
+            // Keep this as debug signal, but avoid spamming in reconnect loops.
             retryCountRef.current = 0;
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error(`✗ Channel error for ${tableName}`);
-            handleReconnect();
-          } else if (status === 'TIMED_OUT') {
-            console.error(`✗ Subscription timeout for ${tableName}`);
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             handleReconnect();
           }
         });
@@ -85,33 +125,18 @@ export function useRealtimeSubscription<T = any>({
         channelRef.current = channel;
       } catch (error) {
         console.error(`Error setting up subscription for ${tableName}:`, error);
-        callbacks.onError?.(error as Error);
+        callbacksRef.current.onError?.(error as Error);
         handleReconnect();
-      }
-    };
-
-    const handleReconnect = () => {
-      if (retryCountRef.current < maxRetries) {
-        retryCountRef.current++;
-        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000);
-        console.log(`Retrying subscription to ${tableName} in ${delay}ms (attempt ${retryCountRef.current}/${maxRetries})`);
-        setTimeout(setupSubscription, delay);
-      } else {
-        console.error(`Max retries reached for ${tableName} subscription`);
-        callbacks.onError?.(new Error(`Failed to subscribe to ${tableName} after ${maxRetries} attempts`));
       }
     };
 
     setupSubscription();
 
-    // Cleanup function
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
+      isCancelled = true;
+      teardown();
     };
-  }, [tableName, filter, enabled, callbacks.onInsert, callbacks.onUpdate, callbacks.onDelete, callbacks.onError]);
+  }, [tableName, filter, enabled]);
 
   return {
     channel: channelRef.current,

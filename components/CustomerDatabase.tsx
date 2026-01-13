@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useRealtimeList } from '../hooks/useRealtimeList';
-import { fetchContacts, bulkUpdateContacts } from '../services/supabaseService';
+import { fetchContacts, bulkUpdateContacts, createContact } from '../services/supabaseService';
 import { Contact } from '../types';
 import CustomerListSidebar from './CustomerListSidebar';
 import CustomerDetailPanel from './CustomerDetailPanel';
 import BulkAssignAgentModal from './BulkAssignAgentModal';
 import { Users, UserPlus, EyeOff, Tag, CheckSquare, X } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import AddContactModal from './AddContactModal';
 
 const CustomerDatabase: React.FC = () => {
   // Data Fetching
@@ -25,6 +26,7 @@ const CustomerDatabase: React.FC = () => {
   // Selection State (Multi-select)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAssignAgentModal, setShowAssignAgentModal] = useState(false);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
 
   // Handlers
   const handleSelectCustomer = (id: string) => {
@@ -96,14 +98,35 @@ const CustomerDatabase: React.FC = () => {
   };
 
   const handleCreateNew = () => {
-    toast.info("Create New Customer feature coming soon");
-    // Could trigger the old AddContactModal if I kept the code, but I'm streamlining.
+    setShowAddCustomerModal(true);
+  };
+
+  const handleSubmitNewCustomer = async (data: Omit<Contact, 'id'>) => {
+    try {
+      const created = await createContact(data);
+      // Optimistically add/merge in case realtime hasn't delivered yet
+      setCustomers((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]));
+      setSelectedCustomerId(created.id);
+      toast.success(`Created customer: ${created.company}`);
+      await reload();
+      return created;
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      toast.error(`Failed to create customer: ${errorMessage}`);
+      throw e;
+    }
   };
 
   // Layout
   return (
     <div className="flex h-full w-full bg-slate-50 dark:bg-slate-950 overflow-hidden relative">
       <Toaster position="top-right" richColors />
+
+      <AddContactModal
+        isOpen={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onSubmit={handleSubmitNewCustomer}
+      />
 
       {/* Left Sidebar */}
       <CustomerListSidebar

@@ -1,29 +1,35 @@
-
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Loader2, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 import { CustomerStatus, DealStage, Contact, ContactPerson } from '../types';
 
 interface AddContactModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<Contact, 'id'>) => Promise<void>;
+  onSubmit: (data: Omit<Contact, 'id'>) => Promise<Contact>;
 }
 
 const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSubmit }) => {
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   
-  // Initial State for Contact Persons
-  const emptyContactPerson: Omit<ContactPerson, 'id'> = {
-      enabled: true, name: '', position: '', birthday: '', telephone: '', mobile: '', email: ''
-  };
+  type ContactPersonDraft = Omit<ContactPerson, 'id'>;
 
-  const [contactPersons, setContactPersons] = useState<Omit<ContactPerson, 'id' | 'enabled'>[]>([
-      { ...emptyContactPerson }
-  ]);
+  const today = new Date().toISOString().split('T')[0];
 
-  const [formData, setFormData] = useState<Partial<Contact>>({
+  const createEmptyContactPerson = (): ContactPersonDraft => ({
+    enabled: true,
+    name: '',
+    position: '',
+    birthday: '',
+    telephone: '',
+    mobile: '',
+    email: '',
+  });
+
+  const buildInitialFormData = (): Partial<Contact> => ({
     company: '',
-    customerSince: new Date().toISOString().split('T')[0],
+    customerSince: today,
+    lastContactDate: today,
     team: '',
     salesman: '',
     referBy: '',
@@ -43,7 +49,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
     dealershipSince: '',
     dealershipQuota: 0,
     creditLimit: 0,
-    status: (CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective' as CustomerStatus,
+    status: ((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective') as CustomerStatus,
     isHidden: false,
     debtType: 'Good',
     comment: '',
@@ -54,8 +60,20 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
     comments: [],
     salesHistory: [],
     topProducts: [],
-    avatar: `https://i.pravatar.cc/150?u=${Math.random()}`
+    avatar: `https://i.pravatar.cc/150?u=${Date.now()}`,
   });
+
+  const [contactPersons, setContactPersons] = useState<ContactPersonDraft[]>([createEmptyContactPerson()]);
+  const [formData, setFormData] = useState<Partial<Contact>>(buildInitialFormData());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoading(false);
+    setSubmitError(null);
+    setFormData(buildInitialFormData());
+    setContactPersons([createEmptyContactPerson()]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // Safe status options
   const statusOptions = (CustomerStatus && Object.keys(CustomerStatus).length > 0)
@@ -65,7 +83,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
   if (!isOpen) return null;
 
   const handleAddContactPerson = () => {
-      setContactPersons([...contactPersons, { ...emptyContactPerson }]);
+      setContactPersons([...contactPersons, createEmptyContactPerson()]);
   };
 
   const handleRemoveContactPerson = (index: number) => {
@@ -75,15 +93,16 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
       setContactPersons(newPersons);
   };
 
-  const handleContactPersonChange = (index: number, field: keyof ContactPerson, value: any) => {
+  const handleContactPersonChange = (index: number, field: keyof ContactPersonDraft, value: string) => {
       const newPersons = [...contactPersons];
       newPersons[index] = { ...newPersons[index], [field]: value };
       setContactPersons(newPersons);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    setSubmitError(null);
     try {
       // Construct final object
       const fullContactPersons: ContactPerson[] = contactPersons.map((cp, idx) => ({
@@ -92,21 +111,75 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
           enabled: true
       })) as ContactPerson[];
 
-      const newContact = {
-        ...formData,
-        // Map critical legacy fields for compatibility
-        name: fullContactPersons[0]?.name || 'Unknown Contact',
-        phone: fullContactPersons[0]?.mobile || '',
-        email: fullContactPersons[0]?.email || '',
-        title: fullContactPersons[0]?.position || '',
+      const resolvedDeliveryAddress =
+        (formData.deliveryAddress || '').trim() || (formData.address || '').trim();
+
+      const newContact: Omit<Contact, 'id'> = {
+        // Core Identifiers
+        company: (formData.company || '').trim(),
+        customerSince: formData.customerSince || today,
+        team: formData.team || '',
+        salesman: formData.salesman || '',
+        referBy: formData.referBy || '',
+
+        // Location
+        address: formData.address || '',
+        province: formData.province || '',
+        city: formData.city || '',
+        area: formData.area || '',
+        deliveryAddress: resolvedDeliveryAddress,
+
+        // Financial / Legal
+        tin: formData.tin || '',
+        priceGroup: formData.priceGroup || 'AA',
+        businessLine: formData.businessLine || '',
+        terms: formData.terms || '',
+        transactionType: formData.transactionType || '',
+        vatType: formData.vatType || 'Exclusive',
+        vatPercentage: formData.vatPercentage || '12',
+
+        // Dealership Specifics
+        dealershipTerms: formData.dealershipTerms || '',
+        dealershipSince: formData.dealershipSince || '',
+        dealershipQuota: formData.dealershipQuota ?? 0,
+        creditLimit: formData.creditLimit ?? 0,
+
+        // Status & Logic
+        status:
+          (formData.status as CustomerStatus) ||
+          (((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective') as CustomerStatus),
+        isHidden: !!formData.isHidden,
+        debtType: (formData.debtType as any) || 'Good',
+        comment: formData.comment || '',
+
+        // Nested Data
         contactPersons: fullContactPersons,
-        assignedAgent: formData.salesman
-      } as Omit<Contact, 'id'>;
+
+        // Legacy / UI Helper Fields
+        name: fullContactPersons[0]?.name || 'Unknown Contact',
+        title: fullContactPersons[0]?.position || '',
+        email: fullContactPersons[0]?.email || '',
+        phone: fullContactPersons[0]?.mobile || '',
+        mobile: fullContactPersons[0]?.mobile || '',
+        avatar: formData.avatar || `https://i.pravatar.cc/150?u=${Date.now()}`,
+        dealValue: formData.dealValue ?? 0,
+        stage: (formData.stage as DealStage) || DealStage.NEW,
+        lastContactDate: formData.lastContactDate || today,
+        interactions: formData.interactions || [],
+        comments: formData.comments || [],
+        salesHistory: formData.salesHistory || [],
+        topProducts: formData.topProducts || [],
+        assignedAgent: formData.salesman || '',
+
+        // Soft delete defaults
+        is_deleted: false,
+      };
 
       await onSubmit(newContact);
       onClose();
     } catch (error) {
       console.error(error);
+      setSubmitError(error instanceof Error ? error.message : 'Failed to create customer');
     } finally {
       setLoading(false);
     }
@@ -125,7 +198,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar p-6">
+        <form id="add-contact-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar p-6">
           <div className="space-y-6">
               
               {/* Core Info */}
@@ -373,14 +446,21 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
             >
               Cancel
             </button>
-            <button 
-              type="button" 
-              onClick={handleSubmit}
-              disabled={loading}
-              className="flex-1 px-4 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Customer'}
-            </button>
+            <div className="flex-1 flex flex-col gap-2">
+              {submitError && (
+                <div className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                  {submitError}
+                </div>
+              )}
+              <button
+                type="submit"
+                form="add-contact-form"
+                disabled={loading}
+                className="w-full px-4 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Customer'}
+              </button>
+            </div>
         </div>
 
       </div>

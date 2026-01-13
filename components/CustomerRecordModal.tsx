@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     AlertTriangle,
     Building2,
@@ -199,9 +200,13 @@ const CustomerRecordModal: React.FC<CustomerRecordModalProps> = ({
         { key: 'timeline', label: 'Timeline', count: timeline.length },
     ];
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+	    const modal = (
+	        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+	            {/*
+	              Keep modal size stable across tab switches by using a fixed viewport-based height.
+	              Content scrolls inside, instead of the modal resizing to fit each tab.
+	            */}
+	            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
                 {/* Header */}
                 <div className="p-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
                     <div className="flex items-start justify-between gap-4">
@@ -308,8 +313,13 @@ const CustomerRecordModal: React.FC<CustomerRecordModalProps> = ({
                     ))}
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-5">
+	                {/* Content */}
+	                {/*
+	                  Prevent perceived modal resizing when switching tabs: if a tab overflows,
+	                  the scrollbar can appear/disappear and cause layout shift. Force a stable
+	                  scrollbar gutter and always reserve scrollbar space.
+	                */}
+	                <div className="flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable] p-5">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
@@ -460,8 +470,15 @@ const CustomerRecordModal: React.FC<CustomerRecordModalProps> = ({
                     )}
                 </div>
             </div>
-        </div>
-    );
+	        </div>
+	    );
+
+	    // IMPORTANT: This modal is rendered inside views that use `animate-fadeIn` (which applies
+	    // `transform`). A transformed ancestor changes how `position: fixed` is calculated and can
+	    // cause the overlay/backdrop to NOT cover the full viewport. Portaling to `document.body`
+	    // ensures the backdrop always occupies the full screen.
+	    if (typeof document === 'undefined' || !document.body) return null;
+	    return createPortal(modal, document.body);
 };
 
 export default CustomerRecordModal;
