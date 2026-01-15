@@ -1040,6 +1040,241 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
             <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4 space-y-3">
                 {/* 3. Main Dashboard Grid (Flex-1 to prevent scroll) */}
                 <div className="grid grid-cols-12 gap-3">
+                    {/* Customer Lists & Details - TOP PRIORITY ROW */}
+                    {/* Customer Lists */}
+                    <div className="col-span-12 lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                <ClipboardList className="w-3.5 h-3.5 text-brand-blue" /> Daily Customer Lists
+                            </h3>
+                            <span className="text-[9px] uppercase text-slate-400">Status grouped</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-stretch">
+                            {groupedCustomers.map(group => (
+                                <div key={group.key} className="border border-slate-200 dark:border-slate-800 rounded-md p-2.5 bg-slate-50/40 dark:bg-slate-800/50 flex flex-col h-full">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{group.label}</div>
+                                        <span className="text-[10px] text-slate-400">{group.items.length} customers</span>
+                                    </div>
+                                    <div
+                                        className="relative flex-1 min-h-0 overflow-y-auto custom-scrollbar"
+                                        onScroll={handleListScroll(group.key)}
+                                        ref={(el) => {
+                                            if (el && !listState[group.key]) {
+                                                setListState((prev) => ({ ...prev, [group.key]: { scrollTop: 0, height: el.clientHeight } }));
+                                            }
+                                        }}
+                                    >
+                                        <div style={{ height: group.items.length * ITEM_HEIGHT }} className="relative">
+                                            <div style={{ transform: `translateY(${getRange(group.key, group.items.length).start * ITEM_HEIGHT}px)` }} className="space-y-2 absolute left-0 right-0">
+                                                {group.items.slice(getRange(group.key, group.items.length).start, getRange(group.key, group.items.length).end).map(({ contact, lastActivity }) => {
+                                                    const { companyName, formerName } = getCompanyNameParts(contact);
+                                                    return (
+                                                        <button
+                                                            key={contact.id}
+                                                            onClick={() => setSelectedContactId(contact.id)}
+                                                            className={`w-full text-left p-2 rounded-md border border-transparent hover:border-brand-blue/40 transition-colors ${selectedContactId === contact.id ? 'bg-blue-50 dark:bg-blue-900/20 border-brand-blue/40' : 'bg-white dark:bg-slate-900/60'}`}
+                                                            style={{ height: ITEM_HEIGHT - 4 }} // slight gap compensation
+                                                        >
+                                                            <div className="text-xs font-bold text-slate-800 dark:text-white truncate">
+                                                                <CompanyName
+                                                                    name={companyName}
+                                                                    pastName={formerName}
+                                                                    entity={contact}
+                                                                    className="inline-flex items-center gap-1"
+                                                                    formerNameClassName="text-[10px] text-slate-500 font-medium"
+                                                                />
+                                                            </div>
+                                                            <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                                                                <Clock className="w-3 h-3" /> {group.label} – {lastActivity ? formatDate(lastActivity) : 'No activity'}
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Customer Detail + History */}
+                    <div className="col-span-12 lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                <FileText className="w-3.5 h-3.5 text-brand-blue" /> Customer Summary
+                            </h3>
+                            <span className="text-[9px] text-slate-400">Details, sales, chat</span>
+                        </div>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                value={customerSearchQuery}
+                                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                                placeholder="Search customers..."
+                                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none"
+                            />
+                            {customerSearchResults.length > 0 && (
+                                <div className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                    {customerSearchResults.map((contact) => (
+                                        <button
+                                            key={contact.id}
+                                            onClick={() => {
+                                                setSelectedContactId(contact.id);
+                                                setCustomerSearchQuery('');
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-slate-800"
+                                        >
+                                            <div className="font-semibold text-slate-800 dark:text-white truncate">{contact.company}</div>
+                                            <div className="text-xs text-slate-500">{contact.status} • {contact.city}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        {selectedContact ? (
+                            <div className="space-y-3">
+                                <div className="flex items-start gap-3">
+                                    <img src={selectedContact.avatar} className="w-10 h-10 rounded-full border border-slate-200" alt="" />
+                                    <div className="flex-1 space-y-1">
+                                        {(() => {
+                                            const { companyName, formerName } = getCompanyNameParts(selectedContact);
+                                            return (
+                                                <div className="text-sm font-bold text-slate-800 dark:text-white">
+                                                    <CompanyName
+                                                        name={companyName}
+                                                        pastName={formerName}
+                                                        entity={selectedContact}
+                                                        className="inline-flex items-center gap-1"
+                                                        formerNameClassName="text-[11px] text-slate-500 font-normal ml-1"
+                                                        formerLabel="formerly"
+                                                    />
+                                                </div>
+                                            );
+                                        })()}
+                                        <div className="text-[11px] text-slate-500">{selectedContact.status} • Assigned: {selectedContact.salesman || 'Unassigned'}</div>
+                                        <div className="text-[11px] text-slate-500">Terms: {selectedContact.terms || 'N/A'} | Balance: ₱{Number(selectedContact.balance || 0).toLocaleString()}</div>
+                                        <div className="text-[11px] text-slate-500">Last purchase: {formatDate(contactPurchases[0]?.purchased_at)}</div>
+                                        <div className="text-[11px] text-slate-500">Email: {selectedContact.email || '—'} | Phone: {selectedContact.phone || selectedContact.mobile || '—'}</div>
+                                        <div className="text-[11px] text-slate-500">Address: {selectedContact.address || selectedContact.officeAddress || '—'}</div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button onClick={openPricingModal} className="text-xs px-2 py-2 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:border-brand-blue/60">
+                                        <TrendingUp className="w-4 h-4 text-brand-blue" /> Adjust pricing
+                                    </button>
+                                    <button onClick={openReassignModal} className="text-xs px-2 py-2 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:border-brand-blue/60">
+                                        <Users className="w-4 h-4 text-brand-blue" /> Reassign client
+                                    </button>
+                                    <button onClick={openBlacklistModal} className="text-xs px-2 py-2 rounded-md border border-rose-200 dark:border-rose-700 flex items-center gap-2 hover:border-rose-400/80">
+                                        <ShieldAlert className="w-4 h-4 text-rose-500" /> Blacklist
+                                    </button>
+                                    <button onClick={openReplyModal} className="text-xs px-2 py-2 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:border-brand-blue/60">
+                                        <MessageSquare className="w-4 h-4 text-brand-blue" /> Reply to report
+                                    </button>
+                                </div>
+
+                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                    <div className="text-[11px] uppercase text-slate-500 font-bold mb-2">Sales Report / Purchase History</div>
+                                    <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
+                                        {contactPurchases.map((p) => (
+                                            <div key={p.id} className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300">
+                                                <span className="font-bold">₱{Number(p.amount).toLocaleString()}</span>
+                                                <span className="text-[11px] text-slate-500">{p.status} • {formatDate(p.purchased_at)}</span>
+                                                <span className="text-[11px] text-slate-500">{p.notes || '—'}</span>
+                                            </div>
+                                        ))}
+                                        {contactPurchases.length === 0 && (
+                                            <div className="text-xs text-slate-500">No purchases yet.</div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                    <div className="text-[11px] uppercase text-slate-500 font-bold mb-2">Chat History (date & time)</div>
+                                    <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
+                                        {contactInquiries.map((inq) => (
+                                            <div key={inq.id} className="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                <MessageSquare className="w-3 h-3 text-brand-blue" />
+                                                <span className="font-bold">{inq.title}</span>
+                                                <span className="text-[11px] text-slate-500">{formatDate(inq.occurred_at)} • {new Date(inq.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                <span className="text-[11px] text-slate-500">({inq.channel})</span>
+                                            </div>
+                                        ))}
+                                        {contactInquiries.length === 0 && <div className="text-xs text-slate-500">No chats logged.</div>}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-sm text-slate-500">Select a customer from the list to see details.</div>
+                        )}
+                    </div>
+
+                    {/* Team Chat */}
+                    <div className="col-span-12 lg:col-span-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">
+                        <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 shrink-0 flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4 text-brand-blue" />
+                            <h3 className="font-bold text-sm text-slate-800 dark:text-white">Team Chat</h3>
+                        </div>
+
+                        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+                            {chatMessages.map((msg) => (
+                                <div key={msg.id} className={`flex gap-2 ${msg.isMe ? 'flex-row-reverse' : ''}`}>
+                                    <img src={msg.avatar} className="w-6 h-6 rounded-full border border-slate-200 shrink-0" alt="" />
+                                    <div className={`flex flex-col max-w-[90%] ${msg.isMe ? 'items-end' : 'items-start'}`}>
+                                        <div className={`px-3 py-2 rounded-xl text-xs ${msg.isMe
+                                            ? 'bg-brand-blue text-white rounded-tr-none'
+                                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-tl-none'
+                                            }`}>
+                                            {renderMessageText(msg.message)}
+                                        </div>
+                                        <span className="text-[9px] text-slate-400 mt-0.5">{msg.time}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 shrink-0">
+                            <div className="relative">
+                                {showMentions && filteredAgents.length > 0 && (
+                                    <div className="absolute bottom-full left-0 mb-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden z-50">
+                                        <div className="max-h-32 overflow-y-auto">
+                                            {filteredAgents.map((agent, index) => (
+                                                <button
+                                                    key={agent.id}
+                                                    onClick={() => insertMention(agent.name)}
+                                                    onMouseEnter={() => setSelectedIndex(index)}
+                                                    className={`w-full text-left p-2 flex items-center gap-2 text-xs ${index === selectedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                                                        }`}
+                                                >
+                                                    <img src={agent.avatar} className="w-5 h-5 rounded-full" alt="" />
+                                                    <span className="font-bold text-slate-800 dark:text-white">{agent.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={newMessage}
+                                    onChange={handleInputChange}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Type message..."
+                                    className="w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition-all"
+                                />
+                                <button
+                                    onClick={handleSendMessage}
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-600 text-brand-blue"
+                                >
+                                    <Send className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* [NEW] Priority Dashboard Row */}
                     <div className="col-span-12 grid grid-cols-1 md:grid-cols-12 gap-3">
                         {/* 1. Agent Call Volume (5 cols) */}
@@ -1236,274 +1471,6 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         </div>
                     </div>
 
-                    {/* Customer Lists & Details */}
-                    {/* Customer Lists */}
-                    <div className="col-span-12 lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm p-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                <ClipboardList className="w-3.5 h-3.5 text-brand-blue" /> Daily Customer Lists
-                            </h3>
-                            <span className="text-[9px] uppercase text-slate-400">Status grouped</span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-stretch">
-                            {groupedCustomers.map(group => (
-                                <div key={group.key} className="border border-slate-200 dark:border-slate-800 rounded-md p-2.5 bg-slate-50/40 dark:bg-slate-800/50 flex flex-col h-full">
-                                    <div className="flex items-center justify-between mb-1.5">
-                                        <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{group.label}</div>
-                                        <span className="text-[10px] text-slate-400">{group.items.length} customers</span>
-                                    </div>
-                                    <div
-                                        className="relative flex-1 min-h-0 overflow-y-auto custom-scrollbar"
-                                        onScroll={handleListScroll(group.key)}
-                                        ref={(el) => {
-                                            if (el && !listState[group.key]) {
-                                                setListState((prev) => ({ ...prev, [group.key]: { scrollTop: 0, height: el.clientHeight } }));
-                                            }
-                                        }}
-                                    >
-                                        <div style={{ height: group.items.length * ITEM_HEIGHT }} className="relative">
-                                            <div style={{ transform: `translateY(${getRange(group.key, group.items.length).start * ITEM_HEIGHT}px)` }} className="space-y-2 absolute left-0 right-0">
-                                                {group.items.slice(getRange(group.key, group.items.length).start, getRange(group.key, group.items.length).end).map(({ contact, lastActivity }) => {
-                                                    const { companyName, formerName } = getCompanyNameParts(contact);
-                                                    return (
-                                                        <button
-                                                            key={contact.id}
-                                                            onClick={() => setSelectedContactId(contact.id)}
-                                                            className={`w-full text-left p-2 rounded-md border border-transparent hover:border-brand-blue/40 transition-colors ${selectedContactId === contact.id ? 'bg-blue-50 dark:bg-blue-900/20 border-brand-blue/40' : 'bg-white dark:bg-slate-900/60'}`}
-                                                            style={{ height: ITEM_HEIGHT - 4 }} // slight gap compensation
-                                                        >
-                                                            <div className="text-xs font-bold text-slate-800 dark:text-white truncate">
-                                                                <CompanyName
-                                                                    name={companyName}
-                                                                    pastName={formerName}
-                                                                    entity={contact}
-                                                                    className="inline-flex items-center gap-1"
-                                                                    formerNameClassName="text-[10px] text-slate-500 font-medium"
-                                                                />
-                                                            </div>
-                                                            <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                                                                <Clock className="w-3 h-3" /> {group.label} – {lastActivity ? formatDate(lastActivity) : 'No activity'}
-                                                            </div>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Customer Detail + History */}
-                    <div className="col-span-12 lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm p-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                <FileText className="w-3.5 h-3.5 text-brand-blue" /> Customer Summary
-                            </h3>
-                            <span className="text-[9px] text-slate-400">Details, sales, chat</span>
-                        </div>
-                        <div className="relative">
-                            <input
-                                type="text"
-                                value={customerSearchQuery}
-                                onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                                placeholder="Search customers..."
-                                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none"
-                            />
-                            {customerSearchResults.length > 0 && (
-                                <div className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                    {customerSearchResults.map((contact) => (
-                                        <button
-                                            key={contact.id}
-                                            onClick={() => {
-                                                setSelectedContactId(contact.id);
-                                                setCustomerSearchQuery('');
-                                            }}
-                                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 dark:hover:bg-slate-800"
-                                        >
-                                            <div className="font-semibold text-slate-800 dark:text-white truncate">{contact.company}</div>
-                                            <div className="text-xs text-slate-500">{contact.status} • {contact.city}</div>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        {selectedContact ? (
-                            <div className="space-y-3">
-                                <div className="flex items-start gap-3">
-                                    <img src={selectedContact.avatar} className="w-10 h-10 rounded-full border border-slate-200" alt="" />
-                                    <div className="flex-1 space-y-1">
-                                        {(() => {
-                                            const { companyName, formerName } = getCompanyNameParts(selectedContact);
-                                            return (
-                                                <div className="text-sm font-bold text-slate-800 dark:text-white">
-                                                    <CompanyName
-                                                        name={companyName}
-                                                        pastName={formerName}
-                                                        entity={selectedContact}
-                                                        className="inline-flex items-center gap-1"
-                                                        formerNameClassName="text-[11px] text-slate-500 font-normal ml-1"
-                                                        formerLabel="formerly"
-                                                    />
-                                                </div>
-                                            );
-                                        })()}
-                                        <div className="text-[11px] text-slate-500">{selectedContact.status} • Assigned: {selectedContact.salesman || 'Unassigned'}</div>
-                                        <div className="text-[11px] text-slate-500">Terms: {selectedContact.terms || 'N/A'} | Balance: ₱{Number(selectedContact.balance || 0).toLocaleString()}</div>
-                                        <div className="text-[11px] text-slate-500">Last purchase: {formatDate(contactPurchases[0]?.purchased_at)}</div>
-                                        <div className="text-[11px] text-slate-500">Email: {selectedContact.email || '—'} | Phone: {selectedContact.phone || selectedContact.mobile || '—'}</div>
-                                        <div className="text-[11px] text-slate-500">Address: {selectedContact.address || selectedContact.officeAddress || '—'}</div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={openPricingModal} className="text-xs px-2 py-2 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:border-brand-blue/60">
-                                        <TrendingUp className="w-4 h-4 text-brand-blue" /> Adjust pricing
-                                    </button>
-                                    <button onClick={openReassignModal} className="text-xs px-2 py-2 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:border-brand-blue/60">
-                                        <Users className="w-4 h-4 text-brand-blue" /> Reassign client
-                                    </button>
-                                    <button onClick={openBlacklistModal} className="text-xs px-2 py-2 rounded-md border border-rose-200 dark:border-rose-700 flex items-center gap-2 hover:border-rose-400/80">
-                                        <ShieldAlert className="w-4 h-4 text-rose-500" /> Blacklist
-                                    </button>
-                                    <button onClick={openReplyModal} className="text-xs px-2 py-2 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:border-brand-blue/60">
-                                        <MessageSquare className="w-4 h-4 text-brand-blue" /> Reply to report
-                                    </button>
-                                </div>
-
-                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
-                                    <div className="text-[11px] uppercase text-slate-500 font-bold mb-2">Sales Report / Purchase History</div>
-                                    <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
-                                        {contactPurchases.map((p) => (
-                                            <div key={p.id} className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300">
-                                                <span className="font-bold">₱{Number(p.amount).toLocaleString()}</span>
-                                                <span className="text-[11px] text-slate-500">{p.status} • {formatDate(p.purchased_at)}</span>
-                                                <span className="text-[11px] text-slate-500">{p.notes || '—'}</span>
-                                            </div>
-                                        ))}
-                                        {contactPurchases.length === 0 && (
-                                            <div className="text-xs text-slate-500">No purchases yet.</div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
-                                    <div className="text-[11px] uppercase text-slate-500 font-bold mb-2">Chat History (date & time)</div>
-                                    <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
-                                        {contactInquiries.map((inq) => (
-                                            <div key={inq.id} className="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                                                <MessageSquare className="w-3 h-3 text-brand-blue" />
-                                                <span className="font-bold">{inq.title}</span>
-                                                <span className="text-[11px] text-slate-500">{formatDate(inq.occurred_at)} • {new Date(inq.occurred_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                                <span className="text-[11px] text-slate-500">({inq.channel})</span>
-                                            </div>
-                                        ))}
-                                        {contactInquiries.length === 0 && <div className="text-xs text-slate-500">No chats logged.</div>}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="text-sm text-slate-500">Select a customer from the list to see details.</div>
-                        )}
-                    </div>
-
-                    {/* Lead Opportunities + Performance */}
-                    <div className="col-span-12 lg:col-span-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                <Target className="w-4 h-4 text-brand-blue" /> Lead Opportunities
-                            </h3>
-                            <button className="text-[11px] text-brand-blue flex items-center gap-1"><RefreshCw className="w-3 h-3" /> Sync</button>
-                        </div>
-                        <div className="space-y-2">
-                            <div className="text-[11px] font-bold text-slate-500 uppercase">Active – no purchase this month</div>
-                            {leadOpportunities.activeNoPurchase.map(c => {
-                                const { companyName, formerName } = getCompanyNameParts(c);
-                                return (
-                                    <div key={c.id} className="text-xs text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1">
-                                        <CompanyName
-                                            name={companyName}
-                                            pastName={formerName}
-                                            entity={c}
-                                            className="inline-flex items-center gap-1"
-                                            formerNameClassName="text-[10px] text-slate-500 font-medium"
-                                        />
-                                    </div>
-                                );
-                            })}
-                            {leadOpportunities.activeNoPurchase.length === 0 && <div className="text-xs text-slate-500">All active customers purchased this month.</div>}
-                        </div>
-                        <div className="space-y-2">
-                            <div className="text-[11px] font-bold text-slate-500 uppercase">Inactive – positive interest</div>
-                            {leadOpportunities.inactivePositive.map(c => {
-                                const { companyName, formerName } = getCompanyNameParts(c);
-                                return (
-                                    <div key={c.id} className="text-xs text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1">
-                                        <CompanyName
-                                            name={companyName}
-                                            pastName={formerName}
-                                            entity={c}
-                                            className="inline-flex items-center gap-1"
-                                            formerNameClassName="text-[10px] text-slate-500 font-medium"
-                                        />
-                                    </div>
-                                );
-                            })}
-                            {leadOpportunities.inactivePositive.length === 0 && <div className="text-xs text-slate-500">No inactive positive leads.</div>}
-                        </div>
-                        <div className="space-y-2">
-                            <div className="text-[11px] font-bold text-slate-500 uppercase">Prospectives – positive</div>
-                            {leadOpportunities.prospectivePositive.map(c => {
-                                const { companyName, formerName } = getCompanyNameParts(c);
-                                return (
-                                    <div key={c.id} className="text-xs text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1">
-                                        <CompanyName
-                                            name={companyName}
-                                            pastName={formerName}
-                                            entity={c}
-                                            className="inline-flex items-center gap-1"
-                                            formerNameClassName="text-[10px] text-slate-500 font-medium"
-                                        />
-                                    </div>
-                                );
-                            })}
-                            {leadOpportunities.prospectivePositive.length === 0 && <div className="text-xs text-slate-500">No positive prospectives.</div>}
-                        </div>
-
-                        <div className="border-t border-slate-200 dark:border-slate-800 pt-3 space-y-2">
-                            <div className="text-[11px] font-bold text-slate-500 uppercase">New today</div>
-                            <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
-                                <UserPlus className="w-4 h-4 text-brand-blue" /> Prospects: {newProspectsToday.length} | Customers: {newCustomersToday.length}
-                            </div>
-                        </div>
-
-                        <div className="border-t border-slate-200 dark:border-slate-800 pt-3 space-y-2">
-                            <div className="text-[11px] font-bold text-slate-500 uppercase">Agent Performance</div>
-                            <div className="grid grid-cols-2 gap-2 text-xs text-slate-700 dark:text-slate-200">
-                                <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                                    <div className="font-bold">Monthly Quota</div>
-                                    <div className="text-sm">₱1.5M</div>
-                                </div>
-                                <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
-                                    <div className="font-bold">Current Sales</div>
-                                    <div className="text-sm">₱{totalSales.toLocaleString()}</div>
-                                </div>
-                                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
-                                    <div className="font-bold">Active Customers</div>
-                                    <div className="text-sm">₱{salesFromStatus(CustomerStatus.ACTIVE).toLocaleString()}</div>
-                                </div>
-                                <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40">
-                                    <div className="font-bold">Inactive Customers</div>
-                                    <div className="text-sm">₱{salesFromStatus(CustomerStatus.INACTIVE).toLocaleString()}</div>
-                                </div>
-                                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 col-span-2">
-                                    <div className="font-bold">Prospective Customers</div>
-                                    <div className="text-sm">₱{salesFromStatus(CustomerStatus.PROSPECTIVE).toLocaleString()}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <div className="min-h-0">
@@ -1592,76 +1559,6 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                                             })}
                                         </tbody>
                                     </table>
-                                </div>
-                            </div>
-
-                        </div>
-
-                        {/* RIGHT COLUMN: Insights & Chat (Span 3) */}
-                        <div className="col-span-12 lg:col-span-3 flex flex-col gap-4 h-full min-h-0 lg:self-start">
-
-
-
-                            {/* Chat (Flex-1) */}
-                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-[420px]">
-                                <div className="p-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 shrink-0 flex items-center gap-2">
-                                    <MessageSquare className="w-4 h-4 text-brand-blue" />
-                                    <h3 className="font-bold text-sm text-slate-800 dark:text-white">Team Chat</h3>
-                                </div>
-
-                                <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-                                    {chatMessages.map((msg) => (
-                                        <div key={msg.id} className={`flex gap-2 ${msg.isMe ? 'flex-row-reverse' : ''}`}>
-                                            <img src={msg.avatar} className="w-6 h-6 rounded-full border border-slate-200 shrink-0" alt="" />
-                                            <div className={`flex flex-col max-w-[90%] ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                                                <div className={`px-3 py-2 rounded-xl text-xs ${msg.isMe
-                                                    ? 'bg-brand-blue text-white rounded-tr-none'
-                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-tl-none'
-                                                    }`}>
-                                                    {renderMessageText(msg.message)}
-                                                </div>
-                                                <span className="text-[9px] text-slate-400 mt-0.5">{msg.time}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 shrink-0">
-                                    <div className="relative">
-                                        {showMentions && filteredAgents.length > 0 && (
-                                            <div className="absolute bottom-full left-0 mb-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden z-50">
-                                                <div className="max-h-32 overflow-y-auto">
-                                                    {filteredAgents.map((agent, index) => (
-                                                        <button
-                                                            key={agent.id}
-                                                            onClick={() => insertMention(agent.name)}
-                                                            onMouseEnter={() => setSelectedIndex(index)}
-                                                            className={`w-full text-left p-2 flex items-center gap-2 text-xs ${index === selectedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : ''
-                                                                }`}
-                                                        >
-                                                            <img src={agent.avatar} className="w-5 h-5 rounded-full" alt="" />
-                                                            <span className="font-bold text-slate-800 dark:text-white">{agent.name}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <input
-                                            ref={inputRef}
-                                            type="text"
-                                            value={newMessage}
-                                            onChange={handleInputChange}
-                                            onKeyDown={handleKeyDown}
-                                            placeholder="Type message..."
-                                            className="w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue transition-all"
-                                        />
-                                        <button
-                                            onClick={handleSendMessage}
-                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-600 text-brand-blue"
-                                        >
-                                            <Send className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
 
