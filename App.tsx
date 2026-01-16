@@ -43,6 +43,8 @@ import ReceivingStock from './components/ReceivingStock';
 import PurchaseRequestModule from './components/PurchaseRequest';
 import ReturnToSupplier from './components/ReturnToSupplier';
 import SalesMap from './components/SalesMap';
+import PromotionManagementView from './components/PromotionManagementView';
+import PromotionListView from './components/PromotionListView';
 
 // Maintenance Modules
 import Suppliers from './components/Maintenance/Product/Suppliers';
@@ -417,6 +419,18 @@ const App: React.FC = () => {
                 moduleContext.invoice?.invoiceId
               }
             />
+          </div>
+        );
+      case 'sales-transaction-product-promotions':
+        // Owner sees management dashboard, others see list view
+        const isOwner = userProfile?.role === 'Owner';
+        return (
+          <div className="h-full overflow-y-auto">
+            {isOwner ? (
+              <PromotionManagementView currentUser={userProfile} />
+            ) : (
+              <PromotionListView currentUser={userProfile} />
+            )}
           </div>
         );
       case 'management':

@@ -1572,3 +1572,121 @@ export interface InventoryAuditReportData {
   generatedAt: string;
   filters: InventoryAuditFilters;
 }
+
+// ============================================================================
+// Product Promotion Management Types
+// ============================================================================
+
+export type PromotionStatus = 'Draft' | 'Active' | 'Expired' | 'Cancelled';
+export type PostingStatus = 'Not Posted' | 'Pending Review' | 'Approved' | 'Rejected';
+
+export interface Promotion {
+  id: string;
+  campaign_title: string;
+  description?: string;
+  start_date?: string;
+  end_date: string;
+  status: PromotionStatus;
+  created_by: string;
+  assigned_to: string[];  // Empty array = all sales persons
+  target_platforms: string[];
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  is_deleted: boolean;
+  // Joined data
+  creator?: UserProfile;
+  products?: PromotionProduct[];
+  postings?: PromotionPosting[];
+}
+
+export interface PromotionProduct {
+  id: string;
+  promotion_id: string;
+  product_id: string;
+  promo_price_aa?: number;
+  promo_price_bb?: number;
+  promo_price_cc?: number;
+  promo_price_dd?: number;
+  promo_price_vip1?: number;
+  promo_price_vip2?: number;
+  created_at: string;
+  // Joined product data
+  product?: Product;
+}
+
+export interface PromotionPosting {
+  id: string;
+  promotion_id: string;
+  platform_name: string;
+  posted_by?: string;
+  post_url?: string;
+  screenshot_url?: string;
+  status: PostingStatus;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  rejection_reason?: string;
+  created_at: string;
+  updated_at: string;
+  // Joined data
+  poster?: UserProfile;
+  reviewer?: UserProfile;
+}
+
+export interface CreatePromotionDTO {
+  campaign_title: string;
+  description?: string;
+  start_date?: string;
+  end_date: string;
+  assigned_to: string[];  // Empty = all sales persons
+  target_platforms: string[];
+  products: Array<{
+    product_id: string;
+    promo_price_aa?: number;
+    promo_price_bb?: number;
+    promo_price_cc?: number;
+    promo_price_dd?: number;
+    promo_price_vip1?: number;
+    promo_price_vip2?: number;
+  }>;
+}
+
+export interface UpdatePromotionDTO {
+  campaign_title?: string;
+  description?: string;
+  start_date?: string;
+  end_date?: string;
+  status?: PromotionStatus;
+  assigned_to?: string[];
+  target_platforms?: string[];
+}
+
+export interface PromotionFilters {
+  status?: PromotionStatus | PromotionStatus[];
+  created_by?: string;
+  assigned_to?: string;
+  expiring_within_days?: number;
+  search?: string;
+}
+
+export interface PromotionPerformance {
+  promotion_id: string;
+  total_sales: number;
+  total_orders: number;
+  products_sold: Array<{
+    product_id: string;
+    product_name: string;
+    quantity: number;
+    revenue: number;
+  }>;
+  date_range: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface PromotionStats {
+  total_active: number;
+  pending_reviews: number;
+  expiring_soon: number;
+}
