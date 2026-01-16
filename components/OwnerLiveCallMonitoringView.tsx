@@ -15,6 +15,7 @@ import { useToast } from './ToastProvider';
 import { countCallOutcomes } from './callMetricsUtils';
 import SalesPerformanceCard from './SalesPerformanceCard';
 import AgentSummaryModal from './AgentSummaryModal';
+import InquiryAlertPanel from './InquiryAlertPanel';
 
 // Mock Chat Data
 interface ChatMessage {
@@ -1038,6 +1039,9 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4 space-y-3">
+                {/* Inquiry Alert Panel */}
+                <InquiryAlertPanel currentUser={currentUser} />
+
                 {/* 3. Main Dashboard Grid (Flex-1 to prevent scroll) */}
                 <div className="grid grid-cols-12 gap-3">
                     {/* Customer Lists & Details - TOP PRIORITY ROW */}
