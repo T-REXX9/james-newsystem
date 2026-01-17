@@ -60,6 +60,11 @@ import { Pipeline } from './components/Maintenance/Customer/Pipeline';
 import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
 import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
 
+// AI Customer Service Components
+import AIDashboardView from './components/AIDashboardView';
+import AIStandardAnswersView from './components/AIStandardAnswersView';
+import AIEscalationPanel from './components/AIEscalationPanel';
+
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
@@ -584,6 +589,27 @@ const App: React.FC = () => {
       case 'tasks':
       case 'communication-productivity-tasks':
         return <TasksView currentUser={userProfile} />;
+
+      // AI Customer Service Routes
+      case 'ai-service-dashboard':
+        return (
+          <div className="h-full overflow-y-auto">
+            <AIDashboardView currentUser={userProfile} />
+          </div>
+        );
+      case 'ai-service-standard-answers':
+        return (
+          <div className="h-full overflow-y-auto">
+            <AIStandardAnswersView currentUser={userProfile} />
+          </div>
+        );
+      case 'ai-service-escalations':
+        return (
+          <div className="h-full overflow-y-auto">
+            <AIEscalationPanel currentUser={userProfile} />
+          </div>
+        );
+
       default:
         return renderComingSoon(getModuleLabel(canonicalTab));
     }

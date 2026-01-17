@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Map,
   Tag,
+  Bot,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -482,6 +483,31 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             label: 'Operator',
             route: 'communication-text-menu-operator',
             icon: MessageSquare,
+          },
+        ],
+      },
+      {
+        id: 'ai-service',
+        label: 'AI SERVICE',
+        icon: Bot,
+        items: [
+          {
+            id: 'ai-service-dashboard',
+            label: 'AI Dashboard',
+            route: 'ai-service-dashboard',
+            icon: Bot,
+          },
+          {
+            id: 'ai-service-standard-answers',
+            label: 'Standard Answers',
+            route: 'ai-service-standard-answers',
+            icon: MessageSquare,
+          },
+          {
+            id: 'ai-service-escalations',
+            label: 'Escalation Queue',
+            route: 'ai-service-escalations',
+            icon: Users,
           },
         ],
       },

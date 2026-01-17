@@ -1701,3 +1701,123 @@ export interface PromotionStats {
   pending_reviews: number;
   expiring_soon: number;
 }
+
+// --- AI Customer Service Types ---
+
+export type AIConversationChannel = 'sms';
+export type AIConversationPurpose = 'lead_gen' | 'inquiry' | 'complaint' | 'delivery' | 'sales';
+export type AIConversationStatus = 'active' | 'completed' | 'escalated' | 'abandoned';
+export type AIConversationOutcome = 'resolved' | 'escalated' | 'follow_up' | 'converted';
+export type AIMessageRole = 'customer' | 'ai' | 'agent';
+export type AIEscalationReason = 'low_confidence' | 'customer_request' | 'complex_issue' | 'vip_customer';
+export type AIEscalationPriority = 'urgent' | 'high' | 'normal' | 'low';
+export type AIEscalationStatus = 'pending' | 'in_progress' | 'resolved';
+
+export interface AIStandardAnswer {
+  id: string;
+  category: string;
+  trigger_keywords: string[];
+  question_template: string;
+  answer_template: string;
+  variables?: Record<string, string>;
+  is_active: boolean;
+  priority: number;
+  created_by?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface AIConversation {
+  id: string;
+  contact_id?: string;
+  phone_number?: string;
+  channel: AIConversationChannel;
+  purpose: AIConversationPurpose;
+  status: AIConversationStatus;
+  started_at: string;
+  ended_at?: string;
+  duration_seconds?: number;
+  outcome?: AIConversationOutcome;
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  summary?: string;
+  assigned_agent_id?: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+  updated_at?: string;
+  // Joined fields
+  contact?: Contact;
+  assigned_agent?: UserProfile;
+  messages?: AIConversationMessage[];
+}
+
+export interface AIConversationMessage {
+  id: string;
+  conversation_id: string;
+  role: AIMessageRole;
+  content: string;
+  timestamp: string;
+  standard_answer_id?: string;
+  confidence_score?: number;
+}
+
+export interface AIEscalation {
+  id: string;
+  conversation_id: string;
+  reason: AIEscalationReason;
+  priority: AIEscalationPriority;
+  assigned_to?: string;
+  status: AIEscalationStatus;
+  created_at: string;
+  resolved_at?: string;
+  resolution_notes?: string;
+  // Joined fields
+  conversation?: AIConversation;
+  assigned_agent?: UserProfile;
+}
+
+export interface CreateAIStandardAnswerInput {
+  category: string;
+  trigger_keywords: string[];
+  question_template: string;
+  answer_template: string;
+  variables?: Record<string, string>;
+  priority?: number;
+}
+
+export interface UpdateAIStandardAnswerInput {
+  category?: string;
+  trigger_keywords?: string[];
+  question_template?: string;
+  answer_template?: string;
+  variables?: Record<string, string>;
+  priority?: number;
+  is_active?: boolean;
+}
+
+export interface AIConversationFilters {
+  status?: AIConversationStatus;
+  purpose?: AIConversationPurpose;
+  contact_id?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+export interface AIEscalationWithDetails extends AIEscalation {
+  conversation: AIConversation & {
+    contact?: Contact;
+  };
+  assigned_agent?: UserProfile;
+}
+
+export interface AIDashboardStats {
+  active_conversations: number;
+  today_conversations: number;
+  escalation_rate: number;
+  avg_response_time_seconds: number;
+  sentiment_breakdown: {
+    positive: number;
+    neutral: number;
+    negative: number;
+  };
+  purpose_breakdown: Record<AIConversationPurpose, number>;
+}
