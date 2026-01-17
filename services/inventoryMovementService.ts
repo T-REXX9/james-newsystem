@@ -203,3 +203,67 @@ export async function generateFastSlowReport(filters: FastSlowReportFilters): Pr
     generatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Lightweight function to fetch movement classification for all products.
+ * Returns a Map of product_id -> classification ('fast' | 'slow' | 'normal')
+ */
+export async function fetchProductMovementClassifications(): Promise<Map<string, MovementCategory>> {
+  const result = new Map<string, MovementCategory>();
+  const periods = getThreeMonthPeriods();
+
+  const { data: products, error: productsError } = await supabase
+    .from('products')
+    .select('id')
+    .eq('is_deleted', false);
+
+  if (productsError || !products || products.length === 0) {
+    return result;
+  }
+
+  const productIds = products.map(p => p.id);
+
+  const { data: allLogs, error: logsError } = await (supabase as any)
+    .from('inventory_logs')
+    .select('item_id, date, qty_out')
+    .in('item_id', productIds)
+    .eq('is_deleted', false);
+
+  if (logsError || !allLogs) {
+    return result;
+  }
+
+  const month2Start = formatDateForDB(periods.month2.start);
+  const month2End = formatDateForDB(periods.month2.end);
+  const month3Start = formatDateForDB(periods.month3.start);
+  const month3End = formatDateForDB(periods.month3.end);
+
+  for (const product of products) {
+    const productLogs = allLogs.filter((log: any) => log.item_id === product.id);
+
+    let month2Sales = 0;
+    let month3Sales = 0;
+    let hasActivity = false;
+
+    for (const log of productLogs) {
+      const logDate = log.date?.split('T')[0];
+      const qtyOut = log.qty_out || 0;
+
+      if (qtyOut > 0) hasActivity = true;
+
+      if (logDate >= month2Start && logDate <= month2End) {
+        month2Sales += qtyOut;
+      } else if (logDate >= month3Start && logDate <= month3End) {
+        month3Sales += qtyOut;
+      }
+    }
+
+    // Only classify if there's activity
+    if (hasActivity) {
+      const category = categorizeMovement(0, month2Sales, month3Sales);
+      result.set(product.id, category);
+    }
+  }
+
+  return result;
+}

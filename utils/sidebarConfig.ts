@@ -1,4 +1,4 @@
-import { LayoutDashboard, KanbanSquare, Database, Package, Settings, Users, BarChart3, MessageSquare, CalendarDays, PhoneCall, ClipboardList, Recycle, FileText } from 'lucide-react';
+import { LayoutDashboard, KanbanSquare, Database, Package, Settings, Users, BarChart3, MessageSquare, CalendarDays, PhoneCall, ClipboardList, Recycle, FileText, Tag } from 'lucide-react';
 import type { MenuItem } from '../components/SidebarMenuItem';
 import { MenuCategory } from '../types';
 
@@ -102,6 +102,15 @@ export const HIERARCHICAL_MENU_CONFIG: MenuCategory[] = [
             level: 3,
             parentId: 'sales-transactions',
             route: 'sales-transaction-invoice',
+            isExpandable: false,
+          },
+          {
+            id: 'sales-transaction-product-promotions',
+            label: 'Product Promotions',
+            icon: Tag,
+            level: 3,
+            parentId: 'sales-transactions',
+            route: 'sales-transaction-product-promotions',
             isExpandable: false,
           },
         ],

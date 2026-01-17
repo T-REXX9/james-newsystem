@@ -43,6 +43,8 @@ import ReceivingStock from './components/ReceivingStock';
 import PurchaseRequestModule from './components/PurchaseRequest';
 import ReturnToSupplier from './components/ReturnToSupplier';
 import SalesMap from './components/SalesMap';
+import PromotionManagementView from './components/PromotionManagementView';
+import PromotionListView from './components/PromotionListView';
 
 // Maintenance Modules
 import Suppliers from './components/Maintenance/Product/Suppliers';
@@ -57,6 +59,11 @@ import { CustomerData } from './components/Maintenance/Customer/CustomerData';
 import { Pipeline } from './components/Maintenance/Customer/Pipeline';
 import SpecialPrice from './components/Maintenance/Product/SpecialPrice';
 import ActivityLogs from './components/Maintenance/Profile/ActivityLogs';
+
+// AI Customer Service Components
+import AIDashboardView from './components/AIDashboardView';
+import AIStandardAnswersView from './components/AIStandardAnswersView';
+import AIEscalationPanel from './components/AIEscalationPanel';
 
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
@@ -107,8 +114,11 @@ const App: React.FC = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session?.user) fetchUserProfile(session.user.id);
-      else {
+      if (session?.user) {
+        // Reset to dashboard on every login to prevent access issues when switching accounts
+        setActiveTab('dashboard');
+        fetchUserProfile(session.user.id);
+      } else {
         setUserProfile(null);
         setAppLoading(false);
       }
@@ -419,6 +429,18 @@ const App: React.FC = () => {
             />
           </div>
         );
+      case 'sales-transaction-product-promotions':
+        // Owner sees management dashboard, others see list view
+        const isOwner = userProfile?.role === 'Owner';
+        return (
+          <div className="h-full overflow-y-auto">
+            {isOwner ? (
+              <PromotionManagementView currentUser={userProfile} />
+            ) : (
+              <PromotionListView currentUser={userProfile} />
+            )}
+          </div>
+        );
       case 'management':
       case 'sales-performance-management-dashboard':
         return (
@@ -567,6 +589,27 @@ const App: React.FC = () => {
       case 'tasks':
       case 'communication-productivity-tasks':
         return <TasksView currentUser={userProfile} />;
+
+      // AI Customer Service Routes
+      case 'ai-service-dashboard':
+        return (
+          <div className="h-full overflow-y-auto">
+            <AIDashboardView currentUser={userProfile} />
+          </div>
+        );
+      case 'ai-service-standard-answers':
+        return (
+          <div className="h-full overflow-y-auto">
+            <AIStandardAnswersView currentUser={userProfile} />
+          </div>
+        );
+      case 'ai-service-escalations':
+        return (
+          <div className="h-full overflow-y-auto">
+            <AIEscalationPanel currentUser={userProfile} />
+          </div>
+        );
+
       default:
         return renderComingSoon(getModuleLabel(canonicalTab));
     }
