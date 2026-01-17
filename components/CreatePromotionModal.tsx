@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Search, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Plus, Search, Trash2, MapPin, Users } from 'lucide-react';
 import { UserProfile, Product } from '../types';
 import * as promotionService from '../services/promotionService';
 import { supabase } from '../lib/supabaseClient';
@@ -40,6 +40,14 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
+    // Client Targeting state
+    const [targetAllClients, setTargetAllClients] = useState<'all' | 'specific'>('all');
+    const [selectedClients, setSelectedClients] = useState<string[]>([]);
+    const [selectedCities, setSelectedCities] = useState<string[]>([]);
+    const [clientList, setClientList] = useState<Array<{ id: string; company: string; city: string }>>([]);
+    const [clientSearch, setClientSearch] = useState('');
+    const [citySearch, setCitySearch] = useState('');
+
     // Fetch products and staff
     useEffect(() => {
         const fetchData = async () => {
@@ -60,6 +68,14 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                     .in('role', ['Sales Agent', 'sales_agent', 'Senior Agent'])
                     .order('full_name');
                 setStaffList(staffData || []);
+
+                // Fetch clients (contacts) for targeting
+                const { data: contactsData } = await supabase
+                    .from('contacts')
+                    .select('id, company, city')
+                    .eq('is_deleted', false)
+                    .order('company');
+                setClientList(contactsData || []);
             } catch (error) {
                 console.error('Error fetching data:', error);
             } finally {
@@ -68,6 +84,27 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
         };
         fetchData();
     }, []);
+
+    // Get unique cities from client list
+    const availableCities = useMemo(() => {
+        const cities = new Set(clientList.map(c => c.city).filter(Boolean));
+        return Array.from(cities).sort();
+    }, [clientList]);
+
+    // Filter clients for search
+    const filteredClients = useMemo(() => {
+        return clientList.filter(c =>
+            c.company?.toLowerCase().includes(clientSearch.toLowerCase()) ||
+            c.city?.toLowerCase().includes(clientSearch.toLowerCase())
+        );
+    }, [clientList, clientSearch]);
+
+    // Filter cities for search
+    const filteredCities = useMemo(() => {
+        return availableCities.filter(c =>
+            c.toLowerCase().includes(citySearch.toLowerCase())
+        );
+    }, [availableCities, citySearch]);
 
     const handleAddPlatform = () => {
         if (platformInput.trim() && !platforms.includes(platformInput.trim())) {
@@ -143,6 +180,10 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                     end_date: endDate,
                     assigned_to: assignTo === 'all' ? [] : selectedStaff,
                     target_platforms: platforms,
+                    // Client targeting
+                    target_all_clients: targetAllClients === 'all',
+                    target_client_ids: targetAllClients === 'specific' ? selectedClients : [],
+                    target_cities: selectedCities,
                     products: selectedProducts.map((sp) => ({
                         product_id: sp.product.id,
                         promo_price_aa: sp.promo_price_aa,
@@ -342,6 +383,127 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                                 ))}
                             </div>
                         )}
+                    </div>
+
+                    {/* Client Targeting */}
+                    <div>
+                        <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <Users className="w-4 h-4" />
+                            Client Targeting
+                        </h3>
+
+                        {/* All or Specific Clients */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Apply To
+                            </label>
+                            <select
+                                value={targetAllClients}
+                                onChange={(e) => setTargetAllClients(e.target.value as 'all' | 'specific')}
+                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">All Clients</option>
+                                <option value="specific">Selected Clients Only</option>
+                            </select>
+                        </div>
+
+                        {/* Specific Client Selection */}
+                        {targetAllClients === 'specific' && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                    Select Clients ({selectedClients.length} selected)
+                                </label>
+                                <div className="relative mb-2">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        value={clientSearch}
+                                        onChange={(e) => setClientSearch(e.target.value)}
+                                        placeholder="Search clients..."
+                                        className="w-full pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-0 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                                <div className="max-h-40 overflow-y-auto space-y-1 border border-slate-200 dark:border-slate-700 rounded-lg p-2">
+                                    {filteredClients.slice(0, 50).map((client) => (
+                                        <label key={client.id} className="flex items-center gap-2 py-1 px-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedClients.includes(client.id)}
+                                                onChange={(e) =>
+                                                    setSelectedClients(
+                                                        e.target.checked
+                                                            ? [...selectedClients, client.id]
+                                                            : selectedClients.filter((id) => id !== client.id)
+                                                    )
+                                                }
+                                                className="rounded border-slate-300 dark:border-slate-600 text-blue-600"
+                                            />
+                                            <span className="text-sm text-slate-700 dark:text-slate-300 flex-1 truncate">
+                                                {client.company}
+                                            </span>
+                                            {client.city && (
+                                                <span className="text-xs text-slate-400">{client.city}</span>
+                                            )}
+                                        </label>
+                                    ))}
+                                    {filteredClients.length === 0 && (
+                                        <p className="text-xs text-slate-400 text-center py-2">No clients found</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* City Filter */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5" />
+                                City Filter (Optional)
+                            </label>
+                            <div className="relative mb-2">
+                                <input
+                                    type="text"
+                                    value={citySearch}
+                                    onChange={(e) => setCitySearch(e.target.value)}
+                                    placeholder="Search cities..."
+                                    className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border-0 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {selectedCities.map((city) => (
+                                    <span
+                                        key={city}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-xs"
+                                    >
+                                        {city}
+                                        <button
+                                            onClick={() => setSelectedCities(selectedCities.filter((c) => c !== city))}
+                                            className="hover:text-emerald-900 dark:hover:text-emerald-200"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 border border-slate-200 dark:border-slate-700 rounded-lg">
+                                {filteredCities.slice(0, 30).map((city) => (
+                                    <button
+                                        key={city}
+                                        onClick={() => {
+                                            if (!selectedCities.includes(city)) {
+                                                setSelectedCities([...selectedCities, city]);
+                                            }
+                                        }}
+                                        disabled={selectedCities.includes(city)}
+                                        className="px-2 py-1 text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {city}
+                                    </button>
+                                ))}
+                                {filteredCities.length === 0 && (
+                                    <p className="text-xs text-slate-400 text-center w-full py-1">No cities found</p>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     {/* Assignment */}

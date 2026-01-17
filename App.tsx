@@ -109,8 +109,11 @@ const App: React.FC = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session?.user) fetchUserProfile(session.user.id);
-      else {
+      if (session?.user) {
+        // Reset to dashboard on every login to prevent access issues when switching accounts
+        setActiveTab('dashboard');
+        fetchUserProfile(session.user.id);
+      } else {
         setUserProfile(null);
         setAppLoading(false);
       }

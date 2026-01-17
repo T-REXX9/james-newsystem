@@ -40,6 +40,10 @@ export async function createPromotion(
             created_by: createdBy,
             assigned_to: dto.assigned_to,
             target_platforms: dto.target_platforms,
+            // Client/City Targeting
+            target_all_clients: dto.target_all_clients ?? true,
+            target_client_ids: dto.target_client_ids ?? [],
+            target_cities: dto.target_cities ?? [],
         })
         .select()
         .single();

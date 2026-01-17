@@ -1590,6 +1590,10 @@ export interface Promotion {
   created_by: string;
   assigned_to: string[];  // Empty array = all sales persons
   target_platforms: string[];
+  // Client/City Targeting
+  target_all_clients: boolean;  // When true, applies to all clients
+  target_client_ids: string[];  // Specific client IDs when target_all_clients is false
+  target_cities: string[];      // Optional city filter
   created_at: string;
   updated_at: string;
   deleted_at?: string;
@@ -1640,6 +1644,10 @@ export interface CreatePromotionDTO {
   end_date: string;
   assigned_to: string[];  // Empty = all sales persons
   target_platforms: string[];
+  // Client/City Targeting
+  target_all_clients?: boolean;  // Default true = all clients
+  target_client_ids?: string[];  // Specific client IDs
+  target_cities?: string[];      // Optional city filter
   products: Array<{
     product_id: string;
     promo_price_aa?: number;
@@ -1659,6 +1667,9 @@ export interface UpdatePromotionDTO {
   status?: PromotionStatus;
   assigned_to?: string[];
   target_platforms?: string[];
+  target_all_clients?: boolean;
+  target_client_ids?: string[];
+  target_cities?: string[];
 }
 
 export interface PromotionFilters {
