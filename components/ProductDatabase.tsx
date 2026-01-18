@@ -1,20 +1,40 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Search, Plus, Edit2, Trash2, Filter, Package, AlertCircle, X, Check, Loader2, Save, Eye, EyeOff, Archive, TrendingUp, TrendingDown
+  Search, Plus, Edit2, Trash2, Filter, Package, AlertCircle, X, Check, Loader2, Save, Eye, EyeOff, Archive, TrendingUp, TrendingDown, Settings, DollarSign, Percent
 } from 'lucide-react';
-import { Product } from '../types';
-import { fetchProducts, createProduct, updateProduct, deleteProduct } from '../services/supabaseService';
+import { Product, UserProfile } from '../types';
+import { fetchProducts, createProduct, updateProduct, deleteProduct, bulkUpdateProducts } from '../services/supabaseService';
 import { fetchProductMovementClassifications } from '../services/inventoryMovementService';
 import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
+import ConfirmModal from './ConfirmModal';
 
-const ProductDatabase: React.FC = () => {
+interface ProductDatabaseProps {
+  currentUser: UserProfile | null;
+}
+
+const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   const [searchQuery, setSearchQuery] = useState('');
+
+  const isMasterAccess = currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => Promise<void> | void;
+    variant: 'danger' | 'warning' | 'info' | 'success';
+    confirmLabel: string;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => { }, variant: 'danger', confirmLabel: 'Confirm' });
+
 
   // Form State
   const initialFormState: Omit<Product, 'id'> = {
@@ -37,6 +57,7 @@ const ProductDatabase: React.FC = () => {
     no_of_cylinder: '',
 
     // Prices
+    cost: 0,
     price_aa: 0,
     price_bb: 0,
     price_cc: 0,
@@ -105,17 +126,21 @@ const ProductDatabase: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      // Optimistic delete
-      setProducts(prev => applyOptimisticDelete(prev, id));
-
-      try {
-        await deleteProduct(id);
-      } catch (error) {
-        console.error('Error deleting product:', error);
-        // Real-time subscription will correct the state
-      }
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Product',
+      message: 'Are you sure you want to delete this product? It will be moved to the recycle bin.',
+      variant: 'danger',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        setProducts(prev => applyOptimisticDelete(prev, id));
+        try {
+          await deleteProduct(id);
+        } catch (error) {
+          console.error('Error deleting product:', error);
+        }
+      },
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -139,11 +164,102 @@ const ProductDatabase: React.FC = () => {
     }
   };
 
+  const handleBulkUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkFormData.targetPercentage) return;
+
+    const affectedProducts = filteredForBulk.map(p => {
+      const cost = p.cost || 0;
+      const updates: Partial<Product> = {};
+      const percent = bulkFormData.targetPercentage as number;
+
+      bulkFormData.selectedPriceGroups.forEach(group => {
+        const field = `price_${group.toLowerCase()}` as keyof Product;
+        let newPrice = 0;
+
+        if (bulkFormData.updateMethod === 'markup') {
+          // Markup: SP = Cost * (1 + Markup%)
+          newPrice = Math.round(cost * (1 + percent / 100));
+        } else {
+          // GP: SP = Cost / (1 - GP%)
+          const margin = 1 - (percent / 100);
+          newPrice = margin > 0 ? Math.round(cost / margin) : 0;
+        }
+
+        // @ts-ignore
+        updates[field] = newPrice;
+      });
+
+      return { id: p.id, updates };
+    });
+
+    if (affectedProducts.length === 0) {
+      alert('No products match the criteria.');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Update Prices',
+      message: `You are about to update prices for ${affectedProducts.length} products. This action cannot be undone.`,
+      variant: 'warning',
+      confirmLabel: `Update ${affectedProducts.length} Products`,
+      onConfirm: async () => {
+        setIsBulkUpdating(true);
+        try {
+          for (const item of affectedProducts) {
+            await updateProduct(item.id, item.updates);
+          }
+          setIsBulkUpdateModalOpen(false);
+        } catch (error) {
+          console.error(error);
+          alert('Failed to bulk update products');
+        } finally {
+          setIsBulkUpdating(false);
+        }
+      },
+    });
+  };
+
+  const [bulkFormData, setBulkFormData] = useState({
+    keyword: '',
+    minCost: 0,
+    maxCost: 1000000,
+    selectedPriceGroups: [] as string[],
+    updateMethod: 'markup' as 'markup' | 'gp',
+    targetPercentage: 0
+  });
+
+  const filteredForBulk = useMemo(() => {
+    // Normalize: lowercase + remove all whitespace for fuzzy matching
+    const normalize = (str: string) => str.toLowerCase().replace(/\s+/g, '');
+
+    return products.filter(p => {
+      const description = normalize(p.description || '');
+      const keyword = normalize(bulkFormData.keyword);
+      const matchesKeyword = !keyword || description.includes(keyword);
+
+      const cost = Number(p.cost) || 0;
+      const minCost = bulkFormData.minCost || 0;
+      const maxCost = bulkFormData.maxCost || 0;
+
+      // If maxCost is 0, match all products (no upper limit)
+      const matchesCost = cost >= minCost && (maxCost <= 0 || cost <= maxCost);
+
+      return matchesKeyword && matchesCost;
+    });
+  }, [products, bulkFormData.keyword, bulkFormData.minCost, bulkFormData.maxCost]);
+
+  // Count how many filtered products have zero cost (will result in zero price)
+  const zeroCostCount = useMemo(() => {
+    return filteredForBulk.filter(p => !p.cost || Number(p.cost) === 0).length;
+  }, [filteredForBulk]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? Number(value) : value
+      [name]: type === 'number' ? (value === '' ? 0 : Number(value)) : value
     }));
   };
 
@@ -171,12 +287,23 @@ const ProductDatabase: React.FC = () => {
             Manage inventory catalog, pricing, and warehouse stocks.
           </p>
         </div>
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg shadow-sm font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Add Product
-        </button>
+        <div className="flex items-center gap-3">
+          {isMasterAccess && (
+            <button
+              onClick={() => setIsBulkUpdateModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg shadow-sm font-medium transition-colors"
+            >
+              <Settings className="w-4 h-4 text-slate-400" />
+              Bulk Price Update
+            </button>
+          )}
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg shadow-sm font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Product
+          </button>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -334,7 +461,188 @@ const ProductDatabase: React.FC = () => {
         </div>
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Bulk Price Update Modal */}
+      {isBulkUpdateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <Settings className="w-5 h-5 text-brand-blue" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white">Bulk Price Update</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Update multiple product prices based on cost and criteria.</p>
+                </div>
+              </div>
+              <button onClick={() => setIsBulkUpdateModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleBulkUpdate} className="p-6 space-y-6">
+              {/* Step 1: Filter */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-brand-blue" />
+                  1. Filter Products
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Description Keyword (e.g. "nozzle")</label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg px-4 py-2.5 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-sm"
+                      placeholder="Leave empty to include all products in cost range"
+                      value={bulkFormData.keyword}
+                      onChange={(e) => setBulkFormData(prev => ({ ...prev, keyword: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Min Cost</label>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg px-4 py-2.5 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-sm"
+                      value={bulkFormData.minCost === 0 ? '' : bulkFormData.minCost}
+                      onChange={(e) => setBulkFormData(prev => ({ ...prev, minCost: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Max Cost</label>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg px-4 py-2.5 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-sm"
+                      value={bulkFormData.maxCost === 0 ? '' : bulkFormData.maxCost}
+                      onChange={(e) => setBulkFormData(prev => ({ ...prev, maxCost: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                  <p className="text-xs font-medium text-brand-blue flex items-center gap-2">
+                    <AlertCircle className="w-3 h-3" />
+                    Currently matches: <strong>{filteredForBulk.length} products</strong>
+                  </p>
+                </div>
+                {zeroCostCount > 0 && (
+                  <div className="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-900/30">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                      <AlertCircle className="w-3 h-3" />
+                      <strong>Warning:</strong> {zeroCostCount} product(s) have no cost set. These will result in a price of 0. Please set the cost first.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Configuration */}
+              <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-brand-blue" />
+                  2. Pricing Configuration
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-2">Select Price Groups to Update</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['AA', 'BB', 'CC', 'DD', 'VIP1', 'VIP2'].map(group => (
+                        <label key={group} className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded text-brand-blue border-slate-300 focus:ring-brand-blue"
+                            checked={bulkFormData.selectedPriceGroups.includes(group)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setBulkFormData(prev => ({
+                                ...prev,
+                                selectedPriceGroups: checked
+                                  ? [...prev.selectedPriceGroups, group]
+                                  : prev.selectedPriceGroups.filter(g => g !== group)
+                              }));
+                            }}
+                          />
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{group}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-2">Calculation Method</label>
+                      <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => setBulkFormData(prev => ({ ...prev, updateMethod: 'markup' }))}
+                          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-bold transition-all ${bulkFormData.updateMethod === 'markup'
+                            ? 'bg-white dark:bg-slate-700 text-brand-blue shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                        >
+                          Markup %
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBulkFormData(prev => ({ ...prev, updateMethod: 'gp' }))}
+                          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-bold transition-all ${bulkFormData.updateMethod === 'gp'
+                            ? 'bg-white dark:bg-slate-700 text-brand-blue shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                        >
+                          Gross Profit %
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+                        {bulkFormData.updateMethod === 'markup' ? 'Markup Percentage' : 'Gross Profit Percentage'}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white text-sm rounded-lg px-4 py-2.5 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all shadow-sm pr-10"
+                          placeholder="e.g. 50"
+                          value={bulkFormData.targetPercentage === 0 ? '' : bulkFormData.targetPercentage}
+                          onChange={(e) => setBulkFormData(prev => ({ ...prev, targetPercentage: e.target.value === '' ? 0 : Number(e.target.value) }))}
+                        />
+                        <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      </div>
+                      <p className="mt-2 text-[10px] text-slate-400 italic">
+                        {bulkFormData.updateMethod === 'markup'
+                          ? 'Formula: Cost × (1 + Markup%)'
+                          : 'Formula: Cost / (1 - GP%) (e.g. 50% GP doubles the price)'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+              <button
+                onClick={() => setIsBulkUpdateModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                disabled={isBulkUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkUpdate}
+                disabled={isBulkUpdating || filteredForBulk.length === 0 || bulkFormData.selectedPriceGroups.length === 0}
+                className="px-6 py-2 bg-brand-blue hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isBulkUpdating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    Apply to {filteredForBulk.length} Products
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
@@ -405,29 +713,47 @@ const ProductDatabase: React.FC = () => {
                     <span className="w-2 h-2 rounded-full bg-blue-500"></span> Pricing Groups
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                    <div>
+                    {isMasterAccess && (
+                      <div className="col-span-2">
+                        <label className="block text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">Cost (Internal Only)</label>
+                        <input
+                          type="number"
+                          name="cost"
+                          value={formData.cost === 0 ? '' : formData.cost}
+                          onChange={handleInputChange}
+                          className="input-field bg-rose-50/50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-900"
+                        />
+                      </div>
+                    )}
+                    <div className={isMasterAccess ? 'md:col-span-1' : ''}>
                       <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Price AA</label>
-                      <input type="number" name="price_aa" value={formData.price_aa} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
+                      <input
+                        type="number"
+                        name="price_aa"
+                        value={formData.price_aa === 0 ? '' : formData.price_aa}
+                        onChange={handleInputChange}
+                        className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Price BB</label>
-                      <input type="number" name="price_bb" value={formData.price_bb} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
+                      <input type="number" name="price_bb" value={formData.price_bb === 0 ? '' : formData.price_bb} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Price CC</label>
-                      <input type="number" name="price_cc" value={formData.price_cc} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
+                      <input type="number" name="price_cc" value={formData.price_cc === 0 ? '' : formData.price_cc} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">Price DD</label>
-                      <input type="number" name="price_dd" value={formData.price_dd} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
+                      <input type="number" name="price_dd" value={formData.price_dd === 0 ? '' : formData.price_dd} onChange={handleInputChange} className="input-field bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-amber-600 dark:text-amber-500 mb-1">Price VIP1</label>
-                      <input type="number" name="price_vip1" value={formData.price_vip1} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
+                      <input type="number" name="price_vip1" value={formData.price_vip1 === 0 ? '' : formData.price_vip1} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-amber-600 dark:text-amber-500 mb-1">Price VIP2</label>
-                      <input type="number" name="price_vip2" value={formData.price_vip2} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
+                      <input type="number" name="price_vip2" value={formData.price_vip2 === 0 ? '' : formData.price_vip2} onChange={handleInputChange} className="input-field bg-amber-50/50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900" />
                     </div>
                   </div>
                 </div>
@@ -445,7 +771,7 @@ const ProductDatabase: React.FC = () => {
                           type="number"
                           name={`stock_wh${num}`}
                           // @ts-ignore
-                          value={formData[`stock_wh${num}`]}
+                          value={formData[`stock_wh${num}`] === 0 ? '' : formData[`stock_wh${num}`]}
                           onChange={handleInputChange}
                           className="input-field bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-900"
                         />
@@ -571,6 +897,16 @@ const ProductDatabase: React.FC = () => {
         </div>
       )}
 
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        confirmLabel={confirmModal.confirmLabel}
+      />
     </div>
   );
 };

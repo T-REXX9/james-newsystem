@@ -308,7 +308,7 @@ const App: React.FC = () => {
       case 'warehouse-inventory-product-database':
         return (
           <div className="h-full overflow-y-auto">
-            <ProductDatabase />
+            <ProductDatabase currentUser={userProfile} />
           </div>
         );
       case 'reorder':

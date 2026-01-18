@@ -431,6 +431,9 @@ export type Database = {
           title: string
           updated_at: string | null
           value: number | null
+          is_deleted: boolean
+          deleted_at: string | null
+          updatedAt: string | null
         }
         Insert: {
           avatar?: string | null
@@ -447,6 +450,9 @@ export type Database = {
           title: string
           updated_at?: string | null
           value?: number | null
+          is_deleted?: boolean
+          deleted_at?: string | null
+          updatedAt?: string | null
         }
         Update: {
           avatar?: string | null
@@ -463,6 +469,9 @@ export type Database = {
           title?: string
           updated_at?: string | null
           value?: number | null
+          is_deleted?: boolean
+          deleted_at?: string | null
+          updatedAt?: string | null
         }
         Relationships: []
       }
@@ -2112,6 +2121,410 @@ export type Database = {
           },
         ]
       }
+      ai_conversations: {
+        Row: {
+          id: string
+          contact_id: string | null
+          phone_number: string | null
+          channel: string
+          purpose: string
+          status: string
+          started_at: string
+          ended_at: string | null
+          duration_seconds: number | null
+          outcome: string | null
+          sentiment: string | null
+          summary: string | null
+          assigned_agent_id: string | null
+          metadata: Json | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          contact_id?: string | null
+          phone_number?: string | null
+          channel: string
+          purpose: string
+          status: string
+          started_at?: string
+          ended_at?: string | null
+          duration_seconds?: number | null
+          outcome?: string | null
+          sentiment?: string | null
+          summary?: string | null
+          assigned_agent_id?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          contact_id?: string | null
+          phone_number?: string | null
+          channel?: string
+          purpose?: string
+          status?: string
+          started_at?: string
+          ended_at?: string | null
+          duration_seconds?: number | null
+          outcome?: string | null
+          sentiment?: string | null
+          summary?: string | null
+          assigned_agent_id?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_conversations_assigned_agent_id_fkey"
+            columns: ["assigned_agent_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_conversations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_conversation_messages: {
+        Row: {
+          id: string
+          conversation_id: string
+          role: string
+          content: string
+          timestamp: string
+          standard_answer_id: string | null
+          confidence_score: number | null
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          role: string
+          content: string
+          timestamp?: string
+          standard_answer_id?: string | null
+          confidence_score?: number | null
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          role?: string
+          content?: string
+          timestamp?: string
+          standard_answer_id?: string | null
+          confidence_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_conversation_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_conversation_messages_standard_answer_id_fkey"
+            columns: ["standard_answer_id"]
+            isOneToOne: false
+            referencedRelation: "ai_standard_answers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_escalations: {
+        Row: {
+          id: string
+          conversation_id: string
+          reason: string
+          priority: string
+          assigned_to: string | null
+          status: string
+          created_at: string
+          resolved_at: string | null
+          resolution_notes: string | null
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          reason: string
+          priority?: string
+          assigned_to?: string | null
+          status?: string
+          created_at?: string
+          resolved_at?: string | null
+          resolution_notes?: string | null
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          reason?: string
+          priority?: string
+          assigned_to?: string | null
+          status?: string
+          created_at?: string
+          resolved_at?: string | null
+          resolution_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_escalations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_escalations_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_standard_answers: {
+        Row: {
+          id: string
+          category: string
+          trigger_keywords: string[]
+          question_template: string
+          answer_template: string
+          variables: Json | null
+          is_active: boolean
+          priority: number
+          created_by: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          category: string
+          trigger_keywords: string[]
+          question_template: string
+          answer_template: string
+          variables?: Json | null
+          is_active: boolean
+          priority: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          category?: string
+          trigger_keywords?: string[]
+          question_template?: string
+          answer_template?: string
+          variables?: Json | null
+          is_active?: boolean
+          priority?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_standard_answers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promotions: {
+        Row: {
+          id: string
+          campaign_title: string
+          description: string | null
+          start_date: string | null
+          end_date: string
+          status: string
+          created_by: string
+          assigned_to: string[] | null
+          target_platforms: string[]
+          target_all_clients: boolean
+          target_client_ids: string[] | null
+          target_cities: string[] | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+          is_deleted: boolean
+        }
+        Insert: {
+          id?: string
+          campaign_title: string
+          description?: string | null
+          start_date?: string | null
+          end_date: string
+          status: string
+          created_by: string
+          assigned_to?: string[] | null
+          target_platforms: string[]
+          target_all_clients?: boolean
+          target_client_ids?: string[] | null
+          target_cities?: string[] | null
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+          is_deleted?: boolean
+        }
+        Update: {
+          id?: string
+          campaign_title?: string
+          description?: string | null
+          start_date?: string | null
+          end_date?: string
+          status?: string
+          created_by?: string
+          assigned_to?: string[] | null
+          target_platforms?: string[]
+          target_all_clients?: boolean
+          target_client_ids?: string[] | null
+          target_cities?: string[] | null
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+          is_deleted?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promotion_products: {
+        Row: {
+          id: string
+          promotion_id: string
+          product_id: string
+          promo_price_aa: number | null
+          promo_price_bb: number | null
+          promo_price_cc: number | null
+          promo_price_dd: number | null
+          promo_price_vip1: number | null
+          promo_price_vip2: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          promotion_id: string
+          product_id: string
+          promo_price_aa?: number | null
+          promo_price_bb?: number | null
+          promo_price_cc?: number | null
+          promo_price_dd?: number | null
+          promo_price_vip1?: number | null
+          promo_price_vip2?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          promotion_id?: string
+          product_id?: string
+          promo_price_aa?: number | null
+          promo_price_bb?: number | null
+          promo_price_cc?: number | null
+          promo_price_dd?: number | null
+          promo_price_vip1?: number | null
+          promo_price_vip2?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotion_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promotion_products_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promotion_postings: {
+        Row: {
+          id: string
+          promotion_id: string
+          platform_name: string
+          posted_by: string | null
+          post_url: string | null
+          screenshot_url: string | null
+          status: string
+          reviewed_by: string | null
+          reviewed_at: string | null
+          rejection_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          promotion_id: string
+          platform_name: string
+          posted_by?: string | null
+          post_url?: string | null
+          screenshot_url?: string | null
+          status: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          rejection_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          promotion_id?: string
+          platform_name?: string
+          posted_by?: string | null
+          post_url?: string | null
+          screenshot_url?: string | null
+          status?: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          rejection_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotion_postings_posted_by_fkey"
+            columns: ["posted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promotion_postings_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promotion_postings_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -2159,116 +2572,116 @@ type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+  ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+    DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
-    ? R
-    : never
+  ? R
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
+    DefaultSchema["Views"])
+  ? (DefaultSchema["Tables"] &
+    DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R
+    }
+  ? R
+  : never
+  : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Tables"]
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
+    Insert: infer I
+  }
+  ? I
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+    Insert: infer I
+  }
+  ? I
+  : never
+  : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Tables"]
+  | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
+    Update: infer U
+  }
+  ? U
+  : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+    Update: infer U
+  }
+  ? U
+  : never
+  : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["Enums"]
+  | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+  : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
+  | keyof DefaultSchema["CompositeTypes"]
+  | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+  ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+  : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : never
 
 export const Constants = {
   public: {

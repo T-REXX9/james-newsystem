@@ -37,7 +37,7 @@ export async function fetchPendingEscalations(): Promise<AIEscalationWithDetails
         low: 3,
     };
 
-    return (data || []).sort((a, b) => {
+    return ((data || []) as unknown as AIEscalationWithDetails[]).sort((a, b) => {
         const weightA = priorityWeight[a.priority as AIEscalationPriority] ?? 2;
         const weightB = priorityWeight[b.priority as AIEscalationPriority] ?? 2;
         if (weightA !== weightB) return weightA - weightB;
@@ -74,7 +74,7 @@ export async function fetchEscalations(
         throw error;
     }
 
-    return data || [];
+    return (data || []) as unknown as AIEscalationWithDetails[];
 }
 
 /**
@@ -113,7 +113,7 @@ export async function assignEscalation(
             .eq('id', escalation.conversation_id);
     }
 
-    return data;
+    return data as unknown as AIEscalation;
 }
 
 /**
@@ -139,7 +139,7 @@ export async function resolveEscalation(
         throw error;
     }
 
-    return data;
+    return data as unknown as AIEscalation;
 }
 
 /**
@@ -172,7 +172,7 @@ export async function createEscalation(
         .update({ status: 'escalated' })
         .eq('id', conversationId);
 
-    return data;
+    return data as unknown as AIEscalation;
 }
 
 /**
