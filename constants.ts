@@ -1373,6 +1373,7 @@ export const generateCallMonitoringSeed = (days = 30): { callLogs: CallLogEntry[
         positive: `Discussed replenishment plan with ${contact.company}.`,
         follow_up: `Awaiting approval from ${contact.company}'s manager.`,
         negative: `${contact.company} postponed their decision this week.`,
+        note: `Left a general note for ${contact.company}.`,
         other: `Routine touch-base with ${contact.company}.`
       };
 

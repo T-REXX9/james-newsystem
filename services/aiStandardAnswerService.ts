@@ -32,7 +32,7 @@ export async function fetchStandardAnswers(filters?: {
         throw error;
     }
 
-    return data || [];
+    return (data || []) as unknown as AIStandardAnswer[];
 }
 
 /**
@@ -50,7 +50,7 @@ export async function fetchStandardAnswer(id: string): Promise<AIStandardAnswer 
         throw error;
     }
 
-    return data;
+    return data as unknown as AIStandardAnswer;
 }
 
 /**
@@ -76,7 +76,7 @@ export async function createStandardAnswer(
         throw error;
     }
 
-    return data;
+    return data as unknown as AIStandardAnswer;
 }
 
 /**
@@ -98,7 +98,7 @@ export async function updateStandardAnswer(
         throw error;
     }
 
-    return data;
+    return data as unknown as AIStandardAnswer;
 }
 
 /**
@@ -135,7 +135,7 @@ export async function searchStandardAnswers(
         throw error;
     }
 
-    return data || [];
+    return (data || []) as unknown as AIStandardAnswer[];
 }
 
 /**

@@ -96,7 +96,7 @@ export async function createPromotion(
         }
     }
 
-    return promotion as Promotion;
+    return promotion as unknown as Promotion;
 }
 
 /**
@@ -126,7 +126,7 @@ export async function getPromotion(
         return null;
     }
 
-    return data as Promotion;
+    return data as unknown as Promotion;
 }
 
 /**
@@ -179,7 +179,7 @@ export async function getAllPromotions(
         return [];
     }
 
-    return (data || []) as Promotion[];
+    return (data || []) as unknown as Promotion[];
 }
 
 /**
@@ -202,7 +202,7 @@ export async function updatePromotion(
         return null;
     }
 
-    return data as Promotion;
+    return data as unknown as Promotion;
 }
 
 /**
@@ -256,7 +256,7 @@ export async function extendPromotion(
         }
     }
 
-    return promotion as Promotion;
+    return promotion as unknown as Promotion;
 }
 
 /**
@@ -271,7 +271,7 @@ export async function deletePromotion(id: string): Promise<boolean> {
         .single();
 
     if (promotion) {
-        await supabase.from('recycle_bin').insert({
+        await (supabase as any).from('recycle_bin').insert({
             item_type: 'promotion',
             item_id: id,
             item_name: promotion.campaign_title,
@@ -317,7 +317,7 @@ export async function getPromotionProducts(
         return [];
     }
 
-    return (data || []) as PromotionProduct[];
+    return (data || []) as unknown as PromotionProduct[];
 }
 
 /**
@@ -398,7 +398,7 @@ export async function getPromotionPostings(
         return [];
     }
 
-    return (data || []) as PromotionPosting[];
+    return (data || []) as unknown as PromotionPosting[];
 }
 
 /**
@@ -458,7 +458,7 @@ export async function submitProof(
         return null;
     }
 
-    return data as PromotionPosting;
+    return data as unknown as PromotionPosting;
 }
 
 /**
@@ -484,7 +484,7 @@ export async function approveProof(
         return null;
     }
 
-    return data as PromotionPosting;
+    return data as unknown as PromotionPosting;
 }
 
 /**
@@ -512,7 +512,7 @@ export async function rejectProof(
         return null;
     }
 
-    return data as PromotionPosting;
+    return data as unknown as PromotionPosting;
 }
 
 // ============================================================================
@@ -579,7 +579,7 @@ export async function getAssignedPromotions(
         return [];
     }
 
-    return (data || []) as Promotion[];
+    return (data || []) as unknown as Promotion[];
 }
 
 /**

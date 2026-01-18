@@ -45,7 +45,7 @@ export async function fetchAIConversations(
         throw error;
     }
 
-    return data || [];
+    return (data || []) as unknown as AIConversation[];
 }
 
 /**
@@ -82,8 +82,8 @@ export async function fetchAIConversation(id: string): Promise<AIConversation | 
     }
 
     return {
-        ...conversation,
-        messages: messages || [],
+        ...(conversation as unknown as AIConversation),
+        messages: (messages || []) as unknown as AIConversationMessage[],
     };
 }
 
@@ -104,7 +104,7 @@ export async function fetchConversationMessages(
         throw error;
     }
 
-    return data || [];
+    return (data || []) as unknown as AIConversationMessage[];
 }
 
 /**
@@ -146,7 +146,7 @@ export async function updateConversationStatus(
         throw error;
     }
 
-    return data;
+    return data as unknown as AIConversation;
 }
 
 /**
@@ -186,7 +186,7 @@ export async function fetchAIDashboardStats(): Promise<AIDashboardStats> {
         .not('sentiment', 'is', null);
 
     const sentimentBreakdown = { positive: 0, neutral: 0, negative: 0 };
-    (sentimentData || []).forEach(s => {
+    ((sentimentData as any[]) || []).forEach(s => {
         if (s.sentiment && sentimentBreakdown.hasOwnProperty(s.sentiment)) {
             sentimentBreakdown[s.sentiment as keyof typeof sentimentBreakdown]++;
         }
@@ -205,7 +205,7 @@ export async function fetchAIDashboardStats(): Promise<AIDashboardStats> {
         delivery: 0,
         sales: 0,
     };
-    (purposeData || []).forEach(p => {
+    ((purposeData as any[]) || []).forEach(p => {
         if (p.purpose && purposeBreakdown.hasOwnProperty(p.purpose)) {
             purposeBreakdown[p.purpose]++;
         }

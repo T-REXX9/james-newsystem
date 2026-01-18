@@ -342,6 +342,23 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
   }
 };
 
+export const bulkUpdateProducts = async (
+  ids: string[],
+  updates: Partial<Product>
+): Promise<void> => {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .update(updates)
+      .in('id', ids);
+
+    if (error) throw error;
+  } catch (err) {
+    console.error("Error bulk updating products:", err);
+    throw err;
+  }
+};
+
 export const deleteProduct = async (id: string): Promise<void> => {
   try {
     // Fetch the current user
@@ -1291,25 +1308,25 @@ export const fetchContactTransactions = async (contactId: string) => {
     }
 
     // Fetch Invoices
-	    // Note: invoices schema uses invoice_no, sales_date, grand_total (see supabase migrations)
-	    const { data: invoices } = await (supabase
-	      .from('invoices')
-	      .select('id, invoice_no, sales_date, grand_total, status') as any) // Type assertion to bypass incorrect schema inference
-	      .eq('contact_id', contactId)
-	      .eq('is_deleted', false)
-	      .order('sales_date', { ascending: false });
+    // Note: invoices schema uses invoice_no, sales_date, grand_total (see supabase migrations)
+    const { data: invoices } = await (supabase
+      .from('invoices')
+      .select('id, invoice_no, sales_date, grand_total, status') as any) // Type assertion to bypass incorrect schema inference
+      .eq('contact_id', contactId)
+      .eq('is_deleted', false)
+      .order('sales_date', { ascending: false });
 
-	    if (invoices) {
-	      transactions.push(...(invoices as any[]).map(inv => ({
-	        id: inv.id,
-	        type: 'invoice',
-	        number: inv.invoice_no,
-	        date: inv.sales_date,
-	        amount: inv.grand_total,
-	        status: inv.status,
-	        label: `Invoice ${inv.invoice_no}`
-	      })));
-	    }
+    if (invoices) {
+      transactions.push(...(invoices as any[]).map(inv => ({
+        id: inv.id,
+        type: 'invoice',
+        number: inv.invoice_no,
+        date: inv.sales_date,
+        amount: inv.grand_total,
+        status: inv.status,
+        label: `Invoice ${inv.invoice_no}`
+      })));
+    }
 
     // Fetch Purchase History (Legacy/Manual entries)
     const { data: purchases } = await supabase
@@ -1538,9 +1555,9 @@ export const fetchCustomerMetrics = async (contactId: string) => {
       .from('customer_metrics')
       .select('*')
       .eq('contact_id', contactId)
-			.maybeSingle();
-		if (error) throw error;
-		return data ?? null;
+      .maybeSingle();
+    if (error) throw error;
+    return data ?? null;
   } catch (err) {
     console.error('Error fetching customer metrics:', err);
     return null;
@@ -1553,7 +1570,7 @@ export const updateCustomerMetrics = async (contactId: string, metrics: any) => 
       .from('customer_metrics')
       .select('id')
       .eq('contact_id', contactId)
-			.maybeSingle();
+      .maybeSingle();
 
     if (existing) {
       const { error } = await supabase
