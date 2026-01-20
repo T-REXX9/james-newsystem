@@ -170,7 +170,7 @@ const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
         <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 p-6">
             {/* Header */}
             <div className="mb-6">
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Product Promotions</h1>
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Marketing Campaign</h1>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                     Manage promotional campaigns and track posting compliance
                 </p>
@@ -228,8 +228,8 @@ const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 className={`text-sm font-medium pb-2 border-b-2 transition-colors ${activeTab === tab
-                                        ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400'
-                                        : 'text-slate-500 dark:text-slate-400 border-transparent hover:text-slate-700 dark:hover:text-slate-300'
+                                    ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400'
+                                    : 'text-slate-500 dark:text-slate-400 border-transparent hover:text-slate-700 dark:hover:text-slate-300'
                                     }`}
                             >
                                 {tab === 'active' && 'Active'}
@@ -307,12 +307,12 @@ const PromotionManagementView: React.FC<Props> = ({ currentUser }) => {
                                         <div className="mt-2">
                                             <span
                                                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${promotion.status === 'Active'
-                                                        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                                                        : promotion.status === 'Draft'
-                                                            ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                                                            : promotion.status === 'Expired'
-                                                                ? 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                                                                : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'
+                                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                                                    : promotion.status === 'Draft'
+                                                        ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                                                        : promotion.status === 'Expired'
+                                                            ? 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                                                            : 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'
                                                     }`}
                                             >
                                                 {promotion.status}

@@ -185,7 +185,7 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
           },
           {
             id: 'sales-transaction-product-promotions',
-            label: 'Product Promotions',
+            label: 'Marketing Campaign',
             route: 'sales-transaction-product-promotions',
             icon: Tag,
           },
