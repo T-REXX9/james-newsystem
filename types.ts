@@ -1821,3 +1821,323 @@ export interface AIDashboardStats {
   };
   purpose_breakdown: Record<AIConversationPurpose, number>;
 }
+
+// ============================================================================
+// Loyalty Discount (Regular Buyer Discount) Types
+// ============================================================================
+
+export type LoyaltyEvaluationPeriod = 'calendar_month' | 'rolling_30_days';
+export type LoyaltyEligibilityStatus = 'eligible' | 'partially_used' | 'fully_used' | 'expired';
+
+export interface LoyaltyDiscountRule {
+  id: string;
+  name: string;
+  description?: string;
+  min_purchase_amount: number;
+  discount_percentage: number;
+  evaluation_period: LoyaltyEvaluationPeriod;
+  is_active: boolean;
+  priority: number;
+  created_by?: string;
+  created_at: string;
+  updated_at?: string;
+  is_deleted: boolean;
+  deleted_at?: string;
+}
+
+export interface ClientMonthlyPurchase {
+  id: string;
+  client_id: string;
+  year_month: string;  // e.g., '2026-01'
+  total_amount: number;
+  order_count: number;
+  last_order_date?: string;
+  created_at: string;
+  updated_at?: string;
+  // Joined data
+  client?: Contact;
+}
+
+export interface ClientDiscountEligibility {
+  id: string;
+  client_id: string;
+  rule_id: string;
+  eligible_month: string;
+  qualifying_month: string;
+  qualifying_amount: number;
+  discount_percentage: number;
+  status: LoyaltyEligibilityStatus;
+  total_discount_applied?: number;
+  usage_count?: number;
+  created_at: string;
+  expires_at: string;
+  // Joined data
+  client?: Contact;
+  rule?: LoyaltyDiscountRule;
+}
+
+export interface DiscountUsageLog {
+  id: string;
+  eligibility_id: string;
+  order_id?: string;
+  invoice_id?: string;
+  order_amount: number;
+  discount_amount: number;
+  applied_by?: string;
+  applied_at: string;
+  notes?: string;
+  // Joined data
+  eligibility?: ClientDiscountEligibility;
+  applier?: UserProfile;
+}
+
+export interface CreateLoyaltyDiscountRuleDTO {
+  name: string;
+  description?: string;
+  min_purchase_amount: number;
+  discount_percentage: number;
+  evaluation_period?: LoyaltyEvaluationPeriod;
+  priority?: number;
+}
+
+export interface UpdateLoyaltyDiscountRuleDTO {
+  name?: string;
+  description?: string;
+  min_purchase_amount?: number;
+  discount_percentage?: number;
+  evaluation_period?: LoyaltyEvaluationPeriod;
+  priority?: number;
+  is_active?: boolean;
+}
+
+export interface LoyaltyDiscountStats {
+  total_active_rules: number;
+  clients_eligible_this_month: number;
+  total_discount_given_this_month: number;
+  top_qualifying_clients: Array<{
+    client_id: string;
+    client_name: string;
+    qualifying_amount: number;
+    discount_percentage: number;
+  }>;
+}
+
+export interface ClientActiveDiscount {
+  eligibility_id: string;
+  discount_percentage: number;
+  qualifying_amount: number;
+  expires_at: string;
+}
+
+// ============================================================================
+// Profit Protection & System Settings Types
+// ============================================================================
+
+export type OverrideType = 'price_adjustment' | 'full_approval' | 'discount_override' | 'discount_rule' | 'profit_threshold';
+
+// Note: SystemSetting interface is already defined above (line ~1204)
+
+export interface ProfitThresholdConfig {
+  percentage: number;
+  enforce_approval: boolean;
+  allow_override: boolean;
+}
+
+export interface AISalesAgentConfig {
+  default_language: 'tagalog' | 'english';
+  fallback_language: 'tagalog' | 'english';
+  max_retries: number;
+  response_timeout_seconds: number;
+}
+
+export interface ProfitOverrideLog {
+  id: string;
+  order_id?: string;
+  invoice_id?: string;
+  item_id: string;
+  original_price: number;
+  override_price: number;
+  cost: number;
+  original_profit_pct: number;
+  override_profit_pct: number;
+  reason?: string;
+  override_type: OverrideType;
+  approved_by: string;
+  created_at: string;
+  // Joined data
+  approver?: UserProfile;
+  item?: Product;
+}
+
+export interface AdminOverrideLog {
+  id: string;
+  override_type: string;
+  entity_type: string;
+  entity_id: string;
+  original_value?: Record<string, any>;
+  override_value?: Record<string, any>;
+  reason?: string;
+  performed_by: string;
+  created_at: string;
+  // Joined data
+  performer?: UserProfile;
+}
+
+export interface LowProfitItem {
+  product_id: string;
+  product_name: string;
+  item_code: string;
+  cost: number;
+  selling_price: number;
+  discount: number;
+  net_price: number;
+  profit_amount: number;
+  profit_percentage: number;
+  threshold_percentage: number;
+  below_threshold: boolean;
+}
+
+export interface ProfitCalculation {
+  selling_price: number;
+  cost: number;
+  discount: number;
+  net_price: number;
+  profit_amount: number;
+  profit_percentage: number;
+  is_below_threshold: boolean;
+  suggested_price?: number;
+}
+
+export interface CreateProfitOverrideDTO {
+  order_id?: string;
+  invoice_id?: string;
+  item_id: string;
+  original_price: number;
+  override_price: number;
+  cost: number;
+  original_profit_pct: number;
+  override_profit_pct: number;
+  reason?: string;
+  override_type: OverrideType;
+}
+
+export interface CreateAdminOverrideDTO {
+  override_type: string;
+  entity_type: string;
+  entity_id: string;
+  original_value?: Record<string, any>;
+  override_value?: Record<string, any>;
+  reason?: string;
+}
+
+// ============================================================================
+// AI Sales Agent Types
+// ============================================================================
+
+export type AIOutreachType = 'sms' | 'call' | 'chat';
+export type AIOutreachStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'responded';
+export type AIOutreachOutcome = 'interested' | 'not_interested' | 'no_response' | 'converted' | 'escalated';
+export type AIFeedbackType = 'objection' | 'interest' | 'question' | 'conversion' | 'complaint' | 'positive';
+export type AISentiment = 'positive' | 'neutral' | 'negative';
+export type AIMessageLanguage = 'tagalog' | 'english';
+
+export interface AICampaignOutreach {
+  id: string;
+  campaign_id: string;
+  client_id: string;
+  outreach_type: AIOutreachType;
+  status: AIOutreachStatus;
+  language: AIMessageLanguage;
+  message_content?: string;
+  scheduled_at?: string;
+  sent_at?: string;
+  response_received: boolean;
+  response_content?: string;
+  outcome?: AIOutreachOutcome;
+  conversation_id?: string;
+  error_message?: string;
+  retry_count: number;
+  created_by?: string;
+  created_at: string;
+  updated_at?: string;
+  // Joined data
+  campaign?: Promotion;
+  client?: Contact;
+  conversation?: AIConversation;
+}
+
+export interface AICampaignFeedback {
+  id: string;
+  campaign_id: string;
+  outreach_id?: string;
+  client_id?: string;
+  feedback_type: AIFeedbackType;
+  content: string;
+  sentiment?: AISentiment;
+  tags?: string[];
+  ai_analysis?: Record<string, any>;
+  created_at: string;
+  // Joined data
+  campaign?: Promotion;
+  outreach?: AICampaignOutreach;
+  client?: Contact;
+}
+
+export interface AIMessageTemplate {
+  id: string;
+  name: string;
+  language: AIMessageLanguage;
+  template_type: string;
+  content: string;
+  variables: string[];
+  is_active: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CreateAIMessageTemplateDTO {
+  name: string;
+  language: AIMessageLanguage;
+  template_type: string;
+  content: string;
+  variables: string[];
+  is_active?: boolean;
+}
+
+export interface CreateAICampaignOutreachDTO {
+  campaign_id: string;
+  client_ids: string[];
+  outreach_type: AIOutreachType;
+  language: AIMessageLanguage;
+  scheduled_at?: string;
+  message_template_id?: string;
+  custom_message?: string;
+}
+
+export interface AICampaignStats {
+  total_outreach: number;
+  pending_count: number;
+  sent_count: number;
+  delivered_count: number;
+  responded_count: number;
+  failed_count: number;
+  conversion_rate: number;
+  response_rate: number;
+  sentiment_breakdown: {
+    positive: number;
+    neutral: number;
+    negative: number;
+  };
+  outcome_breakdown: Record<AIOutreachOutcome, number>;
+}
+
+export interface AIAgentCapabilities {
+  can_handle_inbound: boolean;
+  can_handle_outbound: boolean;
+  supported_languages: AIMessageLanguage[];
+  supported_channels: AIOutreachType[];
+  can_offer_discount: boolean;
+  max_discount_percentage: number;
+  requires_human_approval_for: string[];
+}

@@ -65,6 +65,11 @@ import AIDashboardView from './components/AIDashboardView';
 import AIStandardAnswersView from './components/AIStandardAnswersView';
 import AIEscalationPanel from './components/AIEscalationPanel';
 
+// System Enhancement Components
+import LoyaltyDiscountRulesView from './components/LoyaltyDiscountRulesView';
+import ProfitThresholdSettings from './components/ProfitThresholdSettings';
+import AIMessageTemplatesView from './components/AIMessageTemplatesView';
+
 import { supabase } from './lib/supabaseClient';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
@@ -559,6 +564,12 @@ const App: React.FC = () => {
         );
       case 'maintenance-profile-system-access':
         return <AccessControlSettings />;
+      case 'maintenance-system-loyalty-discounts':
+        return <LoyaltyDiscountRulesView currentUser={userProfile} />;
+      case 'maintenance-system-profit-protection':
+        return <ProfitThresholdSettings currentUser={userProfile} />;
+      case 'maintenance-system-ai-templates':
+        return <AIMessageTemplatesView currentUser={userProfile} />;
       case 'mail':
       case 'communication-messaging-inbox':
         return renderComingSoon('Inbox');

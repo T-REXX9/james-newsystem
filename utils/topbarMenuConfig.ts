@@ -11,6 +11,8 @@ import {
   Map,
   Tag,
   Bot,
+  Gift,
+  Shield,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -436,6 +438,25 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
           },
         ],
       },
+      {
+        id: 'maintenance-system',
+        label: 'SYSTEM',
+        icon: Settings,
+        items: [
+          {
+            id: 'maintenance-system-loyalty-discounts',
+            label: 'Loyalty Discounts',
+            route: 'maintenance-system-loyalty-discounts',
+            icon: Gift,
+          },
+          {
+            id: 'maintenance-system-profit-protection',
+            label: 'Profit Protection',
+            route: 'maintenance-system-profit-protection',
+            icon: Shield,
+          },
+        ],
+      },
     ],
   },
   {
@@ -508,6 +529,12 @@ export const TOPBAR_MENU_CONFIG: TopbarMainMenu[] = [
             label: 'Escalation Queue',
             route: 'ai-service-escalations',
             icon: Users,
+          },
+          {
+            id: 'maintenance-system-ai-templates',
+            label: 'Message Templates',
+            route: 'maintenance-system-ai-templates',
+            icon: MessageSquare,
           },
         ],
       },

@@ -199,7 +199,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
             onCreated();
         } catch (error) {
             console.error('Error creating promotion:', error);
-            alert('Failed to create promotion. Please try again.');
+            alert('Failed to create campaign. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -217,7 +217,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
             <div className="bg-white dark:bg-slate-900 rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-xl">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Create New Promotion</h2>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Create New Campaign</h2>
                     <button
                         onClick={onClose}
                         className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
@@ -563,7 +563,7 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                         disabled={saving}
                         className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-semibold transition-colors"
                     >
-                        {saving ? 'Creating...' : 'Create Promotion'}
+                        {saving ? 'Creating...' : 'Create Campaign'}
                     </button>
                 </div>
             </div>
