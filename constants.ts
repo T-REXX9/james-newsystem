@@ -103,7 +103,7 @@ export const AVAILABLE_APP_MODULES = [
   { id: 'sales-transaction-sales-order', label: 'Sales Orders' },
   { id: 'sales-transaction-order-slip', label: 'Order Slips' },
   { id: 'sales-transaction-invoice', label: 'Invoices' },
-  { id: 'sales-transaction-product-promotions', label: 'Product Promotions' },
+  { id: 'sales-transaction-product-promotions', label: 'Marketing Campaign' },
   { id: 'sales-reports-inquiry-report', label: 'Inquiry Report' },
   { id: 'sales-reports-sales-report', label: 'Sales Report' },
   { id: 'sales-reports-sales-development-report', label: 'Sales Development Report' },

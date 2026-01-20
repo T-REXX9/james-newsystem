@@ -106,7 +106,7 @@ export const HIERARCHICAL_MENU_CONFIG: MenuCategory[] = [
           },
           {
             id: 'sales-transaction-product-promotions',
-            label: 'Product Promotions',
+            label: 'Marketing Campaign',
             icon: Tag,
             level: 3,
             parentId: 'sales-transactions',
