@@ -179,6 +179,9 @@ export const MODULE_ID_ALIASES: Record<string, string> = {
   'maintenance-profile-staff-and-agents': 'maintenance-profile-staff',
   'maintenance-system-recycle-bin': 'maintenance-profile-server-maintenance',
   'maintenance-system-settings-permissions': 'maintenance-profile-system-access',
+  'maintenance-system-loyalty-discounts': 'maintenance-system-loyalty-discounts',
+  'maintenance-system-profit-protection': 'maintenance-system-profit-protection',
+  'maintenance-system-ai-templates': 'maintenance-system-ai-templates',
   'accounting-reports-overview': 'accounting-reports-accounting-overview',
 
   'accounting-reports-daily-calls-monitoring': 'sales-transaction-daily-call-monitoring',

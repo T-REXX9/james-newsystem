@@ -1,4 +1,4 @@
-import { LayoutDashboard, KanbanSquare, Database, Package, Settings, Users, BarChart3, MessageSquare, CalendarDays, PhoneCall, ClipboardList, Recycle, FileText, Tag } from 'lucide-react';
+import { LayoutDashboard, KanbanSquare, Database, Package, Settings, Users, BarChart3, MessageSquare, CalendarDays, PhoneCall, ClipboardList, Recycle, FileText, Tag, Gift, Shield, Bot } from 'lucide-react';
 import type { MenuItem } from '../components/SidebarMenuItem';
 import { MenuCategory } from '../types';
 
@@ -227,6 +227,33 @@ export const HIERARCHICAL_MENU_CONFIG: MenuCategory[] = [
             route: 'maintenance-system-settings-permissions',
             isExpandable: false,
           },
+          {
+            id: 'maintenance-system-loyalty-discounts',
+            label: 'Loyalty Discounts',
+            icon: Gift,
+            level: 3,
+            parentId: 'maintenance-system',
+            route: 'maintenance-system-loyalty-discounts',
+            isExpandable: false,
+          },
+          {
+            id: 'maintenance-system-profit-protection',
+            label: 'Profit Protection',
+            icon: Shield,
+            level: 3,
+            parentId: 'maintenance-system',
+            route: 'maintenance-system-profit-protection',
+            isExpandable: false,
+          },
+          {
+            id: 'maintenance-system-ai-templates',
+            label: 'AI Message Templates',
+            icon: Bot,
+            level: 3,
+            parentId: 'maintenance-system',
+            route: 'maintenance-system-ai-templates',
+            isExpandable: false,
+          },
         ],
       },
     ],
@@ -347,6 +374,9 @@ export const SIDEBAR_CONFIG: MenuItem[] = [
   { id: 'communication-productivity-tasks', icon: ClipboardList, label: 'Tasks', group: 'communication', badge: 0 },
   { id: 'maintenance-system-recycle-bin', icon: Recycle, label: 'Recycle Bin', group: 'maintenance', badge: 0 },
   { id: 'maintenance-system-settings-permissions', icon: Settings, label: 'Settings & Permissions', group: 'maintenance', badge: 0 },
+  { id: 'maintenance-system-loyalty-discounts', icon: Gift, label: 'Loyalty Discounts', group: 'maintenance', badge: 0 },
+  { id: 'maintenance-system-profit-protection', icon: Shield, label: 'Profit Protection', group: 'maintenance', badge: 0 },
+  { id: 'maintenance-system-ai-templates', icon: Bot, label: 'AI Message Templates', group: 'maintenance', badge: 0 },
   { id: 'accounting-reports-overview', icon: FileText, label: 'Accounting Overview', group: 'accounting', badge: 0 },
 ];
 
