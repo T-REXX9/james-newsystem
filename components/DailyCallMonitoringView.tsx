@@ -202,6 +202,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [callForwardingEnabled, setCallForwardingEnabled] = useState(false);
   const [showForwardingInput, setShowForwardingInput] = useState(false);
+  const [historyTab, setHistoryTab] = useState<'all' | 'calls' | 'sms'>('all');
 
   const [repFilter, setRepFilter] = useState('All');
   const [provinceFilter, setProvinceFilter] = useState('All');
@@ -212,7 +213,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [sortField, setSortField] = useState<'priority' | 'lastContact' | 'lastPurchase' | 'salesValue'>('priority');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [readActivityIds, setReadActivityIds] = useState<Set<string>>(() => new Set());
-  const [showFullTimeline, setShowFullTimeline] = useState(false);
   const [openClientLists, setOpenClientLists] = useState<Record<ClientListKey, boolean>>({
     active: false,
     inactivePositive: false,
@@ -308,6 +308,24 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return;
     }
     window.location.href = `tel:${phoneNumber}`;
+  };
+
+  const handleSMSContact = (contact: Contact) => {
+    const phoneNumber = contact.mobile || contact.phone || contact.contactPersons[0]?.mobile || contact.contactPersons[0]?.telephone;
+    if (!phoneNumber) {
+      addToast({ type: 'error', message: 'No phone number available for this contact' });
+      return;
+    }
+    window.location.href = `sms:${phoneNumber}`;
+  };
+
+  const handleEmailContact = (contact: Contact) => {
+    const email = contact.email || contact.contactPersons[0]?.email;
+    if (!email) {
+      addToast({ type: 'error', message: 'No email address available for this contact' });
+      return;
+    }
+    window.location.href = `mailto:${email}`;
   };
 
   const handleEnableCallForwarding = (forwardingNumber: string) => {
@@ -616,6 +634,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     const calls = (callLogsByContact.get(selectedClientId) || []).map((log) => ({
       id: `call-${log.id}`,
       type: 'call' as const,
+      channel: log.channel as 'voice' | 'text',
+      direction: log.direction as 'inbound' | 'outbound',
+      outcome: log.outcome,
       title: log.channel === 'text' ? 'SMS Touch' : 'Call',
       occurred_at: log.occurred_at,
       detail: log.notes,
@@ -633,14 +654,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return [...calls, ...inquiryEvents].sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at));
   }, [selectedClientId, callLogsByContact, inquiriesByContact]);
 
-  const visibleTimeline = useMemo(
-    () => (showFullTimeline ? selectedTimeline : selectedTimeline.slice(0, 5)),
-    [selectedTimeline, showFullTimeline]
-  );
-
-  useEffect(() => {
-    setShowFullTimeline(false);
-  }, [selectedClientId]);
+  const filteredTimeline = useMemo(() => {
+    if (historyTab === 'all') return selectedTimeline;
+    return selectedTimeline.filter((event) => {
+      if (historyTab === 'calls') return event.type === 'call' && event.channel === 'voice';
+      if (historyTab === 'sms') return event.type === 'call' && event.channel === 'text';
+      return true;
+    });
+  }, [selectedTimeline, historyTab]);
 
   const todayStart = useMemo(() => getStartOfToday(), []);
   const monthStart = useMemo(() => getStartOfMonth(), []);
@@ -1126,7 +1147,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                           Priority {Math.round(row.priority)}
                         </p>
                       </td>
-                      <td className="px-3 py-4">
+                       <td className="px-3 py-4">
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={(e) => {
@@ -1137,7 +1158,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                           >
                             Call
                           </button>
-                          <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-600">SMS</button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSMSContact(row.contact);
+                            }}
+                            className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-colors"
+                          >
+                            SMS
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1420,46 +1449,96 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                       Call
                     </button>
                     <button
+                      onClick={() => handleSMSContact(selectedClient)}
                       className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-emerald-500 hover:text-white transition-colors"
                     >
                       <MessageSquare className="w-3.5 h-3.5" />
                       SMS
                     </button>
                     <button
+                      onClick={() => handleEmailContact(selectedClient)}
                       className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-500 hover:text-white transition-colors"
                     >
                       <Mail className="w-3.5 h-3.5" />
                       Email
                     </button>
                   </div>
-                  <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                    <span className="font-semibold text-slate-700 dark:text-slate-200">Recent activity</span>
-                    {selectedTimeline.length > 5 && (
-                      <button
-                        onClick={() => setShowFullTimeline((prev) => !prev)}
-                        className="text-xs font-semibold text-brand-blue hover:underline"
-                      >
-                        {showFullTimeline ? 'View less' : 'View all'}
-                      </button>
-                    )}
-                  </div>
-                  <div className="mt-3 space-y-3">
-                    {visibleTimeline.map((event) => (
-                      <div
-                        key={event.id}
-                        className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800"
-                      >
-                        <div className="flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
-                          <span>{event.title}</span>
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{formatDate(event.occurred_at)}</span>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{event.detail || 'No notes added.'}</p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500">{event.meta}</p>
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs">Communication History</span>
+                      <div className="flex items-center gap-1">
+                        {(['all', 'calls', 'sms'] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            onClick={() => setHistoryTab(tab)}
+                            className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${
+                              historyTab === tab
+                                ? 'bg-brand-blue text-white border-brand-blue'
+                                : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            {tab === 'all' ? 'All' : tab === 'calls' ? 'Calls' : 'SMS'}
+                          </button>
+                        ))}
                       </div>
-                    ))}
-                    {visibleTimeline.length === 0 && (
-                      <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">No activity logged yet</div>
-                    )}
+                    </div>
+                    <div className="mt-3 space-y-3 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                      {filteredTimeline.map((event) => (
+                        <div
+                          key={event.id}
+                          className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800"
+                        >
+                          <div className="flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            <div className="flex items-center gap-2">
+                              {event.type === 'call' ? (
+                                event.channel === 'text' ? (
+                                  <MessageSquare className="w-4 h-4 text-purple-500" />
+                                ) : (
+                                  <PhoneCall className="w-4 h-4 text-brand-blue" />
+                                )
+                              ) : (
+                                <ClipboardList className="w-4 h-4 text-amber-500" />
+                              )}
+                              <span>{event.title}</span>
+                            </div>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">{formatDate(event.occurred_at)}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {event.type === 'call' && event.direction && (
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                event.direction === 'inbound'
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                              }`}>
+                                {event.direction === 'inbound' ? 'Inbound' : 'Outbound'}
+                              </span>
+                            )}
+                            {event.type === 'call' && event.outcome && (
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                event.outcome === 'positive'
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                  : event.outcome === 'negative'
+                                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                              }`}>
+                                {event.outcome.replace('_', ' ')}
+                              </span>
+                            )}
+                          </div>
+                          {event.detail && (
+                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 bg-white dark:bg-slate-800 p-2 rounded border border-slate-100 dark:border-slate-800">
+                              {event.detail}
+                            </p>
+                          )}
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{event.meta}</p>
+                        </div>
+                      ))}
+                      {filteredTimeline.length === 0 && (
+                        <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-6">
+                          {historyTab === 'all' ? 'No activity logged yet' : `No ${historyTab === 'calls' ? 'call' : 'SMS'} history`}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               ) : (
