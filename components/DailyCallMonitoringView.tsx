@@ -32,6 +32,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
 import PatientChartModal from './PatientChartModal';
+import { useToast } from './ToastProvider';
 import {
   countCallLogsByChannelInRange,
   countCallLogsInRange,
@@ -189,6 +190,7 @@ const priorityBadgeClasses = (priority: number) => {
 };
 
 const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ currentUser }) => {
+  const { addToast } = useToast();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -198,6 +200,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [callForwardingEnabled, setCallForwardingEnabled] = useState(false);
+  const [showForwardingInput, setShowForwardingInput] = useState(false);
 
   const [repFilter, setRepFilter] = useState('All');
   const [provinceFilter, setProvinceFilter] = useState('All');
@@ -296,6 +300,42 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     }, 300);
     return () => clearTimeout(handler);
   }, [searchValue]);
+
+  const handleCallContact = (contact: Contact) => {
+    const phoneNumber = contact.mobile || contact.phone || contact.contactPersons[0]?.mobile || contact.contactPersons[0]?.telephone;
+    if (!phoneNumber) {
+      addToast({ type: 'error', message: 'No phone number available for this contact' });
+      return;
+    }
+    window.location.href = `tel:${phoneNumber}`;
+  };
+
+  const handleEnableCallForwarding = (forwardingNumber: string) => {
+    if (!forwardingNumber) return;
+
+    const formattedNumber = forwardingNumber.replace(/^0/, '63');
+    const forwardCode = `*21*${formattedNumber}#`;
+
+    try {
+      window.location.href = `tel:${forwardCode}`;
+      setCallForwardingEnabled(true);
+      setShowForwardingInput(false);
+      addToast({ type: 'success', message: `Call forwarding enabled to ${forwardingNumber}` });
+    } catch (error) {
+      console.error('Error enabling call forwarding:', error);
+      addToast({ type: 'error', message: 'Failed to enable call forwarding. Please try again.' });
+    }
+  };
+
+  const handleDisableCallForwarding = () => {
+    try {
+      window.location.href = 'tel:#21#';
+      setCallForwardingEnabled(false);
+    } catch (error) {
+      console.error('Error disabling call forwarding:', error);
+      addToast({ type: 'error', message: 'Failed to disable call forwarding. Please try again.' });
+    }
+  };
 
   const selectedClient = useMemo(
     () => contacts.find((contact) => contact.id === selectedClientId) || null,
@@ -753,6 +793,47 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
+          {callForwardingEnabled ? (
+            <button
+              onClick={handleDisableCallForwarding}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 text-sm font-semibold text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/30"
+              title="Disable Call Forwarding"
+            >
+              <PhoneForwarded className="w-4 h-4" />
+              Forwarding On
+            </button>
+          ) : showForwardingInput ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="tel"
+                placeholder="09123456789"
+                className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-blue w-40"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && e.currentTarget.value) {
+                    handleEnableCallForwarding(e.currentTarget.value);
+                  } else if (e.key === 'Escape') {
+                    setShowForwardingInput(false);
+                  }
+                }}
+                autoFocus
+              />
+              <button
+                onClick={() => setShowForwardingInput(false)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowForwardingInput(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              title="Enable Call Forwarding"
+            >
+              <PhoneForwarded className="w-4 h-4" />
+              Forward Calls
+            </button>
+          )}
           <div className="relative">
             <button
               onClick={handleActivityReadAll}
@@ -1047,7 +1128,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                       </td>
                       <td className="px-3 py-4">
                         <div className="flex flex-wrap gap-2">
-                          <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-brand-blue/10 text-brand-blue">Call</button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCallContact(row.contact);
+                            }}
+                            className="px-2 py-1 text-xs font-semibold rounded-lg bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-white transition-colors"
+                          >
+                            Call
+                          </button>
                           <button className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-600">SMS</button>
                           <button
                             onClick={(e) => {
@@ -1323,15 +1412,25 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                     <span>Assigned: {selectedClient.salesman}</span>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {[{ label: 'Call', icon: Phone }, { label: 'SMS', icon: MessageSquare }, { label: 'Email', icon: Mail }].map((action) => (
-                      <button
-                        key={action.label}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300"
-                      >
-                        <action.icon className="w-3.5 h-3.5" />
-                        {action.label}
-                      </button>
-                    ))}
+                    <button
+                      onClick={() => handleCallContact(selectedClient)}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-blue hover:text-white transition-colors"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      Call
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-emerald-500 hover:text-white transition-colors"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      SMS
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-500 hover:text-white transition-colors"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      Email
+                    </button>
                   </div>
                   <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                     <span className="font-semibold text-slate-700 dark:text-slate-200">Recent activity</span>
