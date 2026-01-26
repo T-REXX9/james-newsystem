@@ -50,6 +50,7 @@ import {
   fetchTeamMessages,
   subscribeToCallMonitoringUpdates
 } from '../services/supabaseService';
+import { supabase } from '../lib/supabaseClient';
 import {
   CallLogEntry,
   Contact,
@@ -203,6 +204,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [callForwardingEnabled, setCallForwardingEnabled] = useState(false);
   const [showForwardingInput, setShowForwardingInput] = useState(false);
   const [historyTab, setHistoryTab] = useState<'all' | 'calls' | 'sms'>('all');
+  const [showSMSModal, setShowSMSModal] = useState(false);
+  const [smsRecipient, setSMSRecipient] = useState<Contact | null>(null);
+  const [smsMessage, setSMSMessage] = useState('');
+  const [sendingSMS, setSendingSMS] = useState(false);
 
   const [repFilter, setRepFilter] = useState('All');
   const [provinceFilter, setProvinceFilter] = useState('All');
@@ -316,7 +321,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       addToast({ type: 'error', message: 'No phone number available for this contact' });
       return;
     }
-    window.location.href = `sms:${phoneNumber}`;
+    handleOpenSMSModal(contact);
   };
 
   const handleEmailContact = (contact: Contact) => {
@@ -326,6 +331,55 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       return;
     }
     window.location.href = `mailto:${email}`;
+  };
+
+  const handleOpenSMSModal = (contact: Contact) => {
+    setSMSRecipient(contact);
+    setSMSMessage('');
+    setShowSMSModal(true);
+  };
+
+  const handleSendSMS = async () => {
+    if (!smsRecipient || !smsMessage.trim()) return;
+
+    const phoneNumber = smsRecipient.mobile || smsRecipient.phone || smsRecipient.contactPersons[0]?.mobile || smsRecipient.contactPersons[0]?.telephone;
+    if (!phoneNumber) {
+      addToast({ type: 'error', message: 'No phone number available for this contact' });
+      return;
+    }
+
+    setSendingSMS(true);
+    try {
+      const { error } = await supabase
+        .from('call_logs')
+        .insert({
+          contact_id: smsRecipient.id,
+          agent_name: agentDataName || 'Unknown',
+          channel: 'text',
+          direction: 'outbound',
+          outcome: 'logged',
+          notes: smsMessage.trim(),
+          occurred_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error('Error logging SMS:', error);
+        addToast({ type: 'error', message: 'Failed to log SMS' });
+        return;
+      }
+
+      addToast({ type: 'success', message: 'SMS logged successfully' });
+      setShowSMSModal(false);
+      setSMSRecipient(null);
+      setSMSMessage('');
+
+      await loadAgentData();
+    } catch (error) {
+      console.error('Error sending SMS:', error);
+      addToast({ type: 'error', message: 'Failed to send SMS' });
+    } finally {
+      setSendingSMS(false);
+    }
   };
 
   const handleEnableCallForwarding = (forwardingNumber: string) => {
@@ -1161,7 +1215,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleSMSContact(row.contact);
+                              handleOpenSMSModal(row.contact);
                             }}
                             className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-colors"
                           >
@@ -1449,7 +1503,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                       Call
                     </button>
                     <button
-                      onClick={() => handleSMSContact(selectedClient)}
+                      onClick={() => handleOpenSMSModal(selectedClient)}
                       className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-emerald-500 hover:text-white transition-colors"
                     >
                       <MessageSquare className="w-3.5 h-3.5" />
@@ -1620,6 +1674,82 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </div>
         </div>
       </section>
+
+      {showSMSModal && smsRecipient && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">Send SMS</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{smsRecipient.company}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSMSModal(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="mb-4">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                  To
+                </label>
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-600 dark:text-slate-300">
+                  <Phone className="w-4 h-4 text-slate-400" />
+                  {smsRecipient.mobile || smsRecipient.phone || smsRecipient.contactPersons[0]?.mobile || smsRecipient.contactPersons[0]?.telephone || 'No phone number'}
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                  Message
+                </label>
+                <textarea
+                  value={smsMessage}
+                  onChange={(e) => setSMSMessage(e.target.value)}
+                  placeholder="Type your message here..."
+                  rows={5}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                  autoFocus
+                />
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {smsMessage.length} characters
+                  </span>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                    Max 160 characters recommended
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setShowSMSModal(false)}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendSMS}
+                  disabled={!smsMessage.trim() || sendingSMS}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {sendingSMS ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <MessageSquare className="w-4 h-4" />
+                  )}
+                  {sendingSMS ? 'Sending...' : 'Send SMS'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPatientChart && selectedClient && (
         <PatientChartModal
