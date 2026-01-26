@@ -289,17 +289,13 @@ const App: React.FC = () => {
       case 'dashboard': {
         const isSalesAgent = userProfile?.role === 'Sales Agent' || userProfile?.role === 'sales_agent';
 
-        if (isSalesAgent) {
-          return (
-            <div className="p-4 h-full overflow-y-auto bg-slate-100 dark:bg-slate-950">
-              <SalespersonDashboardView currentUser={userProfile} onNavigate={handleSetActiveTab} />
-            </div>
-          );
-        }
-
-        return (
+        return isSalesAgent ? (
           <div className="p-4 h-full overflow-y-auto bg-slate-100 dark:bg-slate-950">
-            <Dashboard user={userProfile} />
+            <DailyCallMonitoringView currentUser={userProfile} />
+          </div>
+        ) : (
+          <div className="h-full overflow-hidden">
+            <OwnerLiveCallMonitoringView currentUser={userProfile} />
           </div>
         );
       }
