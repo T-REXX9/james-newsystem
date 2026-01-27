@@ -190,6 +190,51 @@ const priorityBadgeClasses = (priority: number) => {
   return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
 };
 
+type DensityMode = 'comfortable' | 'compact' | 'ultra-compact';
+
+const getDensityConfig = (density: DensityMode) => {
+  switch (density) {
+    case 'comfortable':
+      return {
+        rowPadding: 'py-3',
+        fontSize: 'text-sm',
+        chipSize: 'px-3 py-1',
+        iconSize: 'w-4 h-4',
+        cellPadding: 'px-3',
+        badgePadding: 'px-2 py-0.5'
+      };
+    case 'compact':
+      return {
+        rowPadding: 'py-2',
+        fontSize: 'text-xs',
+        chipSize: 'px-2 py-0.5',
+        iconSize: 'w-3.5 h-3.5',
+        cellPadding: 'px-2',
+        badgePadding: 'px-1.5 py-0.5'
+      };
+    case 'ultra-compact':
+      return {
+        rowPadding: 'py-1.5',
+        fontSize: 'text-[11px]',
+        chipSize: 'px-1.5 py-0.5',
+        iconSize: 'w-3 h-3',
+        cellPadding: 'px-1.5',
+        badgePadding: 'px-1 py-0.5'
+      };
+  }
+};
+
+const getRowHeight = (density: DensityMode) => {
+  switch (density) {
+    case 'comfortable':
+      return 56;
+    case 'compact':
+      return 44;
+    case 'ultra-compact':
+      return 36;
+  }
+};
+
 const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ currentUser }) => {
   const { addToast } = useToast();
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -224,6 +269,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     prospectivePositive: false
   });
   const [showPatientChart, setShowPatientChart] = useState(false);
+  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
+  const [density, setDensity] = useState<'comfortable' | 'compact' | 'ultra-compact'>('compact');
+  const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
+  const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
 
   const handleOpenPatientChart = (contactId: string) => {
     setSelectedClientId(contactId);
@@ -640,18 +689,17 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     const sorted = filtered.sort((a, b) => {
       if (sortField === 'priority') {
         return (a.priority - b.priority) * direction * -1;
-      }
-      if (sortField === 'salesValue') {
+      } else if (sortField === 'salesValue') {
         return (a.totalSales - b.totalSales) * direction;
-      }
-      if (sortField === 'lastContact') {
+      } else if (sortField === 'lastContact') {
         const aTime = a.lastContact ? Date.parse(a.lastContact) : 0;
         const bTime = b.lastContact ? Date.parse(b.lastContact) : 0;
         return (aTime - bTime) * direction;
+      } else {
+        const aPurchase = a.lastPurchase ? Date.parse(a.lastPurchase) : 0;
+        const bPurchase = b.lastPurchase ? Date.parse(b.lastPurchase) : 0;
+        return (aPurchase - bPurchase) * direction;
       }
-      const aPurchase = a.lastPurchase ? Date.parse(a.lastPurchase) : 0;
-      const bPurchase = b.lastPurchase ? Date.parse(b.lastPurchase) : 0;
-      return (aPurchase - bPurchase) * direction;
     });
 
     return sorted;
@@ -848,33 +896,44 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     );
   }
 
+  const densityConfig = getDensityConfig(density);
+  const tableRowHeight = getRowHeight(density);
+
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-950 p-4 lg:p-6 space-y-4">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
+      <header className="flex-shrink-0 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between px-4 lg:px-6 py-3">
         <div>
-          <div className="flex items-center gap-3">
-            <Phone className="w-6 h-6 text-brand-blue" />
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Daily Call Monitoring</h1>
+          <div className="flex items-center gap-2">
+            <Phone className="w-5 h-5 text-brand-blue" />
+            <h1 className="text-xl font-bold text-slate-800 dark:text-white">Daily Call Monitoring</h1>
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Tracking every touchpoint for <span className="font-semibold">{agentDisplayName}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={loadAgentData}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            onClick={() => setSummaryCollapsed(!summaryCollapsed)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            title={summaryCollapsed ? 'Expand Summary' : 'Collapse Summary'}
           >
-            <RefreshCw className="w-4 h-4" />
+            {summaryCollapsed ? <BarChart3 className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            Summary
+          </button>
+          <button
+            onClick={loadAgentData}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
             Refresh
           </button>
           {callForwardingEnabled ? (
             <button
               onClick={handleDisableCallForwarding}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 text-sm font-semibold text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/30"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 text-xs font-semibold text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/30"
               title="Disable Call Forwarding"
             >
-              <PhoneForwarded className="w-4 h-4" />
+              <PhoneForwarded className="w-3.5 h-3.5" />
               Forwarding On
             </button>
           ) : showForwardingInput ? (
@@ -882,7 +941,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <input
                 type="tel"
                 placeholder="09123456789"
-                className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-blue w-40"
+                className="px-2 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-blue w-36"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && e.currentTarget.value) {
                     handleEnableCallForwarding(e.currentTarget.value);
@@ -894,37 +953,102 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               />
               <button
                 onClick={() => setShowForwardingInput(false)}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           ) : (
             <button
               onClick={() => setShowForwardingInput(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               title="Enable Call Forwarding"
             >
-              <PhoneForwarded className="w-4 h-4" />
-              Forward Calls
+              <PhoneForwarded className="w-3.5 h-3.5" />
+              Forward
             </button>
           )}
           <div className="relative">
             <button
               onClick={handleActivityReadAll}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-blue text-white text-sm font-semibold shadow-sm"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-blue text-white text-xs font-semibold shadow-sm"
             >
-              <Bell className="w-4 h-4" />
+              <Bell className="w-3.5 h-3.5" />
               Activity
               {unseenActivityCount > 0 && (
-                <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-bold bg-white/20">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-white/20">
                   {unseenActivityCount}
                 </span>
               )}
             </button>
           </div>
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
+          <button
+            onClick={() => {
+              const modes: DensityMode[] = ['comfortable', 'compact', 'ultra-compact'];
+              const currentIndex = modes.indexOf(density);
+              const nextIndex = (currentIndex + 1) % modes.length;
+              setDensity(modes[nextIndex]);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            title={`Density: ${density.charAt(0).toUpperCase() + density.slice(1)}`}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+            <span className="capitalize">{density}</span>
+          </button>
         </div>
       </header>
+
+      {!summaryCollapsed && (
+        <section className="flex-shrink-0 px-4 lg:px-6 py-2">
+          <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm px-4 py-3">
+            <div className="flex items-center gap-3">
+              <PhilippinePeso className="w-4 h-4 text-brand-blue flex-shrink-0" />
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Monthly Quota</p>
+                <p className="text-sm font-bold text-slate-800 dark:text-white">{formatCurrency(quota)}</p>
+              </div>
+            </div>
+            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Achievement</p>
+                <p className="text-sm font-bold text-slate-800 dark:text-white">
+                  {achievementsValue !== null ? formatCurrency(achievementsValue) : '—'}
+                </p>
+                <p className={`text-[10px] font-semibold ${percentAchieved !== null && percentAchieved > 80 ? 'text-emerald-500' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {percentAchieved !== null ? `${percentAchieved}%` : 'N/A'}
+                </p>
+              </div>
+            </div>
+            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
+            <div className="flex items-center gap-3">
+              <AlertCircle className={`w-4 h-4 flex-shrink-0 ${remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-400 dark:text-slate-500'}`} />
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Remaining</p>
+                <p className={`text-sm font-bold ${remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-800 dark:text-white'}`}>
+                  {remainingQuota !== null ? formatCurrency(remainingQuota) : '—'}
+                </p>
+              </div>
+            </div>
+            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
+            <div className="flex items-center gap-3">
+              <ClipboardList className="w-4 h-4 text-amber-500 flex-shrink-0" />
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Follow-ups Due</p>
+                <p className="text-sm font-bold text-slate-800 dark:text-white">
+                  {hasLoadedData ? followUpsDue : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {loadError && (
         <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-900 rounded-xl p-4 shadow-sm flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -948,111 +1072,42 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       )}
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-lg p-3 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-              <PhilippinePeso className="w-4 h-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">Monthly Quota</span>
-            </div>
-            <Target className="w-4 h-4 text-brand-blue" />
-          </div>
-          <p className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(quota)}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Goal for the current month</p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-500/70 rounded-lg p-3 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-              <TrendingUp className="w-4 h-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">Achievement</span>
-            </div>
-            <ArrowUpRight className="w-4 h-4 text-emerald-500" />
-          </div>
-          <p className="text-2xl font-bold text-slate-800 dark:text-white">
-            {achievementsValue !== null ? formatCurrency(achievementsValue) : '—'}
-          </p>
-          <p
-            className={`text-xs font-semibold mt-1 ${percentAchieved !== null && percentAchieved > 80
-              ? 'text-emerald-500'
-              : 'text-slate-500 dark:text-slate-400'
-              }`}
-          >
-            {percentAchieved !== null ? `${percentAchieved}% of target` : 'Data unavailable'}
-          </p>
-          <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-            {percentAchieved !== null ? (
-              <div
-                className={`h-full rounded-full ${percentAchieved > 80 ? 'bg-emerald-500' : 'bg-brand-blue'}`}
-                style={{ width: `${percentAchieved}%` }}
-              />
-            ) : (
-              <div className="h-full rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-rose-400/70 rounded-lg p-3 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-              <BarChart3 className="w-4 h-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">Remaining</span>
-            </div>
-            <AlertCircle
-              className={`w-4 h-4 ${remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-400 dark:text-slate-500'
-                }`}
-            />
-          </div>
-          <p
-            className={`text-2xl font-bold ${remainingQuota !== null && remainingQuota < quota * 0.2 ? 'text-rose-500' : 'text-slate-800 dark:text-white'
-              }`}
-          >
-            {remainingQuota !== null ? formatCurrency(remainingQuota) : '—'}
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {remainingQuota !== null ? 'Needed to hit target' : 'Data unavailable'}
-          </p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-amber-400/70 rounded-lg p-3 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
-              <Calendar className="w-4 h-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">Follow-ups Due</span>
-            </div>
-            <ClipboardList className="w-4 h-4 text-amber-500" />
-          </div>
-          <p className="text-2xl font-bold text-slate-800 dark:text-white">
-            {hasLoadedData ? followUpsDue : '—'}
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {hasLoadedData ? 'Need action today' : 'Data unavailable'}
-          </p>
-        </div>
-      </section>
-
       {/* Master Call View - Main Focus */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl shadow-sm">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <Filter className="w-4 h-4" />
-              <span className="text-sm font-semibold text-slate-800 dark:text-white">Master Call View</span>
+      <section className="flex-1 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-brand-blue/70 rounded-xl shadow-sm mx-4 lg:mx-6 mb-4 overflow-hidden">
+        <div className="flex-shrink-0 p-3 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+              <Filter className="w-3.5 h-3.5" />
+              <span className="text-xs font-semibold text-slate-800 dark:text-white">Master Call View</span>
             </div>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Full pipeline coverage across territories</p>
+            <div className="flex items-center gap-1">
+              {(['master', 'today', 'activity'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors ${
+                    activeTab === tab
+                      ? 'bg-brand-blue text-white border-brand-blue'
+                      : 'bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {tab === 'master' ? 'All Clients' : tab === 'today' ? "Today's List" : 'Activity'}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-3 py-1.5 rounded-lg flex-1 min-w-[200px]">
-              <Search className="w-4 h-4 text-slate-400" />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-2.5 py-1.5 rounded-lg flex-1 min-w-[180px]">
+              <Search className="w-3.5 h-3.5 text-slate-400" />
               <input
-                className="bg-transparent text-sm outline-none text-slate-800 dark:text-slate-200 placeholder:text-slate-400 flex-1"
+                className={`bg-transparent outline-none text-slate-800 dark:text-slate-200 placeholder:text-slate-400 flex-1 ${densityConfig.fontSize}`}
                 placeholder="Search clients"
                 value={searchValue}
                 onChange={(event) => setSearchValue(event.target.value)}
               />
             </div>
             <select
-              className="text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1.5"
+              className={`${densityConfig.fontSize} bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1`}
               value={repFilter}
               onChange={(event) => setRepFilter(event.target.value)}
             >
@@ -1063,7 +1118,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               ))}
             </select>
             <select
-              className="text-xs bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1.5"
+              className={`${densityConfig.fontSize} bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1`}
               value={provinceFilter}
               onChange={(event) => setProvinceFilter(event.target.value)}
             >
@@ -1073,162 +1128,174 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </option>
               ))}
             </select>
-            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 px-3 py-1.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 rounded-lg cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={noPurchaseOnly}
-                onChange={(event) => setNoPurchaseOnly(event.target.checked)}
-              />
-              No purchase
-            </label>
-          </div>
-        </div>
-        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex flex-wrap gap-2">
-            {statusOptions.map((status) => (
-              <button
-                key={status}
-                onClick={() => toggleStatusFilter(status)}
-                className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${statusFilters.includes(status)
+            <button
+              onClick={() => setNoPurchaseOnly(!noPurchaseOnly)}
+              className={`flex items-center gap-1.5 ${densityConfig.fontSize} font-semibold border rounded-lg transition-colors ${
+                noPurchaseOnly
                   ? 'bg-brand-blue text-white border-brand-blue'
-                  : 'bg-slate-50 dark:bg-slate-900/60 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-300'
+                  : 'bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+              } px-2.5 py-1`}
+            >
+              No purchase
+            </button>
+            <div className="flex items-center gap-1">
+              {statusOptions.map((status) => (
+                <button
+                  key={status}
+                  onClick={() => toggleStatusFilter(status)}
+                  className={`text-[10px] font-semibold ${densityConfig.badgePadding} rounded-full border transition-colors ${
+                    statusFilters.includes(status)
+                      ? 'bg-brand-blue text-white border-brand-blue'
+                      : 'bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
-              >
-                {status}
-              </button>
-            ))}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <div className="max-h-[420px] overflow-y-auto">
-              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400">
+        <div className="flex-1 overflow-hidden">
+          {activeTab === 'master' && (
+            <div className="h-full overflow-y-auto">
+              <table className="w-full divide-y divide-slate-200 dark:divide-slate-800" style={{ tableLayout: 'fixed' }}>
+                <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 sticky top-0 z-10">
                   <tr>
-                    {[
-                      { key: 'client', label: 'Client' },
-                      { key: 'status', label: 'Status' },
-                      { key: 'lastContact', label: 'Last Contact', sortable: true, sortKey: 'lastContact' },
-                      { key: 'potential', label: 'Potential', sortable: true, sortKey: 'salesValue' },
-                      { key: 'actions', label: 'Actions' }
-                    ].map((column) => (
-                      <th
-                        key={column.key}
-                        className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide"
+                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '30%' }}>
+                      Client
+                    </th>
+                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '12%' }}>
+                      Status
+                    </th>
+                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '15%' }}>
+                      <button
+                        className="flex items-center gap-1"
+                        onClick={() => {
+                          const newField = 'lastContact';
+                          if (sortField === newField) {
+                            setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                          } else {
+                            setSortField(newField);
+                            setSortDirection('desc');
+                          }
+                        }}
                       >
-                        {column.sortable ? (
-                          <button
-                            className="flex items-center gap-1"
-                            onClick={() => {
-                              const newField = column.sortKey || 'lastContact';
-                              if (sortField === newField) {
-                                setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-                              } else {
-                                setSortField(newField as typeof sortField);
-                                setSortDirection('desc');
-                              }
-                            }}
-                          >
-                            {column.label}
-                            {(sortField === column.sortKey) && (
-                              <ArrowUpRight
-                                className={`w-3 h-3 ${sortDirection === 'desc' ? 'rotate-180' : ''}`}
-                              />
-                            )}
-                          </button>
-                        ) : (
-                          column.label
+                        Last Contact
+                        {sortField === 'lastContact' && (
+                          <ArrowUpRight className={`w-3 h-3 ${sortDirection === 'desc' ? 'rotate-180' : ''}`} />
                         )}
-                      </th>
-                    ))}
+                      </button>
+                    </th>
+                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '12%' }}>
+                      Last Purchase
+                    </th>
+                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '15%' }}>
+                      <button
+                        className="flex items-center gap-1"
+                        onClick={() => {
+                          const newField = 'salesValue';
+                          if (sortField === newField) {
+                            setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                          } else {
+                            setSortField(newField);
+                            setSortDirection('desc');
+                          }
+                        }}
+                      >
+                        Potential
+                        {sortField === 'salesValue' && (
+                          <ArrowUpRight className={`w-3 h-3 ${sortDirection === 'desc' ? 'rotate-180' : ''}`} />
+                        )}
+                      </button>
+                    </th>
+                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '10%' }}>
+                      Priority
+                    </th>
+                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '6%' }}>
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {masterRows.map((row) => (
                     <tr
                       key={row.contact.id}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer"
-                      onClick={() => setSelectedClientId(row.contact.id)}
+                      className={`hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer ${densityConfig.rowPadding}`}
+                      style={{ height: `${tableRowHeight}px` }}
+                      onClick={() => {
+                        setSelectedClientId(row.contact.id);
+                        setDetailsPanelOpen(true);
+                      }}
                     >
-                      <td className="px-3 py-4 min-w-[220px]">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-slate-800 dark:text-white">{row.contact.company}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">{row.contact.province}</p>
-                          </div>
+                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} overflow-hidden`}>
+                        <div className="flex items-center gap-2">
+                          <p className={`font-semibold text-slate-800 dark:text-white truncate ${densityConfig.fontSize}`} title={row.contact.company}>
+                            {row.contact.company}
+                          </p>
                         </div>
-                        <div className="mt-2 flex items-center gap-3 text-slate-400 dark:text-slate-500">
-                          <button
-                            type="button"
-                            title={`Rep: ${row.contact.salesman}`}
-                            className="p-1 rounded-full bg-slate-100 dark:bg-slate-900/60"
-                          >
-                            <UserCheck className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            title={`${row.totalInteractions} touchpoints`}
-                            className="p-1 rounded-full bg-slate-100 dark:bg-slate-900/60"
-                          >
-                            <Clock className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            title={row.contact.comment ? row.contact.comment : 'No notes provided'}
-                            className="p-1 rounded-full bg-slate-100 dark:bg-slate-900/60"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        <p className={`text-slate-500 dark:text-slate-400 truncate ${densityConfig.fontSize}`} title={row.contact.province || 'No location'}>
+                          {row.contact.province || 'No location'}
+                        </p>
                       </td>
-                      <td className="px-3 py-4">
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeClasses(row.contact.status)}`}>
+                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+                        <span className={`font-semibold rounded-full ${densityConfig.badgePadding} ${statusBadgeClasses(row.contact.status)} ${densityConfig.fontSize}`}>
                           {row.contact.status}
                         </span>
                       </td>
-                      <td className="px-3 py-4">
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+                        <p className={`font-semibold text-slate-700 dark:text-slate-200 ${densityConfig.fontSize}`} title={row.lastContact ? new Date(row.lastContact).toLocaleDateString() : 'No activity yet'}>
                           {formatRelativeTime(row.lastContact)}
                         </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Last purchase {formatDate(row.lastPurchase)}
+                      </td>
+                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+                        <p className={`text-slate-600 dark:text-slate-300 ${densityConfig.fontSize}`} title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString() : 'No purchases'}>
+                          {formatDate(row.lastPurchase)}
                         </p>
                       </td>
-                      <td className="px-3 py-4">
-                        <p className="text-sm font-bold text-slate-800 dark:text-white">{formatCurrency(row.totalSales)}</p>
-                        <p className={`mt-1 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${priorityBadgeClasses(row.priority)}`}>
-                          Priority {Math.round(row.priority)}
+                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+                        <p className={`font-bold text-slate-800 dark:text-white ${densityConfig.fontSize}`} title={`Total sales: ${formatCurrency(row.totalSales)}`}>
+                          {formatCurrency(row.totalSales)}
                         </p>
+                        <span className={`inline-block mt-0.5 rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
+                          {Math.round(row.priority)}
+                        </span>
                       </td>
-                       <td className="px-3 py-4">
-                        <div className="flex flex-wrap gap-2">
+                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center`}>
+                        <span className={`inline-block rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
+                          {Math.round(row.priority)}
+                        </span>
+                      </td>
+                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleCallContact(row.contact);
                             }}
-                            className="px-2 py-1 text-xs font-semibold rounded-lg bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-white transition-colors"
+                            className={`p-1 rounded hover:bg-brand-blue hover:text-white transition-colors text-slate-600 dark:text-slate-300 ${densityConfig.iconSize}`}
+                            title="Call"
                           >
-                            Call
+                            <Phone className={densityConfig.iconSize} />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenSMSModal(row.contact);
                             }}
-                            className="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-colors"
+                            className={`p-1 rounded hover:bg-emerald-500 hover:text-white transition-colors text-slate-600 dark:text-slate-300 ${densityConfig.iconSize}`}
+                            title="SMS"
                           >
-                            SMS
+                            <MessageSquare className={densityConfig.iconSize} />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenPatientChart(row.contact.id);
                             }}
-                            className="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-blue hover:text-white transition-colors"
+                            className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-300 ${densityConfig.iconSize}`}
+                            title="Details"
                           >
-                            Details
+                            <ClipboardList className={densityConfig.iconSize} />
                           </button>
                         </div>
                       </td>
@@ -1236,7 +1303,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   ))}
                   {masterRows.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                      <td colSpan={7} className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center text-sm text-slate-500 dark:text-slate-400`}>
                         {dataUnavailable ? 'Client data is unavailable. Retry loading the dashboard.' : 'No clients match the current filters.'}
                       </td>
                     </tr>
@@ -1244,177 +1311,28 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      </section>
+          )}
 
-
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-400/70 rounded-lg shadow-sm">
-            <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-2">
-                <PhoneCall className="w-5 h-5 text-brand-blue" />
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white">Today's Call List</h2>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Prioritized outreach for the day</p>
-            </div>
-            <div className="p-3">
+          {activeTab === 'today' && (
+            <div className="h-full overflow-y-auto p-4">
               {hasLoadedData ? (
                 <AgentCallActivity
                   callLogs={callLogs}
                   inquiries={inquiries}
                   contacts={contacts}
-                  maxItems={15}
+                  maxItems={50}
                   title="Today's Call List"
                 />
               ) : (
                 <div className="text-sm text-rose-500 text-center py-6">Call activity unavailable</div>
               )}
             </div>
-          </div>
+          )}
 
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-sky-400/70 rounded-lg shadow-sm p-3">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-2">
-                <PhoneCall className="w-5 h-5 text-brand-blue" />
-                <h2 className="text-lg font-bold text-slate-800 dark:text-white">Call Activity Tracker</h2>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <Clock className="w-4 h-4" />
-                Updated live from Supabase
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
-                  <PhoneForwarded className="w-3.5 h-3.5 text-brand-blue" />
-                  Calls Today
-                </p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
-                  {hasLoadedData ? callsToday : '—'}
-                </p>
-                {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
-              </div>
-              <div className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
-                  <MessageSquare className="w-3.5 h-3.5 text-purple-500" />
-                  SMS Today
-                </p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
-                  {hasLoadedData ? smsToday : '—'}
-                </p>
-                {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
-              </div>
-              <div className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
-                  <Users className="w-3.5 h-3.5 text-emerald-500" />
-                  Contacts Today
-                </p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
-                  {hasLoadedData ? clientsContactedToday : '—'}
-                </p>
-                {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
-              </div>
-              <div className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60">
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 uppercase">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                  Calls this Month
-                </p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
-                  {hasLoadedData ? callsThisMonth : '—'}
-                </p>
-                {dataUnavailable && <p className="text-[11px] text-rose-500 mt-0.5">Data unavailable</p>}
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-1 lg:grid-cols-5 gap-3">
-              <div className="lg:col-span-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-100 dark:border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Monthly Summary</h3>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {contactsThisMonth} clients
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500 dark:text-slate-400">Unique Clients</span>
-                    <span className="font-semibold text-slate-800 dark:text-white">
-                      {hasLoadedData ? contactsThisMonth : '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500 dark:text-slate-400">Follow-ups Pending</span>
-                    <span className="font-semibold text-amber-500">{hasLoadedData ? followUpsDue : '—'}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-500 dark:text-slate-400">Conversion Ratio</span>
-                    <span className="font-semibold text-emerald-500">
-                      {hasLoadedData ? `${conversionRate}%` : '—'}
-                    </span>
-                  </div>
-                  {dataUnavailable && (
-                    <p className="text-[11px] text-rose-500 mt-1">Monthly summary unavailable</p>
-                  )}
-                </div>
-              </div>
-              <div className="lg:col-span-2 bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-100 dark:border-slate-800">
-                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Outcome Mix</h3>
-                {hasLoadedData ? (
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={callOutcomeBreakdown} dataKey="value" nameKey="name" innerRadius={40} outerRadius={70} paddingAngle={4}>
-                          {callOutcomeBreakdown.map((entry, index) => (
-                            <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="h-48 flex items-center justify-center text-sm text-rose-500">Outcome data unavailable</div>
-                )}
-              </div>
-            </div>
-            <div className="mt-4 overflow-x-auto pb-2">
-              <div className="flex gap-3 min-w-max">
-                {perClientHistory.map((item) => (
-                  <div
-                    key={item.contact.id}
-                    className="min-w-[220px] p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col gap-2 shadow-sm"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800 dark:text-white">{item.contact.company}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{item.contact.province}</p>
-                      </div>
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        {item.total} interactions
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                      <span>Positive: {item.positive}</span>
-                      <span>Follow-ups: {item.followUps}</span>
-                      <span>{formatRelativeTime(item.lastInteraction)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-5 space-y-6">
-          <div className="space-y-6">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-purple-400/70 rounded-xl shadow-sm p-4 flex flex-col max-h-[500px] min-h-0">
-              <div className="flex items-center justify-between mb-4 shrink-0">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-brand-blue" />
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">Activity Highlights</h3>
-                </div>
+          {activeTab === 'activity' && (
+            <div className="h-full overflow-y-auto p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-white">Activity Highlights</h3>
                 <button
                   onClick={handleActivityReadAll}
                   className="text-xs font-semibold text-brand-blue hover:underline"
@@ -1422,258 +1340,188 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   Mark all seen
                 </button>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
-                <div className="space-y-3">
-                  {activityItems.map((activity) => (
-                    <div
-                      key={activity.id}
-                      className={`p-3 rounded-xl border ${activity.read ? 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60' : 'border-brand-blue/20 bg-blue-50/60 dark:bg-blue-900/30'}`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                          {activity.type === 'report' ? <ShieldAlert className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
-                          {activity.type === 'report' ? 'Owner' : 'Stock'}
-                        </span>
-                        {!activity.read && (
-                          <button
-                            onClick={() => handleActivityRead(activity.id)}
-                            className="text-[11px] font-semibold text-brand-blue hover:underline"
-                          >
-                            Mark seen
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{activity.title}</p>
-                      <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{activity.message}</p>
-                      <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-                        {formatRelativeTime(activity.timestamp)}
-                      </div>
-                    </div>
-                  ))}
-                  {activityItems.length === 0 && (
-                    <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-6">No recent activity</div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-400/70 rounded-xl shadow-sm p-4 lg:sticky xl:top-24 z-10">
-              {selectedClient ? (
-                <>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                        <Phone className="w-5 h-5 text-brand-blue" />
-                      </div>
-                      <div>
-                        <h3 className="text-base font-bold text-slate-800 dark:text-white">{selectedClient.company}</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{selectedClient.province}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowPatientChart(true)}
-                        className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-brand-blue transition-colors"
-                        title="Open Patient Chart"
-                      >
-                        <ClipboardList className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => setSelectedClientId(null)}
-                        className="p-1 rounded-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
-                        aria-label="Close client panel"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                    <span className={`px-2 py-0.5 rounded-full font-semibold ${statusBadgeClasses(selectedClient.status)}`}>
-                      {selectedClient.status}
-                    </span>
-                    <span>Assigned: {selectedClient.salesman}</span>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => handleCallContact(selectedClient)}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-blue hover:text-white transition-colors"
-                    >
-                      <Phone className="w-3.5 h-3.5" />
-                      Call
-                    </button>
-                    <button
-                      onClick={() => handleOpenSMSModal(selectedClient)}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-emerald-500 hover:text-white transition-colors"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      SMS
-                    </button>
-                    <button
-                      onClick={() => handleEmailContact(selectedClient)}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-500 hover:text-white transition-colors"
-                    >
-                      <Mail className="w-3.5 h-3.5" />
-                      Email
-                    </button>
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs">Communication History</span>
-                      <div className="flex items-center gap-1">
-                        {(['all', 'calls', 'sms'] as const).map((tab) => (
-                          <button
-                            key={tab}
-                            onClick={() => setHistoryTab(tab)}
-                            className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${
-                              historyTab === tab
-                                ? 'bg-brand-blue text-white border-brand-blue'
-                                : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            {tab === 'all' ? 'All' : tab === 'calls' ? 'Calls' : 'SMS'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mt-3 space-y-3 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
-                      {filteredTimeline.map((event) => (
-                        <div
-                          key={event.id}
-                          className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800"
+              <div className="space-y-3">
+                {activityItems.map((activity) => (
+                  <div
+                    key={activity.id}
+                    className={`p-3 rounded-xl border ${activity.read ? 'border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60' : 'border-brand-blue/20 bg-blue-50/60 dark:bg-blue-900/30'}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                        {activity.type === 'report' ? <ShieldAlert className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
+                        {activity.type === 'report' ? 'Owner' : 'Stock'}
+                      </span>
+                      {!activity.read && (
+                        <button
+                          onClick={() => handleActivityRead(activity.id)}
+                          className="text-[11px] font-semibold text-brand-blue hover:underline"
                         >
-                          <div className="flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
-                            <div className="flex items-center gap-2">
-                              {event.type === 'call' ? (
-                                event.channel === 'text' ? (
-                                  <MessageSquare className="w-4 h-4 text-purple-500" />
-                                ) : (
-                                  <PhoneCall className="w-4 h-4 text-brand-blue" />
-                                )
-                              ) : (
-                                <ClipboardList className="w-4 h-4 text-amber-500" />
-                              )}
-                              <span>{event.title}</span>
-                            </div>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">{formatDate(event.occurred_at)}</span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            {event.type === 'call' && event.direction && (
-                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                                event.direction === 'inbound'
-                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                              }`}>
-                                {event.direction === 'inbound' ? 'Inbound' : 'Outbound'}
-                              </span>
-                            )}
-                            {event.type === 'call' && event.outcome && (
-                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                                event.outcome === 'positive'
-                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                  : event.outcome === 'negative'
-                                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
-                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                              }`}>
-                                {event.outcome.replace('_', ' ')}
-                              </span>
-                            )}
-                          </div>
-                          {event.detail && (
-                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 bg-white dark:bg-slate-800 p-2 rounded border border-slate-100 dark:border-slate-800">
-                              {event.detail}
-                            </p>
-                          )}
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{event.meta}</p>
-                        </div>
-                      ))}
-                      {filteredTimeline.length === 0 && (
-                        <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-6">
-                          {historyTab === 'all' ? 'No activity logged yet' : `No ${historyTab === 'calls' ? 'call' : 'SMS'} history`}
-                        </div>
+                          Mark seen
+                        </button>
                       )}
                     </div>
+                    <p className="text-sm text-slate-700 dark:text-slate-200 font-semibold">{activity.title}</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{activity.message}</p>
+                    <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                      {formatRelativeTime(activity.timestamp)}
+                    </div>
                   </div>
-                </>
-              ) : (
-                <div className="text-center text-sm text-slate-500 dark:text-slate-400 py-10">
-                  {masterRows.length ? 'Select a client to view their timeline.' : 'No clients available for the current filters.'}
-                </div>
-              )}
+                ))}
+                {activityItems.length === 0 && (
+                  <div className="text-center text-sm text-slate-400 dark:text-slate-500 py-6">No recent activity</div>
+                )}
+              </div>
+            </div>
+           )}
+        </div>
+      </section>
+      {detailsPanelOpen && selectedClient && (
+        <div className="fixed inset-y-0 right-0 w-[35%] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col z-50 animate-in slide-in-from-right-10 duration-300">
+          <div className="flex-shrink-0 p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                <Phone className="w-5 h-5 text-brand-blue" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 dark:text-white">{selectedClient.company}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{selectedClient.province}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowPatientChart(true)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-brand-blue transition-colors"
+                title="Open Patient Chart"
+              >
+                <ClipboardList className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setDetailsPanelOpen(false)}
+                className="p-1 rounded-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
+                aria-label="Close details panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 border-l-4 border-l-indigo-400/70 rounded-xl shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Users className="w-5 h-5 text-brand-blue" />
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Client Segments</h3>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+              <span className={`px-2 py-0.5 rounded-full font-semibold ${statusBadgeClasses(selectedClient.status)}`}>
+                {selectedClient.status}
+              </span>
+              <span>Assigned: {selectedClient.salesman}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleCallContact(selectedClient)}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-blue hover:text-white transition-colors"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                Call
+              </button>
+              <button
+                onClick={() => handleOpenSMSModal(selectedClient)}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-emerald-500 hover:text-white transition-colors"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                SMS
+              </button>
+              <button
+                onClick={() => handleEmailContact(selectedClient)}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-500 hover:text-white transition-colors"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                Email
+              </button>
             </div>
             <div className="space-y-3">
-              {([
-                { key: 'active', title: 'Active • No Purchase', icon: UserCheck, data: categorizedEntries.active, virtual: activeVirtual },
-                { key: 'inactivePositive', title: 'Inactive Positives', icon: UserPlus, data: categorizedEntries.inactivePositive, virtual: inactiveVirtual },
-                { key: 'prospectivePositive', title: 'Prospective Positives', icon: UserX, data: categorizedEntries.prospectivePositive, virtual: prospectiveVirtual }
-              ] as const).map(({ key, title, icon: Icon, data, virtual }) => {
-                const isOpen = openClientLists[key];
-                const { visibleItems, offsetTop, totalHeight, viewportHeight, handleScroll } = virtual;
-                return (
-                  <div key={title} className="border border-slate-100 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/40">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs">Communication History</span>
+                <div className="flex items-center gap-1">
+                  {(['all', 'calls', 'sms'] as const).map((tab) => (
                     <button
-                      onClick={() => toggleClientList(key)}
-                      className="w-full flex items-center justify-between px-3 py-3 text-left"
+                      key={tab}
+                      onClick={() => setHistoryTab(tab)}
+                      className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors ${
+                        historyTab === tab
+                          ? 'bg-brand-blue text-white border-brand-blue'
+                          : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <Icon className="w-5 h-5 text-brand-blue" />
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800 dark:text-white">{title}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{data.length} clients</p>
-                        </div>
-                      </div>
-                      <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${isOpen ? '-rotate-180' : ''}`} />
+                      {tab === 'all' ? 'All' : tab === 'calls' ? 'Calls' : 'SMS'}
                     </button>
-                    {isOpen && (
-                      <div className="border-t border-slate-100 dark:border-slate-800 px-3 pb-3">
-                        <div
-                          className="relative pr-1 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent"
-                          style={{ height: `${viewportHeight}px` }}
-                          onScroll={handleScroll}
-                        >
-                          <div style={{ height: `${totalHeight}px` }}>
-                            <div style={{ transform: `translateY(${offsetTop}px)` }} className="space-y-3">
-                              {visibleItems.map((entry) => (
-                                <button
-                                  key={entry.contact.id}
-                                  onClick={() => setSelectedClientId(entry.contact.id)}
-                                  className="w-full text-left bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg p-3 hover:border-brand-blue transition-colors"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <p className="text-sm font-semibold text-slate-800 dark:text-white">{entry.contact.company}</p>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">{entry.contact.province}</p>
-                                    </div>
-                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeClasses(entry.contact.status)}`}>
-                                      {entry.contact.status}
-                                    </span>
-                                  </div>
-                                  <div className="mt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                                    <span>Last touch: {formatRelativeTime(entry.lastContact)}</span>
-                                    <span>Priority {Math.round(entry.priority)}</span>
-                                  </div>
-                                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{formatComment(entry.contact.comment)}</p>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-3">
+                {filteredTimeline.map((event) => (
+                  <div
+                    key={event.id}
+                    className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800"
+                  >
+                    <div className="flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      <div className="flex items-center gap-2">
+                        {event.type === 'call' ? (
+                          event.channel === 'text' ? (
+                            <MessageSquare className="w-4 h-4 text-purple-500" />
+                          ) : (
+                            <PhoneCall className="w-4 h-4 text-brand-blue" />
+                          )
+                        ) : (
+                          <ClipboardList className="w-4 h-4 text-amber-500" />
+                        )}
+                        <span>{event.title}</span>
                       </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{formatDate(event.occurred_at)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      {event.type === 'call' && event.direction && (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          event.direction === 'inbound'
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                        }`}>
+                          {event.direction === 'inbound' ? 'Inbound' : 'Outbound'}
+                        </span>
+                      )}
+                      {event.type === 'call' && event.outcome && (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          event.outcome === 'positive'
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                            : event.outcome === 'negative'
+                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                        }`}>
+                          {event.outcome.replace('_', ' ')}
+                        </span>
+                      )}
+                    </div>
+                    {event.detail && (
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 bg-white dark:bg-slate-800 p-2 rounded border border-slate-100 dark:border-slate-800">
+                        {event.detail}
+                      </p>
                     )}
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{event.meta}</p>
                   </div>
-                );
-              })}
+                ))}
+                {filteredTimeline.length === 0 && (
+                  <div className="text-sm text-slate-500 dark:text-slate-400 text-center py-6">
+                    {historyTab === 'all' ? 'No activity logged yet' : `No ${historyTab === 'calls' ? 'call' : 'SMS'} history`}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </section>
+      )}
+
+      {detailsPanelOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+          onClick={() => setDetailsPanelOpen(false)}
+        />
+      )}
+
 
       {showSMSModal && smsRecipient && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
