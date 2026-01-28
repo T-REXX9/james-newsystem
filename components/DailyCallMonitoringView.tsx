@@ -199,7 +199,7 @@ const getDensityConfig = (density: DensityMode) => {
         rowPadding: 'py-3',
         fontSize: 'text-sm',
         chipSize: 'px-3 py-1',
-        iconSize: 'w-4 h-4',
+        iconSize: 'w-5 h-5',
         cellPadding: 'px-3',
         badgePadding: 'px-2 py-0.5'
       };
@@ -208,7 +208,7 @@ const getDensityConfig = (density: DensityMode) => {
         rowPadding: 'py-2',
         fontSize: 'text-xs',
         chipSize: 'px-2 py-0.5',
-        iconSize: 'w-3.5 h-3.5',
+        iconSize: 'w-4 h-4',
         cellPadding: 'px-2',
         badgePadding: 'px-1.5 py-0.5'
       };
@@ -917,14 +917,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
             title={summaryCollapsed ? 'Expand Summary' : 'Collapse Summary'}
           >
-            {summaryCollapsed ? <BarChart3 className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {summaryCollapsed ? <BarChart3 className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             Summary
           </button>
           <button
             onClick={loadAgentData}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
           {callForwardingEnabled ? (
@@ -933,7 +933,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 text-xs font-semibold text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/30"
               title="Disable Call Forwarding"
             >
-              <PhoneForwarded className="w-3.5 h-3.5" />
+              <PhoneForwarded className="w-4 h-4" />
               Forwarding On
             </button>
           ) : showForwardingInput ? (
@@ -955,7 +955,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 onClick={() => setShowForwardingInput(false)}
                 className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
@@ -964,7 +964,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               title="Enable Call Forwarding"
             >
-              <PhoneForwarded className="w-3.5 h-3.5" />
+              <PhoneForwarded className="w-4 h-4" />
               Forward
             </button>
           )}
@@ -973,7 +973,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               onClick={handleActivityReadAll}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-blue text-white text-xs font-semibold shadow-sm"
             >
-              <Bell className="w-3.5 h-3.5" />
+              <Bell className="w-4 h-4" />
               Activity
               {unseenActivityCount > 0 && (
                 <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-white/20">
@@ -1077,7 +1077,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         <div className="flex-shrink-0 p-3 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-              <Filter className="w-3.5 h-3.5" />
+              <Filter className="w-4 h-4" />
               <span className="text-xs font-semibold text-slate-800 dark:text-white">Master Call View</span>
             </div>
             <div className="flex items-center gap-1">
@@ -1098,7 +1098,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-2.5 py-1.5 rounded-lg flex-1 min-w-[180px]">
-              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <Search className="w-4 h-4 text-slate-400" />
               <input
                 className={`bg-transparent outline-none text-slate-800 dark:text-slate-200 placeholder:text-slate-400 flex-1 ${densityConfig.fontSize}`}
                 placeholder="Search clients"
@@ -1266,13 +1266,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                         </span>
                       </td>
                       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleCallContact(row.contact);
                             }}
-                            className={`p-1 rounded hover:bg-brand-blue hover:text-white transition-colors text-slate-600 dark:text-slate-300 ${densityConfig.iconSize}`}
+                            className={`inline-flex items-center justify-center p-1.5 rounded hover:bg-brand-blue hover:text-white transition-colors text-slate-600 dark:text-slate-300 leading-none shrink-0 ${densityConfig.iconSize}`}
                             title="Call"
                           >
                             <Phone className={densityConfig.iconSize} />
@@ -1282,7 +1282,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                               e.stopPropagation();
                               handleOpenSMSModal(row.contact);
                             }}
-                            className={`p-1 rounded hover:bg-emerald-500 hover:text-white transition-colors text-slate-600 dark:text-slate-300 ${densityConfig.iconSize}`}
+                            className={`inline-flex items-center justify-center p-1.5 rounded hover:bg-emerald-500 hover:text-white transition-colors text-slate-600 dark:text-slate-300 leading-none shrink-0 ${densityConfig.iconSize}`}
                             title="SMS"
                           >
                             <MessageSquare className={densityConfig.iconSize} />
@@ -1292,7 +1292,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                               e.stopPropagation();
                               handleOpenPatientChart(row.contact.id);
                             }}
-                            className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-300 ${densityConfig.iconSize}`}
+                            className={`inline-flex items-center justify-center p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-300 leading-none shrink-0 ${densityConfig.iconSize}`}
                             title="Details"
                           >
                             <ClipboardList className={densityConfig.iconSize} />
@@ -1348,7 +1348,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                        {activity.type === 'report' ? <ShieldAlert className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
+                        {activity.type === 'report' ? <ShieldAlert className="w-4 h-4" /> : <Package className="w-4 h-4" />}
                         {activity.type === 'report' ? 'Owner' : 'Stock'}
                       </span>
                       {!activity.read && (
@@ -1416,21 +1416,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 onClick={() => handleCallContact(selectedClient)}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-brand-blue hover:text-white transition-colors"
               >
-                <Phone className="w-3.5 h-3.5" />
+                <Phone className="w-4 h-4" />
                 Call
               </button>
               <button
                 onClick={() => handleOpenSMSModal(selectedClient)}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-emerald-500 hover:text-white transition-colors"
               >
-                <MessageSquare className="w-3.5 h-3.5" />
+                <MessageSquare className="w-4 h-4" />
                 SMS
               </button>
               <button
                 onClick={() => handleEmailContact(selectedClient)}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-500 hover:text-white transition-colors"
               >
-                <Mail className="w-3.5 h-3.5" />
+                <Mail className="w-4 h-4" />
                 Email
               </button>
             </div>
