@@ -175,3 +175,165 @@ export const purchaseOrderService = {
         return `PO-${year}${sequence}`;
     }
 };
+
+const calculateGrandTotal = (items: Array<{ qty: number; unit_price: number }>) =>
+    items.reduce((sum, item) => sum + (item.qty || 0) * (item.unit_price || 0), 0);
+
+export const getPurchaseOrder = async (id: string): Promise<PurchaseOrderWithDetails | null> => {
+    const { data, error } = await supabase
+        .from('purchase_orders')
+        .select('*, purchase_order_items(*)')
+        .eq('id', id)
+        .eq('is_deleted', false)
+        .single();
+
+    if (error) {
+        if (!data) return null;
+        throw error;
+    }
+
+    return data as unknown as PurchaseOrderWithDetails;
+};
+
+export const getAllPurchaseOrders = async (filters?: { status?: string }): Promise<PurchaseOrderWithDetails[]> => {
+    let query = supabase
+        .from('purchase_orders')
+        .select('*, purchase_order_items(*)')
+        .eq('is_deleted', false);
+
+    if (filters?.status) {
+        query = query.eq('status', filters.status);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data as unknown as PurchaseOrderWithDetails[]) || [];
+};
+
+export const createPurchaseOrder = async (data: PurchaseOrderInsert & { items?: PurchaseOrderItemInsert[] }) => {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const user = authData?.user;
+
+    if (authError || !user) {
+        throw new Error('User not authenticated');
+    }
+
+    const { items = [], ...poData } = data as any;
+    const { data: created, error } = await supabase
+        .from('purchase_orders')
+        .insert({
+            ...poData,
+            created_by: user.id,
+            is_deleted: false,
+            grand_total: calculateGrandTotal(items),
+        })
+        .select()
+        .single();
+
+    if (error) throw error;
+
+    if (items.length > 0) {
+        const itemsPayload = items.map((item: any) => ({
+            ...item,
+            po_id: created.id,
+            amount: (item.qty || 0) * (item.unit_price || 0),
+        }));
+        const { error: itemsError } = await supabase
+            .from('purchase_order_items')
+            .insert(itemsPayload);
+
+        if (itemsError) {
+            await supabase.from('purchase_orders').delete().eq('id', created.id);
+            throw itemsError;
+        }
+    }
+
+    return await getPurchaseOrder(created.id);
+};
+
+export const updatePurchaseOrder = async (
+    id: string,
+    updates: PurchaseOrderUpdate & { items?: PurchaseOrderItemInsert[] }
+) => {
+    const existing = await getPurchaseOrder(id);
+    if (!existing) {
+        throw new Error('Purchase Order not found');
+    }
+
+    if (existing.status !== 'draft') {
+        throw new Error('Only draft purchase orders can be updated');
+    }
+
+    const { items = [], ...poUpdates } = updates as any;
+
+    const { data: updated, error: updateError } = await supabase
+        .from('purchase_orders')
+        .update({
+            ...poUpdates,
+            grand_total: items.length > 0 ? calculateGrandTotal(items) : existing.grand_total,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (updateError) throw updateError;
+
+    if (items.length > 0) {
+        const { error: deleteError } = await supabase
+            .from('purchase_order_items')
+            .delete()
+            .eq('po_id', id);
+        if (deleteError) throw deleteError;
+
+        const itemsPayload = items.map((item: any) => ({
+            ...item,
+            po_id: id,
+            amount: (item.qty || 0) * (item.unit_price || 0),
+        }));
+
+        const { error: itemsError } = await supabase
+            .from('purchase_order_items')
+            .insert(itemsPayload);
+        if (itemsError) throw itemsError;
+    }
+
+    return updated ? await getPurchaseOrder(id) : null;
+};
+
+export const markAsDelivered = async (id: string) => {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const user = authData?.user;
+    if (authError || !user) {
+        throw new Error('User not authenticated');
+    }
+
+    const existing = await getPurchaseOrder(id);
+    if (!existing) {
+        throw new Error('Purchase Order not found');
+    }
+
+    if (existing.status !== 'ordered') {
+        throw new Error('Only ordered purchase orders can be marked as delivered');
+    }
+
+    const now = new Date().toISOString();
+    const deliveryDate = now.split('T')[0];
+
+    const { error: updateError } = await supabase
+        .from('purchase_orders')
+        .update({
+            status: 'delivered',
+            delivery_date: deliveryDate,
+            updated_at: now,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (updateError) throw updateError;
+
+    const { createInventoryLogFromPO } = await import('./inventoryLogService');
+    await createInventoryLogFromPO(id, user.id);
+
+    return await getPurchaseOrder(id);
+};

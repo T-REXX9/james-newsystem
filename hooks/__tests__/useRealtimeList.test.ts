@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useRealtimeList } from '../useRealtimeList';
 
 // Mock the useRealtimeSubscription hook
@@ -15,9 +15,15 @@ interface TestItem {
 
 describe('useRealtimeList', () => {
   const mockFetchFn = vi.fn<[], Promise<TestItem[]>>();
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
   });
 
   it('should fetch initial data on mount', async () => {
@@ -129,4 +135,3 @@ describe('useRealtimeList', () => {
     });
   });
 });
-

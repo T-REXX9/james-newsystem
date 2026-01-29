@@ -40,11 +40,20 @@ vi.mock('../../components/SalesAgentDashboard', () => ({
 }));
 
 vi.mock('../../components/ToastProvider', () => ({
-  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useToast: () => ({ addToast: vi.fn() })
 }));
 
 vi.mock('../../components/NotificationProvider', () => ({
   NotificationProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>
+}));
+
+vi.mock('../../components/OwnerLiveCallMonitoringView', () => ({
+  default: () => <div>OwnerLiveCallMonitoringView</div>
+}));
+
+vi.mock('../../components/DailyCallMonitoringView', () => ({
+  default: () => <div>DailyCallMonitoringView</div>
 }));
 
 const typedSupabase = supabase as unknown as {
@@ -58,6 +67,7 @@ const typedSupabase = supabase as unknown as {
 };
 
 const subscription = { unsubscribe: vi.fn() };
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   typedSupabase.auth.getSession.mockReset();
@@ -66,10 +76,12 @@ beforeEach(() => {
   typedSupabase.auth.signOut.mockReset();
   typedSupabase.from.mockReset();
   typedSupabase.auth.onAuthStateChange.mockReturnValue({ data: { subscription } });
+  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
   cleanup();
+  consoleErrorSpy.mockRestore();
 });
 
 describe('App authentication flow', () => {
