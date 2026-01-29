@@ -53,16 +53,20 @@ const limitedUser: UserProfile = {
 };
 
 describe('Sidebar', () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     // Mock the size of the container for virtualizer
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 1000 });
     Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 256 });
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
     window.localStorage.clear();
+    consoleErrorSpy.mockRestore();
   });
 
   it('renders module items for the owner role', async () => {

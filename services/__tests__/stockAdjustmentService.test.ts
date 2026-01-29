@@ -35,11 +35,15 @@ const createQueryBuilderMock = (result: any) => {
 };
 
 describe('stockAdjustmentService', () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
     beforeEach(() => {
         vi.clearAllMocks();
+        consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     });
 
     afterEach(() => {
+        consoleErrorSpy.mockRestore();
         vi.restoreAllMocks();
     });
 
