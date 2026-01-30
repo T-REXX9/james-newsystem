@@ -35,6 +35,8 @@ import {
 import SalesReturnTab from './SalesReturnTab'; // Reuse existing logic
 import ValidationSummary from './ValidationSummary';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 interface PatientChartModalProps {
     contact: Contact;
@@ -51,6 +53,7 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
     currentUser,
     onClose
 }) => {
+    const { addToast } = useToast();
     const [activeTab, setActiveTab] = useState<'profile' | 'purchases' | 'returns'>('purchases');
     const [timeline, setTimeline] = useState<TimelineItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -136,8 +139,20 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
             await createCallLog(entry);
             setNewMessage('');
             await loadData(); // Refresh to show new message
+            addToast({
+                type: 'success',
+                title: 'Message sent',
+                description: 'Your message has been sent successfully.',
+                durationMs: 4000,
+            });
         } catch (err) {
             console.error('Error sending message', err);
+            addToast({
+                type: 'error',
+                title: 'Unable to send message',
+                description: parseSupabaseError(err, 'message'),
+                durationMs: 6000,
+            });
         } finally {
             setSubmitting(false);
         }

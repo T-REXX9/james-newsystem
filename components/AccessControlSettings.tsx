@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CreateStaffAccountInput, StaffAccountValidationError, UserProfile } from '../types';
 import { fetchProfiles, updateProfile, createStaffAccount } from '../services/supabaseService';
+import { parseSupabaseError } from '../utils/errorHandler';
 import {
   AVAILABLE_APP_MODULES,
   DEFAULT_STAFF_ACCESS_RIGHTS,
@@ -12,8 +13,10 @@ import {
   MODULE_ID_ALIASES,
 } from '../constants';
 import { Loader2, Shield, Save, CheckCircle, AlertTriangle, User, UserPlus, X } from 'lucide-react';
+import { useToast } from './ToastProvider';
 
 const AccessControlSettings: React.FC = () => {
+  const { addToast } = useToast();
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -110,9 +113,20 @@ const AccessControlSettings: React.FC = () => {
         await updateProfile(user.id, { access_rights: user.access_rights });
         // Simulating delay for UX
         await new Promise(resolve => setTimeout(resolve, 500)); 
+        addToast({ 
+          type: 'success', 
+          title: 'Permissions updated',
+          description: 'Access permissions have been updated successfully.',
+          durationMs: 4000,
+        });
     } catch (e) {
         console.error(e);
-        alert('Failed to save permissions');
+        addToast({ 
+          type: 'error', 
+          title: 'Unable to update permissions',
+          description: parseSupabaseError(e, 'permissions'),
+          durationMs: 6000,
+        });
     } finally {
         setSavingId(null);
     }
@@ -174,6 +188,12 @@ const AccessControlSettings: React.FC = () => {
       if (!result.success) {
         setFormErrors(result.validationErrors || {});
         setFormMessage({ type: 'error', text: result.error || 'Unable to create account. Please try again.' });
+        addToast({
+          type: 'error',
+          title: 'Unable to create user',
+          description: result.error || 'Unable to create account. Please try again.',
+          durationMs: 6000,
+        });
         return;
       }
 
@@ -182,9 +202,21 @@ const AccessControlSettings: React.FC = () => {
       setNewUserForm({ fullName: '', email: '', role: DEFAULT_STAFF_ROLE, password: '', birthday: '', mobile: '' });
       setFormErrors({});
       setFormMessage({ type: 'success', text: `Account created for ${payload.fullName}` });
+      addToast({
+        type: 'success',
+        title: 'User created',
+        description: 'Account has been created successfully.',
+        durationMs: 4000,
+      });
     } catch (err: any) {
       console.error('Unexpected error creating staff account:', err);
       setFormMessage({ type: 'error', text: err?.message || 'Something went wrong while creating the account.' });
+      addToast({
+        type: 'error',
+        title: 'Unable to create user',
+        description: parseSupabaseError(err, 'user'),
+        durationMs: 6000,
+      });
     } finally {
       setIsCreatingUser(false);
     }

@@ -3,6 +3,8 @@ import { X, Search, Plus, Trash2 } from 'lucide-react';
 import { CreateReturnDTO, CreateReturnItemDTO, RRItemForReturn } from '../../returnToSupplier.types';
 import { returnToSupplierService } from '../../services/returnToSupplierService';
 import { supabase } from '../../lib/supabaseClient'; // For direct queries if needed or user info
+import { parseSupabaseError } from '../../utils/errorHandler';
+import { useToast } from '../ToastProvider';
 
 interface ReturnToSupplierNewProps {
     onClose: () => void;
@@ -10,6 +12,7 @@ interface ReturnToSupplierNewProps {
 }
 
 const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [step, setStep] = useState<1 | 2>(1); // 1: Select RR, 2: Add Items
     const [loading, setLoading] = useState(false);
     const [rrSearch, setRrSearch] = useState('');
@@ -127,9 +130,20 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
 
             const newReturn = await returnToSupplierService.createReturn(dto);
             onSuccess(newReturn);
+            addToast({ 
+                type: 'success', 
+                title: 'Return created',
+                description: 'Return to supplier has been created successfully.',
+                durationMs: 4000,
+            });
         } catch (err) {
             console.error(err);
-            alert('Failed to create return: ' + (err as Error).message);
+            addToast({ 
+                type: 'error', 
+                title: 'Unable to create return',
+                description: parseSupabaseError(err, 'return'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

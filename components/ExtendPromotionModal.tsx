@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, Calendar } from 'lucide-react';
 import { Promotion } from '../types';
 import * as promotionService from '../services/promotionService';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 interface Props {
     promotion: Promotion;
@@ -10,6 +12,7 @@ interface Props {
 }
 
 const ExtendPromotionModal: React.FC<Props> = ({ promotion, onClose, onExtended }) => {
+    const { addToast } = useToast();
     // Calculate default new end date (+7 days from current end)
     const currentEnd = new Date(promotion.end_date);
     const defaultNewEnd = new Date(currentEnd);
@@ -33,10 +36,21 @@ const ExtendPromotionModal: React.FC<Props> = ({ promotion, onClose, onExtended 
         setSaving(true);
         try {
             await promotionService.extendPromotion(promotion.id, newEndDate);
+            addToast({
+                type: 'success',
+                title: 'Promotion extended',
+                description: 'Promotion has been extended successfully.',
+                durationMs: 4000,
+            });
             onExtended();
         } catch (error) {
             console.error('Error extending promotion:', error);
-            alert('Failed to extend promotion. Please try again.');
+            addToast({
+                type: 'error',
+                title: 'Unable to extend promotion',
+                description: parseSupabaseError(error, 'promotion'),
+                durationMs: 6000,
+            });
         } finally {
             setSaving(false);
         }

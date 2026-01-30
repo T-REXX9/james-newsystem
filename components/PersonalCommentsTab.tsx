@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
 import { fetchPersonalComments, createPersonalComment } from '../services/supabaseService';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 interface PersonalCommentsTabProps {
   contactId: string;
@@ -15,6 +17,7 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
   currentUserName = 'Unknown User',
   currentUserAvatar 
 }) => {
+  const { addToast } = useToast();
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -62,8 +65,20 @@ const PersonalCommentsTab: React.FC<PersonalCommentsTabProps> = ({
       
       setComments(prev => [newCommentObj, ...prev]);
       setNewComment('');
+      addToast({
+        type: 'success',
+        title: 'Comment added',
+        description: 'Your comment has been posted successfully.',
+        durationMs: 4000,
+      });
     } catch (err) {
       console.error('Error creating comment:', err);
+      addToast({
+        type: 'error',
+        title: 'Unable to add comment',
+        description: parseSupabaseError(err, 'comment'),
+        durationMs: 6000,
+      });
     } finally {
       setSubmitting(false);
     }

@@ -5,6 +5,18 @@ import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
+
+interface ToastOverride {
+  title?: string;
+  description?: string;
+  durationMs?: number;
+}
+
+interface ToastOverrides {
+  success?: ToastOverride;
+  error?: ToastOverride;
+}
 
 interface AddContactModalProps {
   isOpen: boolean;
@@ -12,14 +24,25 @@ interface AddContactModalProps {
   onSubmit: (data: Omit<Contact, 'id'>) => Promise<Contact>;
   mode?: 'create' | 'edit';
   initialData?: Contact;
+  enableToasts?: boolean;
+  toastOverrides?: ToastOverrides;
 }
 
-const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSubmit, mode = 'create', initialData }) => {
+const AddContactModal: React.FC<AddContactModalProps> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  mode = 'create',
+  initialData,
+  enableToasts = false,
+  toastOverrides,
+}) => {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
   const [allowPlaceholderSubmission, setAllowPlaceholderSubmission] = useState(false);
+  const { addToast } = useToast();
   
   type ContactPersonDraft = Omit<ContactPerson, 'id'>;
 
@@ -262,10 +285,29 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
       };
 
       await onSubmit(newContact);
+      if (enableToasts) {
+        const successToast = toastOverrides?.success;
+        addToast({ 
+          type: 'success', 
+          title: successToast?.title ?? (isEditMode ? 'Customer updated' : 'Customer created'),
+          description: successToast?.description ?? (isEditMode ? 'Customer information has been updated successfully.' : 'New customer has been added to the database.'),
+          durationMs: successToast?.durationMs ?? 4000,
+        });
+      }
       onClose();
     } catch (error) {
       console.error(error);
-      setSubmitError(parseSupabaseError(error, 'customer'));
+      const errorMessage = parseSupabaseError(error, 'customer');
+      setSubmitError(errorMessage);
+      if (enableToasts) {
+        const errorToast = toastOverrides?.error;
+        addToast({ 
+          type: 'error', 
+          title: errorToast?.title ?? (isEditMode ? 'Unable to update customer' : 'Unable to create customer'),
+          description: errorToast?.description ?? errorMessage,
+          durationMs: errorToast?.durationMs ?? 6000,
+        });
+      }
     } finally {
       setLoading(false);
     }

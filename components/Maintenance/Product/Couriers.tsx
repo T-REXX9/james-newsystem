@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { Courier } from '../../../maintenance.types';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
 
 const CourierForm: React.FC<{
     initialData?: Courier | null;
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<Courier>>(
         initialData || { name: '', contact_number: '', details: '' }
     );
@@ -27,10 +30,23 @@ const CourierForm: React.FC<{
                 const { error } = await supabase.from('couriers' as any).insert([formData]);
                 if (error) throw error;
             }
+            addToast({
+                type: 'success',
+                title: initialData?.id ? 'Courier updated' : 'Courier created',
+                description: initialData?.id
+                    ? 'Courier has been updated successfully.'
+                    : 'New courier has been added to the database.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving courier:', error);
-            alert('Error saving courier');
+            addToast({
+                type: 'error',
+                title: initialData?.id ? 'Unable to update courier' : 'Unable to create courier',
+                description: parseSupabaseError(error, 'courier'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

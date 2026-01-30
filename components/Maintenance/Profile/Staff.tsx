@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
 
 interface Profile {
     id: string;
@@ -22,6 +24,7 @@ const StaffForm: React.FC<{
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<Profile>>(
         initialData || { full_name: '', email: '', role: 'Sales Agent', mobile: '', team_id: '' }
     );
@@ -55,10 +58,21 @@ const StaffForm: React.FC<{
                 alert("Creating new users should be done via Auth Sign Up. This form only updates profile details.");
                 return;
             }
+            addToast({
+                type: 'success',
+                title: 'Staff updated',
+                description: 'Staff profile has been updated successfully.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving profile:', error);
-            alert('Error saving profile');
+            addToast({
+                type: 'error',
+                title: 'Unable to update staff',
+                description: parseSupabaseError(error, 'staff profile'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

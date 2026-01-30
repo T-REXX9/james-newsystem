@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { Approver } from '../../../maintenance.types';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
 
 interface Profile {
     id: string;
@@ -14,6 +16,7 @@ const ApproverForm: React.FC<{
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<Approver>>(
         initialData || { user_id: '', module: 'PO', level: 1 }
     );
@@ -44,10 +47,23 @@ const ApproverForm: React.FC<{
                 const { error } = await supabase.from('approvers' as any).insert([formData]);
                 if (error) throw error;
             }
+            addToast({
+                type: 'success',
+                title: initialData?.id ? 'Approver updated' : 'Approver created',
+                description: initialData?.id
+                    ? 'Approver has been updated successfully.'
+                    : 'New approver has been added to the database.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving approver:', error);
-            alert('Error saving approver');
+            addToast({
+                type: 'error',
+                title: initialData?.id ? 'Unable to update approver' : 'Unable to create approver',
+                description: parseSupabaseError(error, 'approver'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

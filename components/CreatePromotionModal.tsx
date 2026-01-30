@@ -3,6 +3,8 @@ import { X, Plus, Search, Trash2, MapPin, Users } from 'lucide-react';
 import { UserProfile, Product } from '../types';
 import * as promotionService from '../services/promotionService';
 import { supabase } from '../lib/supabaseClient';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 interface Props {
     currentUser: UserProfile | null;
@@ -21,6 +23,7 @@ interface SelectedProduct {
 }
 
 const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated }) => {
+    const { addToast } = useToast();
     // Form state
     const [campaignTitle, setCampaignTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -196,10 +199,21 @@ const CreatePromotionModal: React.FC<Props> = ({ currentUser, onClose, onCreated
                 },
                 currentUser?.id || ''
             );
+            addToast({
+                type: 'success',
+                title: 'Promotion created',
+                description: 'Promotion has been created successfully.',
+                durationMs: 4000,
+            });
             onCreated();
         } catch (error) {
             console.error('Error creating promotion:', error);
-            alert('Failed to create campaign. Please try again.');
+            addToast({
+                type: 'error',
+                title: 'Unable to create promotion',
+                description: parseSupabaseError(error, 'promotion'),
+                durationMs: 6000,
+            });
         } finally {
             setSaving(false);
         }

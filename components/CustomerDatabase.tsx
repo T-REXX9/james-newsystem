@@ -8,8 +8,11 @@ import BulkAssignAgentModal from './BulkAssignAgentModal';
 import { Users, UserPlus, EyeOff, Tag, CheckSquare, X } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import AddContactModal from './AddContactModal';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 const CustomerDatabase: React.FC = () => {
+  const { addToast } = useToast();
   // Data Fetching
   const { data: customers, setData: setCustomers, refetch: reload } = useRealtimeList<Contact>({
     tableName: 'contacts',
@@ -114,12 +117,21 @@ const CustomerDatabase: React.FC = () => {
       // Optimistically add/merge in case realtime hasn't delivered yet
       setCustomers((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]));
       setSelectedCustomerId(created.id);
-      toast.success(`Created customer: ${created.company}`);
+      addToast({ 
+        type: 'success', 
+        title: 'Customer created',
+        description: 'New customer has been added to the database.',
+        durationMs: 4000,
+      });
       await reload();
       return created;
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-      toast.error(`Failed to create customer: ${errorMessage}`);
+      addToast({ 
+        type: 'error', 
+        title: 'Unable to create customer',
+        description: parseSupabaseError(e, 'customer'),
+        durationMs: 6000,
+      });
       throw e;
     }
   };
@@ -131,14 +143,23 @@ const CustomerDatabase: React.FC = () => {
       const updated = { ...editingCustomer, ...data, id: editingCustomer.id };
       setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? updated : c));
       setSelectedCustomerId(editingCustomer.id);
-      toast.success(`Updated customer: ${updated.company}`);
+      addToast({ 
+        type: 'success', 
+        title: 'Customer updated',
+        description: 'Customer information has been updated successfully.',
+        durationMs: 4000,
+      });
       await reload();
       setShowEditCustomerModal(false);
       setEditingCustomer(null);
       return updated;
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-      toast.error(`Failed to update customer: ${errorMessage}`);
+      addToast({ 
+        type: 'error', 
+        title: 'Unable to update customer',
+        description: parseSupabaseError(e, 'customer'),
+        durationMs: 6000,
+      });
       throw e;
     }
   };

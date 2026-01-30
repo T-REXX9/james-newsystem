@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { Supplier } from '../../../maintenance.types';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
 
 const SupplierForm: React.FC<{
     initialData?: Supplier | null;
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<Supplier>>(
         initialData || { name: '', code: '', remarks: '', address: '', contact_person: '', tin: '' }
     );
@@ -27,10 +30,23 @@ const SupplierForm: React.FC<{
                 const { error } = await supabase.from('suppliers' as any).insert([formData]);
                 if (error) throw error;
             }
+            addToast({
+                type: 'success',
+                title: initialData?.id ? 'Supplier updated' : 'Supplier created',
+                description: initialData?.id
+                    ? 'Supplier has been updated successfully.'
+                    : 'New supplier has been added to the database.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving supplier:', error);
-            alert('Error saving supplier');
+            addToast({
+                type: 'error',
+                title: initialData?.id ? 'Unable to update supplier' : 'Unable to create supplier',
+                description: parseSupabaseError(error, 'supplier'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

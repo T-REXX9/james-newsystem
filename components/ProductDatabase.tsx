@@ -12,12 +12,14 @@ import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
 }
 
 const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
+  const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
 
   const isMasterAccess = currentUser?.role === 'Owner' || currentUser?.role === 'Developer';
@@ -143,8 +145,20 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
         setProducts(prev => applyOptimisticDelete(prev, id));
         try {
           await deleteProduct(id);
+          addToast({ 
+            type: 'success', 
+            title: 'Product deleted',
+            description: 'Product has been removed from the database.',
+            durationMs: 4000,
+          });
         } catch (error) {
           console.error('Error deleting product:', error);
+          addToast({ 
+            type: 'error', 
+            title: 'Unable to delete product',
+            description: parseSupabaseError(error, 'product'),
+            durationMs: 6000,
+          });
         }
       },
     });
@@ -163,13 +177,31 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
         // Optimistic update
         setProducts(prev => applyOptimisticUpdate(prev, editingProduct.id, formData));
         await updateProduct(editingProduct.id, formData);
+        addToast({ 
+          type: 'success', 
+          title: 'Product updated',
+          description: 'Product information has been updated successfully.',
+          durationMs: 4000,
+        });
       } else {
         await createProduct(formData);
+        addToast({ 
+          type: 'success', 
+          title: 'Product created',
+          description: 'New product has been added to the database.',
+          durationMs: 4000,
+        });
       }
       setIsModalOpen(false);
     } catch (error) {
       console.error(error);
       setSubmitError(parseSupabaseError(error, 'product'));
+      addToast({ 
+        type: 'error', 
+        title: editingProduct ? 'Unable to update product' : 'Unable to create product',
+        description: parseSupabaseError(error, 'product'),
+        durationMs: 6000,
+      });
       // Real-time subscription will correct the state
     } finally {
       setIsSaving(false);
@@ -252,9 +284,20 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
             await updateProduct(item.id, item.updates);
           }
           setIsBulkUpdateModalOpen(false);
+          addToast({ 
+            type: 'success', 
+            title: 'Bulk update completed',
+            description: 'Product prices have been updated successfully.',
+            durationMs: 4000,
+          });
         } catch (error) {
           console.error(error);
-          alert('Failed to bulk update products');
+          addToast({ 
+            type: 'error', 
+            title: 'Unable to update products',
+            description: parseSupabaseError(error, 'product'),
+            durationMs: 6000,
+          });
         } finally {
           setIsBulkUpdating(false);
         }

@@ -29,6 +29,8 @@ import {
 } from '../types';
 import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
 import { useRealtimeList } from '../hooks/useRealtimeList';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 const WAREHOUSES = [
   { id: '1', name: 'WH1' },
@@ -49,6 +51,7 @@ const statusMeta: Record<TransferStatusType, { label: string; tone: 'neutral' | 
 };
 
 const TransferStockView: React.FC = () => {
+  const { addToast } = useToast();
   const [selectedTransfer, setSelectedTransfer] = useState<TransferStock | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | TransferStatusType>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -267,6 +270,12 @@ const TransferStockView: React.FC = () => {
           `Transfer ${selectedTransfer.transfer_no} has been submitted for approval.`,
           'success'
         );
+        addToast({ 
+          type: 'success', 
+          title: 'Transfer submitted',
+          description: 'Stock transfer has been submitted for approval.',
+          durationMs: 4000,
+        });
       }
       
       setShowSubmitConfirm(false);
@@ -277,6 +286,12 @@ const TransferStockView: React.FC = () => {
         error.message || 'An unexpected error occurred.',
         'error'
       );
+      addToast({ 
+        type: 'error', 
+        title: 'Unable to submit transfer',
+        description: parseSupabaseError(error, 'stock transfer'),
+        durationMs: 6000,
+      });
     } finally {
       setSubmitting(false);
     }
