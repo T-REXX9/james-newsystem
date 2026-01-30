@@ -50,3 +50,41 @@ await createStaffAccount({
   birthday: '1990-01-01'
 });
 ```
+
+---
+
+Data Sanitization Rules (App Layer)
+
+Overview:
+- The service layer now applies placeholder values before insert/update to prevent null/empty strings from reaching the database.
+- Required fields still validate and will block submissions when empty.
+
+Placeholder Defaults:
+- Text (optional): "n/a"
+- Numeric (optional): 0
+- Date (optional): null (dates remain nullable unless required)
+
+Field-Level Rules (Selected Entities):
+- Contacts
+  - company: required (no placeholder)
+  - address, deliveryAddress, province, city, area, tin, businessLine, terms, transactionType, vatType, vatPercentage, dealershipTerms, dealershipSince, comment: "n/a"
+  - creditLimit, dealershipQuota, dealValue: 0
+  - email, phone, mobile: "n/a"
+  - contactPersons[]: each field defaults to "n/a" when blank
+- Products
+  - part_no, description: required (no placeholder)
+  - item_code, oem_no, brand, category: "n/a"
+  - cost, price_aa, price_bb, price_cc, price_dd, price_vip1, price_vip2: 0
+- Sales Orders / Sales Inquiries
+  - sales_date: required
+  - delivery_address, reference_no, customer_reference, send_by, price_group, terms, promise_to_pay, po_number, remarks, inquiry_type, urgency: "n/a"
+  - credit_limit: 0
+
+Nullable Fields That Remain Nullable:
+- Optional date fields such as urgency_date remain null when not provided.
+- Attachments/related transaction arrays remain undefined unless supplied.
+
+Migration Guidance (Existing Data):
+- Existing null/empty text fields can be updated to "n/a" via bulk update scripts as needed.
+- Numeric nulls can be set to 0 when the field is optional and numeric by design.
+- Required fields should be backfilled with real values; do not replace required fields with placeholders.

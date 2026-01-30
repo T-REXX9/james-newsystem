@@ -4,6 +4,10 @@ import { createDeal, updateDeal, fetchContacts, fetchProfiles } from '../service
 import { useToast } from './ToastProvider';
 import { PipelineDeal, UserProfile, Contact } from '../types';
 import { PIPELINE_COLUMNS } from '../constants';
+import ValidationSummary from './ValidationSummary';
+import FieldHelp from './FieldHelp';
+import { validateMinLength, validateNumeric, validateRequired } from '../utils/formValidation';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 interface DealFormModalProps {
   isOpen: boolean;
@@ -29,6 +33,7 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [submitCount, setSubmitCount] = useState(0);
 
   const isEditMode = !!deal;
 
@@ -103,27 +108,37 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
     }
   }, [deal, currentUser]);
 
+  const validateField = (field: string, value: unknown): string => {
+    switch (field) {
+      case 'title': {
+        const requiredCheck = validateRequired(value, 'a deal title');
+        if (!requiredCheck.isValid) return requiredCheck.message;
+        const lengthCheck = validateMinLength(value, 'deal title', 3);
+        return lengthCheck.isValid ? '' : lengthCheck.message;
+      }
+      case 'company': {
+        const result = validateRequired(value, 'a company name');
+        return result.isValid ? '' : result.message;
+      }
+      case 'value': {
+        const result = validateNumeric(value, 'deal value', 1);
+        return result.isValid ? '' : result.message.replace('deal value', 'deal value greater than 0');
+      }
+      case 'stageId': {
+        const result = validateRequired(value, 'a stage');
+        return result.isValid ? '' : result.message;
+      }
+      default:
+        return '';
+    }
+  };
+
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-
-    if (!formData.title.trim()) {
-      errors.title = 'Title is required';
-    } else if (formData.title.trim().length < 3) {
-      errors.title = 'Title must be at least 3 characters';
-    }
-
-    if (!formData.company.trim()) {
-      errors.company = 'Company is required';
-    }
-
-    if (!formData.value || formData.value <= 0) {
-      errors.value = 'Value must be a positive number';
-    }
-
-    if (!formData.stageId) {
-      errors.stageId = 'Stage is required';
-    }
-
+    (['title', 'company', 'value', 'stageId'] as const).forEach((field) => {
+      const message = validateField(field, (formData as Record<string, unknown>)[field]);
+      if (message) errors[field] = message;
+    });
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -132,26 +147,35 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      setSubmitCount((prev) => prev + 1);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       if (isEditMode && deal) {
         await updateDeal(deal.id, formData);
-        addToast({ type: 'success', message: 'Deal updated successfully' });
+        addToast({ type: 'success', title: 'Deal updated', description: 'Your changes have been saved.' });
       } else {
         await createDeal(formData);
-        addToast({ type: 'success', message: 'Deal created successfully' });
+        addToast({ type: 'success', title: 'Deal created', description: 'The deal is ready in your pipeline.' });
       }
       onSuccess();
       handleClose();
     } catch (err) {
       console.error('Error saving deal:', err);
-      setError(isEditMode ? 'Failed to update deal' : 'Failed to create deal');
-      addToast({ type: 'error', message: isEditMode ? 'Failed to update deal' : 'Failed to create deal' });
+      const friendlyMessage = parseSupabaseError(err, 'deal');
+      setError(friendlyMessage);
+      addToast({ type: 'error', title: 'Unable to save deal', description: friendlyMessage, durationMs: 6000 });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleBlur = (field: string, value: unknown) => {
+    const message = validateField(field, value);
+    setValidationErrors((prev) => ({ ...prev, [field]: message }));
   };
 
   const handleClose = () => {
@@ -199,6 +223,7 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+          <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
           {error && (
             <div className="flex items-center gap-2 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg text-rose-700 dark:text-rose-300 text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -221,10 +246,15 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
                     type="text"
                     value={formData.title}
                     onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    onBlur={e => handleBlur('title', e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue ${
                       validationErrors.title ? 'border-rose-500' : 'border-gray-200 dark:border-slate-700'
                     }`}
                     placeholder="e.g., Monthly Oil Supply Contract"
+                  />
+                  <FieldHelp
+                    text="Use a clear, specific title so your team can identify the opportunity quickly."
+                    example="Monthly Oil Supply Contract"
                   />
                   {validationErrors.title && (
                     <p className="mt-1 text-xs text-rose-500">{validationErrors.title}</p>
@@ -244,6 +274,7 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
                       const match = contacts.find(c => c.company === e.target.value);
                       if (match) handleCompanySelect(match);
                     }}
+                    onBlur={e => handleBlur('company', e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue ${
                       validationErrors.company ? 'border-rose-500' : 'border-gray-200 dark:border-slate-700'
                     }`}
@@ -282,10 +313,15 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
                     step="1000"
                     value={formData.value}
                     onChange={e => setFormData(prev => ({ ...prev, value: parseFloat(e.target.value) || 0 }))}
+                    onBlur={e => handleBlur('value', e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue ${
                       validationErrors.value ? 'border-rose-500' : 'border-gray-200 dark:border-slate-700'
                     }`}
                     placeholder="Deal value"
+                  />
+                  <FieldHelp
+                    text="Enter the estimated revenue for this opportunity."
+                    example="150000"
                   />
                   {validationErrors.value && (
                     <p className="mt-1 text-xs text-rose-500">{validationErrors.value}</p>
@@ -299,6 +335,7 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
                   <select
                     value={formData.stageId}
                     onChange={e => setFormData(prev => ({ ...prev, stageId: e.target.value }))}
+                    onBlur={e => handleBlur('stageId', e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue ${
                       validationErrors.stageId ? 'border-rose-500' : 'border-gray-200 dark:border-slate-700'
                     }`}

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { MOCK_AGENTS } from '../constants';
-import { fetchContacts, fetchCallLogs, fetchInquiries, fetchPurchases, subscribeToCallMonitoringUpdates, updateContact, createInquiry, fetchAgentPerformanceLeaderboard, fetchAgentPerformanceSummary, fetchAllPendingIncidentReports, approveIncidentReport, rejectIncidentReport } from '../services/supabaseService';
+import { fetchContacts, fetchCallLogs, fetchInquiries, fetchPurchases, subscribeToCallMonitoringUpdates, updateContact, createInquiry, fetchAgentPerformanceLeaderboard, fetchAgentPerformanceSummary, fetchAllPendingIncidentReports, approveIncidentReport, rejectIncidentReport, fetchPendingContactUpdates } from '../services/supabaseService';
 import { Contact, CustomerStatus, CallLogEntry, Inquiry, Purchase, AgentSalesData, AgentPerformanceSummary, IncidentReportWithCustomer, UserProfile } from '../types';
 import CompanyName from './CompanyName';
 import AgentCallActivity, { AgentActivityItem } from './AgentCallActivity';
@@ -16,6 +16,8 @@ import { countCallOutcomes } from './callMetricsUtils';
 import SalesPerformanceCard from './SalesPerformanceCard';
 import AgentSummaryModal from './AgentSummaryModal';
 import InquiryAlertPanel from './InquiryAlertPanel';
+import ContactDetails from './ContactDetails';
+import UpdateContactApprovalModal from './UpdateContactApprovalModal';
 
 // Mock Chat Data
 interface ChatMessage {
@@ -90,6 +92,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     const [showReassignModal, setShowReassignModal] = useState(false);
     const [showBlacklistModal, setShowBlacklistModal] = useState(false);
     const [showReplyModal, setShowReplyModal] = useState(false);
+    const [showContactDetails, setShowContactDetails] = useState(false);
     const [showStatsModal, setShowStatsModal] = useState(false);
     const [showActivityModal, setShowActivityModal] = useState(false);
     const [selectedActivityItem, setSelectedActivityItem] = useState<AgentActivityItem | null>(null);
@@ -128,6 +131,9 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     // Incident Reports State
     const [pendingIncidentReports, setPendingIncidentReports] = useState<IncidentReportWithCustomer[]>([]);
     const [incidentReportsLoading, setIncidentReportsLoading] = useState(false);
+    const [pendingContactUpdates, setPendingContactUpdates] = useState<any[]>([]);
+    const [pendingContactUpdatesLoading, setPendingContactUpdatesLoading] = useState(false);
+    const [updateReviewContact, setUpdateReviewContact] = useState<Contact | null>(null);
 
     // Chat State
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
@@ -201,6 +207,18 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
         }
     }, []);
 
+    const loadPendingContactUpdates = useCallback(async () => {
+        try {
+            setPendingContactUpdatesLoading(true);
+            const updates = await fetchPendingContactUpdates();
+            setPendingContactUpdates(updates || []);
+        } catch (error) {
+            console.error('Error loading pending contact updates:', error);
+        } finally {
+            setPendingContactUpdatesLoading(false);
+        }
+    }, []);
+
     const loadPendingIncidentReports = useCallback(async () => {
         try {
             setIncidentReportsLoading(true);
@@ -213,6 +231,11 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
             setIncidentReportsLoading(false);
         }
     }, [addToast]);
+
+    const handleReviewContactUpdate = (contactId: string) => {
+        const contact = contactsMap.get(contactId) || ({ id: contactId } as Contact);
+        setUpdateReviewContact(contact);
+    };
 
     const handleApproveIncidentReport = useCallback(async (reportId: string) => {
         if (!currentUser) {
@@ -247,16 +270,18 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     useEffect(() => {
         loadData();
         loadPendingIncidentReports();
-    }, [loadData, loadPendingIncidentReports]);
+        loadPendingContactUpdates();
+    }, [loadData, loadPendingIncidentReports, loadPendingContactUpdates]);
 
     useEffect(() => {
         const unsubscribe = subscribeToCallMonitoringUpdates(() => {
             loadData();
+            loadPendingContactUpdates();
         });
         return () => {
             unsubscribe();
         };
-    }, [loadData]);
+    }, [loadData, loadPendingContactUpdates]);
 
 
     // Keep the chat scrolled to the latest message without moving the page itself
@@ -820,6 +845,11 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
         setShowReplyModal(true);
     };
 
+    const openContactDetails = () => {
+        if (!ensureSelectedContact()) return;
+        setShowContactDetails(true);
+    };
+
     const handlePricingSubmit = async () => {
         if (!selectedContact) return;
         setActionLoading(true);
@@ -1178,6 +1208,9 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                                     <button onClick={openReplyModal} className="text-xs px-2 py-2 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:border-brand-blue/60">
                                         <MessageSquare className="w-4 h-4 text-brand-blue" /> Reply to report
                                     </button>
+                                    <button onClick={openContactDetails} className="text-xs px-2 py-2 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:border-brand-blue/60">
+                                        <FileText className="w-4 h-4 text-brand-blue" /> Full details
+                                    </button>
                                 </div>
 
                                 <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
@@ -1215,6 +1248,29 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                             <div className="text-sm text-slate-500">Select a customer from the list to see details.</div>
                         )}
                     </div>
+
+                    {showContactDetails && selectedContact && (
+                        <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950">
+                            <ContactDetails
+                                contact={selectedContact}
+                                currentUser={currentUser}
+                                onClose={() => setShowContactDetails(false)}
+                                onUpdate={(updated) => {
+                                    setContacts(prev => prev.map(c => c.id === updated.id ? updated : c));
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {updateReviewContact && (
+                        <UpdateContactApprovalModal
+                            contact={updateReviewContact}
+                            isOpen={!!updateReviewContact}
+                            onClose={() => setUpdateReviewContact(null)}
+                            currentUserId={currentUser?.id}
+                            onApprove={loadPendingContactUpdates}
+                        />
+                    )}
 
                     {/* Team Chat */}
                     <div className="col-span-12 lg:col-span-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">
@@ -1277,6 +1333,52 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                                 </button>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Pending Contact Update Requests */}
+                    <div className="col-span-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-brand-blue" />
+                                <h3 className="text-sm font-bold text-slate-800 dark:text-white">Pending Contact Updates</h3>
+                            </div>
+                            <span className="text-xs font-semibold text-slate-500">
+                                {pendingContactUpdates.length} pending
+                            </span>
+                        </div>
+                        {pendingContactUpdatesLoading ? (
+                            <div className="text-sm text-slate-500">Loading update requests...</div>
+                        ) : pendingContactUpdates.length === 0 ? (
+                            <div className="text-sm text-slate-500">No pending update requests.</div>
+                        ) : (
+                            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                                {pendingContactUpdates.slice(0, 10).map((update) => {
+                                    const contactRef = Array.isArray(update.contacts) ? update.contacts[0] : update.contacts;
+                                    const contactName = contactRef?.company || contactRef?.name || 'Unknown customer';
+                                    const submittedDate = update.submitted_date
+                                        ? new Date(update.submitted_date).toLocaleDateString()
+                                        : 'Unknown date';
+                                    return (
+                                        <div key={update.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3">
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                                    {contactName}
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                    Submitted {submittedDate} • {update.submitted_by || 'Staff'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleReviewContactUpdate(update.contact_id)}
+                                                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand-blue/60"
+                                            >
+                                                Review
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     {/* [NEW] Priority Dashboard Row */}

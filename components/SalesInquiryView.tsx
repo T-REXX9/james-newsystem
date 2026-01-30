@@ -41,6 +41,10 @@ import { useToast } from './ToastProvider';
 import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
 import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
+import ValidationSummary from './ValidationSummary';
+import FieldHelp from './FieldHelp';
+import { validateMinLength, validateNumeric, validateRequired } from '../utils/formValidation';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id'> {
   tempId?: string;
@@ -91,6 +95,9 @@ const SalesInquiryView: React.FC = () => {
 
   // Form State
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [submitCount, setSubmitCount] = useState(0);
+  const [submitError, setSubmitError] = useState('');
   const [inquiryNo, setInquiryNo] = useState('');
   const [salesDate, setSalesDate] = useState(new Date().toISOString().split('T')[0]);
   const [salesPerson, setSalesPerson] = useState('');
@@ -383,28 +390,14 @@ const SalesInquiryView: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedCustomer) {
-      addToast({ type: 'error', message: 'Please select a customer' });
-      return;
-    }
-
-
-    if (items.length === 0) {
-      addToast({ type: 'error', message: 'Please add at least one item' });
-      return;
-    }
-
-    // Validate that all items have a product selected (item_id is present)
-    const invalidItems = items.filter(item => !item.item_id);
-    if (invalidItems.length > 0) {
-      addToast({
-        type: 'error',
-        message: `Please select valid products for all items. ${invalidItems.length} item(s) are missing product details.`
-      });
+    if (!validateInquiryForm()) {
+      setSubmitCount((prev) => prev + 1);
+      addToast({ type: 'warning', title: 'Fix validation issues', description: 'Review the highlighted fields and try again.' });
       return;
     }
 
     setLoading(true);
+    setSubmitError('');
     try {
       // Prepare inquiry type
       let finalInquiryType = inquiryType;
@@ -470,10 +463,48 @@ const SalesInquiryView: React.FC = () => {
       addToast({ type: 'success', message: 'Sales Inquiry created successfully!' });
     } catch (error) {
       console.error('Error creating inquiry:', error);
-      addToast({ type: 'error', message: 'Failed to create inquiry' });
+      const friendlyMessage = parseSupabaseError(error, 'sales inquiry');
+      setSubmitError(friendlyMessage);
+      addToast({ type: 'error', title: 'Unable to create inquiry', description: friendlyMessage, durationMs: 6000 });
     } finally {
       setLoading(false);
     }
+  };
+
+  const validateInquiryForm = () => {
+    const errors: Record<string, string> = {};
+    const customerCheck = validateRequired(selectedCustomer?.id, 'a customer');
+    if (!customerCheck.isValid) errors.customer = customerCheck.message;
+    const dateCheck = validateRequired(salesDate, 'a sales date');
+    if (!dateCheck.isValid) errors.salesDate = dateCheck.message;
+    if (items.length === 0) {
+      errors.items = 'Please add at least one item to the inquiry.';
+    }
+    const invalidItems = items.filter(item => !item.item_id);
+    if (invalidItems.length > 0) {
+      errors.itemSelection = `Please select valid products for all items. ${invalidItems.length} item(s) are missing product details.`;
+    }
+    items.forEach((item) => {
+      const qtyCheck = validateNumeric(item.qty, 'quantity', 1);
+      if (!qtyCheck.isValid) errors[`item-${item.tempId}-qty`] = qtyCheck.message;
+      const priceCheck = validateNumeric(item.unit_price, 'unit price', 0);
+      if (!priceCheck.isValid) errors[`item-${item.tempId}-unit_price`] = priceCheck.message;
+    });
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleFieldBlur = (field: string, value: unknown) => {
+    let message = '';
+    if (field === 'customer') {
+      const result = validateRequired(value, 'a customer');
+      message = result.isValid ? '' : result.message;
+    }
+    if (field === 'salesDate') {
+      const result = validateRequired(value, 'a sales date');
+      message = result.isValid ? '' : result.message;
+    }
+    setValidationErrors((prev) => ({ ...prev, [field]: message }));
   };
 
   // Handle delete
@@ -575,6 +606,12 @@ const SalesInquiryView: React.FC = () => {
         <div className={activePanel === 'create' ? 'flex-1 flex flex-col overflow-hidden' : 'hidden'}>
           <div className="flex-1 overflow-y-auto">
             <form id="salesInquiryForm" onSubmit={handleSubmit} className="p-3 space-y-2">
+              <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+              {submitError && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {submitError}
+                </div>
+              )}
               {/* Customer Metrics (Collapsible) */}
               <div className="bg-white dark:bg-slate-900 rounded-lg p-2 border border-slate-200 dark:border-slate-800">
                 <button
@@ -631,13 +668,20 @@ const SalesInquiryView: React.FC = () => {
                         required
                         value={selectedCustomer?.id || ''}
                         onChange={(e) => handleCustomerSelect(e.target.value)}
-                        className="w-full px-1.5 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-blue/50 focus:border-transparent text-xs"
+                        onBlur={(e) => handleFieldBlur('customer', e.target.value)}
+                        className={`w-full px-1.5 py-0.5 border rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-blue/50 focus:border-transparent text-xs ${
+                          validationErrors.customer ? 'border-rose-400' : 'border-slate-300 dark:border-slate-700'
+                        }`}
                       >
                         <option value="">-- Select --</option>
                         {customers.map(c => (
                           <option key={c.id} value={c.id}>{c.company}</option>
                         ))}
                       </select>
+                      <FieldHelp text="Choose the customer this inquiry is for so pricing and terms auto-fill." example="Acme Corporation Inc." />
+                      {validationErrors.customer && (
+                        <p className="mt-1 text-[10px] text-rose-600">{validationErrors.customer}</p>
+                      )}
                     </div>
 
                     <div>
@@ -649,8 +693,14 @@ const SalesInquiryView: React.FC = () => {
                         required
                         value={salesDate}
                         onChange={(e) => setSalesDate(e.target.value)}
-                        className="w-full px-1.5 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-blue/50 focus:border-transparent text-xs"
+                        onBlur={(e) => handleFieldBlur('salesDate', e.target.value)}
+                        className={`w-full px-1.5 py-0.5 border rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-blue/50 focus:border-transparent text-xs ${
+                          validationErrors.salesDate ? 'border-rose-400' : 'border-slate-300 dark:border-slate-700'
+                        }`}
                       />
+                      {validationErrors.salesDate && (
+                        <p className="mt-1 text-[10px] text-rose-600">{validationErrors.salesDate}</p>
+                      )}
                     </div>
 
                     <div>
@@ -899,6 +949,12 @@ const SalesInquiryView: React.FC = () => {
                 </div>
 
                 <div className={getSectionContentClass(expandedSections.items)}>
+                  {validationErrors.items && (
+                    <div className="mb-2 text-[10px] text-rose-600">{validationErrors.items}</div>
+                  )}
+                  {validationErrors.itemSelection && (
+                    <div className="mb-2 text-[10px] text-rose-600">{validationErrors.itemSelection}</div>
+                  )}
                   {items.length === 0 ? (
                     <div className="text-center py-3 text-[10px] text-slate-500 dark:text-slate-400">No items added</div>
                   ) : (
@@ -925,7 +981,9 @@ const SalesInquiryView: React.FC = () => {
                                       type="number"
                                       value={item.qty}
                                       onChange={(e) => updateItemRow(item.tempId, 'qty', parseInt(e.target.value) || 1)}
-                                      className="w-12 px-1 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px]"
+                                      className={`w-12 px-1 py-0.5 border rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px] ${
+                                        validationErrors[`item-${item.tempId}-qty`] ? 'border-rose-400' : 'border-slate-300 dark:border-slate-700'
+                                      }`}
                                     />
                                   </td>
                                   <td className="px-1 py-0.5" colSpan={2}>
@@ -967,7 +1025,9 @@ const SalesInquiryView: React.FC = () => {
                                       type="number"
                                       value={item.unit_price}
                                       onChange={(e) => updateItemRow(item.tempId, 'unit_price', parseFloat(e.target.value) || 0)}
-                                      className="w-24 px-1 py-0.5 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px]"
+                                      className={`w-24 px-1 py-0.5 border rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-[10px] ${
+                                        validationErrors[`item-${item.tempId}-unit_price`] ? 'border-rose-400' : 'border-slate-300 dark:border-slate-700'
+                                      }`}
                                       placeholder="0.00"
                                     />
                                   </td>

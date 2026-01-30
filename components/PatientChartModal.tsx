@@ -33,6 +33,8 @@ import {
     fetchCustomerMetrics
 } from '../services/supabaseService';
 import SalesReturnTab from './SalesReturnTab'; // Reuse existing logic
+import ValidationSummary from './ValidationSummary';
+import { validateMinLength, validateRequired } from '../utils/formValidation';
 
 interface PatientChartModalProps {
     contact: Contact;
@@ -55,6 +57,8 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
     const [newMessage, setNewMessage] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [metrics, setMetrics] = useState<any>(null);
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+    const [submitCount, setSubmitCount] = useState(0);
 
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -97,7 +101,20 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newMessage.trim() || submitting) return;
+        if (submitting) return;
+
+        const requiredCheck = validateRequired(newMessage, 'a message');
+        if (!requiredCheck.isValid) {
+            setValidationErrors({ message: requiredCheck.message });
+            setSubmitCount((prev) => prev + 1);
+            return;
+        }
+        const lengthCheck = validateMinLength(newMessage, 'message', 3);
+        if (!lengthCheck.isValid) {
+            setValidationErrors({ message: lengthCheck.message });
+            setSubmitCount((prev) => prev + 1);
+            return;
+        }
 
         setSubmitting(true);
         try {
@@ -124,6 +141,16 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleMessageBlur = (value: string) => {
+        const requiredCheck = validateRequired(value, 'a message');
+        if (!requiredCheck.isValid) {
+            setValidationErrors({ message: requiredCheck.message });
+            return;
+        }
+        const lengthCheck = validateMinLength(value, 'message', 3);
+        setValidationErrors({ message: lengthCheck.isValid ? '' : lengthCheck.message });
     };
 
     const statusColor = (status: string) => {
@@ -279,13 +306,17 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
 
                         {/* Message Input */}
                         <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
+                            <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
                             <form onSubmit={handleSendMessage} className="relative">
                                 <input
                                     type="text"
                                     value={newMessage}
                                     onChange={(e) => setNewMessage(e.target.value)}
+                                    onBlur={(e) => handleMessageBlur(e.target.value)}
                                     placeholder="Type a new entry, observation, or call log..."
-                                    className="w-full pl-4 pr-12 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue outline-none transition-all placeholder:text-slate-400 text-sm"
+                                    className={`w-full pl-4 pr-12 py-3 bg-slate-50 dark:bg-slate-800 border rounded-xl focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue outline-none transition-all placeholder:text-slate-400 text-sm ${
+                                        validationErrors.message ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
+                                    }`}
                                 />
                                 <button
                                     type="submit"
@@ -295,6 +326,9 @@ const PatientChartModal: React.FC<PatientChartModalProps> = ({
                                     <Send size={16} />
                                 </button>
                             </form>
+                            {validationErrors.message && (
+                                <p className="mt-2 text-xs text-rose-600">{validationErrors.message}</p>
+                            )}
                             <div className="mt-2 flex items-center justify-between px-1">
                                 <span className="text-[10px] text-slate-400 flex items-center gap-1">
                                     <AlertTriangle size={10} />

@@ -5,6 +5,9 @@ import { useToast } from '../ToastProvider';
 import { ArrowLeft, Save, Plus, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import ProductAutocomplete from '../ProductAutocomplete';
 import { Product } from '../../types'; // Import from main types for compatibility with ProductAutocomplete
+import ValidationSummary from '../ValidationSummary';
+import FieldHelp from '../FieldHelp';
+import { validateNumeric, validateRequired } from '../../utils/formValidation';
 
 interface ReceivingFormProps {
     onClose: () => void;
@@ -35,6 +38,8 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
 
     // Line Items
     const [items, setItems] = useState<LineItem[]>([]);
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+    const [submitCount, setSubmitCount] = useState(0);
 
     useEffect(() => {
         const init = async () => {
@@ -99,30 +104,34 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
     };
 
     const validateForm = () => {
-        if (!rrNumber.trim()) {
-            addToast({ type: 'error', message: 'RR Number is required' });
-            return false;
-        }
-        if (!supplierId) {
-            addToast({ type: 'error', message: 'Supplier is required' });
-            return false;
-        }
+        const errors: Record<string, string> = {};
+        const rrValidation = validateRequired(rrNumber, 'an RR number');
+        if (!rrValidation.isValid) errors.rrNumber = rrValidation.message;
+        const supplierValidation = validateRequired(supplierId, 'a supplier');
+        if (!supplierValidation.isValid) errors.supplierId = supplierValidation.message;
         if (items.length === 0) {
-            addToast({ type: 'error', message: 'At least one item is required' });
-            return false;
+            errors.items = 'Please add at least one item to the receiving report.';
         }
-        return true;
+        items.forEach((item, index) => {
+            const qtyCheck = validateNumeric(item.qty_received, `quantity for line ${index + 1}`, 1);
+            if (!qtyCheck.isValid) errors[`item-${item.tempId}-qty`] = qtyCheck.message;
+        });
+        setValidationErrors(errors);
+        return Object.keys(errors).length === 0;
     };
 
     const handleSave = async () => {
-        if (!validateForm()) return;
+        if (!validateForm()) {
+            setSubmitCount((prev) => prev + 1);
+            return;
+        }
 
         setLoading(true);
         try {
             // Check duplicates
             const isDuplicate = await receivingService.checkDuplicateRR(rrNumber);
             if (isDuplicate) {
-                addToast({ type: 'error', message: `RR Number ${rrNumber} already exists.` });
+                addToast({ type: 'error', title: 'Duplicate RR number', description: `RR Number ${rrNumber} already exists.` });
                 setLoading(false);
                 return;
             }
@@ -161,15 +170,28 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                 await receivingService.addReceivingReportItem(itemData);
             }
 
-            addToast({ type: 'success', message: 'Receiving Report created successfully' });
+            addToast({ type: 'success', title: 'Receiving report created', description: 'The receiving report was saved successfully.' });
             onSuccess();
 
         } catch (error: any) {
             console.error("Error saving RR:", error);
-            addToast({ type: 'error', message: error.message || 'Failed to save Receiving Report' });
+            addToast({ type: 'error', title: 'Unable to save report', description: error.message || 'Failed to save Receiving Report' });
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleBlur = (field: string, value: unknown) => {
+        let message = '';
+        if (field === 'rrNumber') {
+            const result = validateRequired(value, 'an RR number');
+            message = result.isValid ? '' : result.message;
+        }
+        if (field === 'supplierId') {
+            const result = validateRequired(value, 'a supplier');
+            message = result.isValid ? '' : result.message;
+        }
+        setValidationErrors((prev) => ({ ...prev, [field]: message }));
     };
 
     if (initializing) {
@@ -210,6 +232,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
                 {/* Main Form */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+                    <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
                     <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 border-b border-slate-100 dark:border-slate-700 pb-2">
                         Report Details
                     </h2>
@@ -222,8 +245,15 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                 type="text"
                                 value={rrNumber}
                                 onChange={(e) => setRrNumber(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                onBlur={(e) => handleBlur('rrNumber', e.target.value)}
+                                className={`w-full px-3 py-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none ${
+                                    validationErrors.rrNumber ? 'border-rose-400' : 'border-slate-300 dark:border-slate-600'
+                                }`}
                             />
+                            <FieldHelp text="Use the RR number printed on the supplier delivery receipt." example="RR-2026-00124" />
+                            {validationErrors.rrNumber && (
+                                <p className="mt-1 text-xs text-rose-600">{validationErrors.rrNumber}</p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -246,13 +276,19 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                             <select
                                 value={supplierId}
                                 onChange={handleSupplierChange}
-                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                onBlur={(e) => handleBlur('supplierId', e.target.value)}
+                                className={`w-full px-3 py-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none ${
+                                    validationErrors.supplierId ? 'border-rose-400' : 'border-slate-300 dark:border-slate-600'
+                                }`}
                             >
                                 <option value="">Select Supplier</option>
                                 {suppliers.map(s => (
                                     <option key={s.id} value={s.id}>{s.company || s.name || s.id}</option>
                                 ))}
                             </select>
+                            {validationErrors.supplierId && (
+                                <p className="mt-1 text-xs text-rose-600">{validationErrors.supplierId}</p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -329,7 +365,9 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                                     min="1"
                                                     value={item.qty_received || ''}
                                                     onChange={(e) => updateItem(item.tempId, 'qty_received', parseFloat(e.target.value) || 0)}
-                                                    className="w-24 px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    className={`w-24 px-2 py-1 border rounded bg-white dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 outline-none ${
+                                                        validationErrors[`item-${item.tempId}-qty`] ? 'border-rose-400' : 'border-slate-300 dark:border-slate-600'
+                                                    }`}
                                                 />
                                             </td>
                                             <td className="px-4 py-3">

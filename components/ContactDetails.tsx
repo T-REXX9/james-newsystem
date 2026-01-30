@@ -12,12 +12,14 @@ import InquiryHistoryTab from './InquiryHistoryTab';
 import PersonalCommentsTab from './PersonalCommentsTab';
 import UpdateContactApprovalModal from './UpdateContactApprovalModal';
 import DiscountRequestModal from './DiscountRequestModal';
+import AddContactModal from './AddContactModal';
 import { 
   MoreHorizontal, Phone, Mail, Calendar, CheckSquare, FileText, 
   MessageSquare, Send, Star, Pencil, ChevronRight,
   Layout, Briefcase, Clock, CheckCircle, AlertTriangle, ShoppingBag, History, Smartphone, User, Users, DollarSign, MapPin, Cake, Building, TrendingUp, AlertCircle, Gift
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { createUpdatedContactDetails, updateContact } from '../services/supabaseService';
 
 interface ContactDetailsProps {
   contact: Contact;
@@ -35,6 +37,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
   );
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isInitialMount = useRef(true);
@@ -56,6 +59,55 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     // Auto-scroll to new comments only for subsequent updates
     commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments]);
+
+  const isOwner = currentUser?.role === 'Owner';
+
+  const buildChangedFields = (previous: Contact, next: Omit<Contact, 'id'>) => {
+    const changed: Record<string, { oldValue: unknown; newValue: unknown }> = {};
+    Object.keys(next).forEach((key) => {
+      const prevValue = (previous as Record<string, unknown>)[key];
+      const nextValue = (next as Record<string, unknown>)[key];
+      const normalize = (value: unknown) => {
+        if (value === undefined) return null;
+        if (typeof value === 'object' && value !== null) {
+          try {
+            return JSON.stringify(value);
+          } catch {
+            return value;
+          }
+        }
+        return value;
+      };
+      if (normalize(prevValue) !== normalize(nextValue)) {
+        changed[key] = { oldValue: prevValue ?? null, newValue: nextValue ?? null };
+      }
+    });
+    return changed;
+  };
+
+  const handleSubmitContactEdit = async (data: Omit<Contact, 'id'>) => {
+    if (!currentUser?.id) {
+      throw new Error('User not authenticated');
+    }
+    if (isOwner) {
+      await updateContact(contact.id, data);
+      const updated = { ...contact, ...data };
+      onUpdate(updated);
+      return updated;
+    }
+    const changedFields = buildChangedFields(contact, data);
+    if (Object.keys(changedFields).length === 0) {
+      return contact;
+    }
+    await createUpdatedContactDetails({
+      contact_id: contact.id,
+      changed_fields: changedFields,
+      submitted_by: currentUser.id,
+      submitted_date: new Date().toISOString(),
+      approval_status: 'pending',
+    });
+    return contact;
+  };
 
   const handleAddComment = () => {
     if (!newComment.trim()) return;
@@ -139,12 +191,21 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
                    Request Discount
                </button>
                <button 
-                onClick={() => setIsUpdateModalOpen(true)}
+                onClick={() => setIsEditModalOpen(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-bold transition-colors"
                >
                    <Pencil className="w-4 h-4" />
-                   Update Details
+                   {isOwner ? 'Edit Details' : 'Request Update'}
                </button>
+               {isOwner && (
+                 <button 
+                  onClick={() => setIsUpdateModalOpen(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-bold transition-colors"
+                 >
+                     <CheckSquare className="w-4 h-4" />
+                     Review Updates
+                 </button>
+               )}
                <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
                    <Star className="w-5 h-5" />
                </button>
@@ -479,6 +540,14 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
         contactId={contact.id}
         isOpen={isDiscountModalOpen}
         onClose={() => setIsDiscountModalOpen(false)}
+      />
+
+      <AddContactModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onSubmit={handleSubmitContactEdit}
+        mode="edit"
+        initialData={contact}
       />
     </div>
   );

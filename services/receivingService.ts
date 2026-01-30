@@ -11,6 +11,30 @@ import {
     Product,
     Supplier
 } from '../receiving.types';
+import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
+import { parseSupabaseError } from '../utils/errorHandler';
+
+const receivingReportSanitizationConfig: SanitizationConfig<ReceivingReportInsert> = {
+    rr_no: { type: 'string', placeholder: 'n/a', required: true },
+    receive_date: { type: 'string', placeholder: 'n/a', required: true },
+    supplier_id: { type: 'string', placeholder: 'n/a', required: true },
+    supplier_name: { type: 'string', placeholder: 'n/a' },
+    po_no: { type: 'string', placeholder: 'n/a' },
+    remarks: { type: 'string', placeholder: 'n/a' },
+    warehouse_id: { type: 'string', placeholder: 'n/a' },
+    grand_total: { type: 'number', placeholder: 0 },
+    status: { type: 'string', placeholder: 'Draft' },
+};
+
+const receivingReportItemSanitizationConfig: SanitizationConfig<ReceivingReportItemInsert> = {
+    item_id: { type: 'string', placeholder: 'n/a', required: true },
+    item_code: { type: 'string', placeholder: 'n/a' },
+    part_no: { type: 'string', placeholder: 'n/a' },
+    description: { type: 'string', placeholder: 'n/a' },
+    qty_received: { type: 'number', placeholder: 0 },
+    unit_cost: { type: 'number', placeholder: 0 },
+    total_amount: { type: 'number', placeholder: 0 },
+};
 
 export const receivingService = {
     // --- Receiving Reports ---
@@ -64,30 +88,46 @@ export const receivingService = {
     },
 
     async createReceivingReport(rr: ReceivingReportInsert): Promise<ReceivingReport> {
-        // Double check duplicate
-        const isDuplicate = await this.checkDuplicateRR(rr.rr_no);
-        if (isDuplicate) {
-            throw new Error(`RR Number ${rr.rr_no} already exists.`);
-        }
+        try {
+            const sanitizedReport = sanitizeObject(rr, receivingReportSanitizationConfig);
+            // Double check duplicate
+            const isDuplicate = await this.checkDuplicateRR(sanitizedReport.rr_no);
+            if (isDuplicate) {
+                throw new Error(`RR Number ${sanitizedReport.rr_no} already exists.`);
+            }
 
-        const { data, error } = await supabase
-            .from('receiving_reports')
-            .insert(rr)
-            .select()
-            .single();
-        if (error) throw error;
-        return data as unknown as ReceivingReport;
+            const { data, error } = await supabase
+                .from('receiving_reports')
+                .insert(sanitizedReport)
+                .select()
+                .single();
+            if (error) throw error;
+            return data as unknown as ReceivingReport;
+        } catch (err) {
+            console.error('Error creating receiving report:', err);
+            throw new Error(parseSupabaseError(err, 'receiving report'));
+        }
     },
 
     async updateReceivingReport(id: string, updates: ReceivingReportUpdate): Promise<ReceivingReport> {
-        const { data, error } = await supabase
-            .from('receiving_reports')
-            .update(updates)
-            .eq('id', id)
-            .select()
-            .single();
-        if (error) throw error;
-        return data as unknown as ReceivingReport;
+        try {
+            const sanitizedUpdates = sanitizeObject(
+                updates as ReceivingReportInsert,
+                receivingReportSanitizationConfig,
+                { enforceRequired: false, onlyProvided: true }
+            );
+            const { data, error } = await supabase
+                .from('receiving_reports')
+                .update(sanitizedUpdates)
+                .eq('id', id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data as unknown as ReceivingReport;
+        } catch (err) {
+            console.error('Error updating receiving report:', err);
+            throw new Error(parseSupabaseError(err, 'receiving report'));
+        }
     },
 
     async deleteReceivingReport(id: string): Promise<void> {
@@ -106,24 +146,40 @@ export const receivingService = {
     // --- Receiving Report Items ---
 
     async addReceivingReportItem(item: ReceivingReportItemInsert): Promise<ReceivingReportItem> {
-        const { data, error } = await supabase
-            .from('receiving_report_items')
-            .insert(item)
-            .select()
-            .single();
-        if (error) throw error;
-        return data as unknown as ReceivingReportItem;
+        try {
+            const sanitizedItem = sanitizeObject(item, receivingReportItemSanitizationConfig);
+            const { data, error } = await supabase
+                .from('receiving_report_items')
+                .insert(sanitizedItem)
+                .select()
+                .single();
+            if (error) throw error;
+            return data as unknown as ReceivingReportItem;
+        } catch (err) {
+            console.error('Error adding receiving report item:', err);
+            throw new Error(parseSupabaseError(err, 'receiving report item'));
+        }
     },
 
     async updateReceivingReportItem(id: string, updates: ReceivingReportItemUpdate): Promise<ReceivingReportItem> {
-        const { data, error } = await supabase
-            .from('receiving_report_items')
-            .update(updates)
-            .eq('id', id)
-            .select()
-            .single();
-        if (error) throw error;
-        return data as unknown as ReceivingReportItem;
+        try {
+            const sanitizedUpdates = sanitizeObject(
+                updates as ReceivingReportItemInsert,
+                receivingReportItemSanitizationConfig,
+                { enforceRequired: false, onlyProvided: true }
+            );
+            const { data, error } = await supabase
+                .from('receiving_report_items')
+                .update(sanitizedUpdates)
+                .eq('id', id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data as unknown as ReceivingReportItem;
+        } catch (err) {
+            console.error('Error updating receiving report item:', err);
+            throw new Error(parseSupabaseError(err, 'receiving report item'));
+        }
     },
 
     async deleteReceivingReportItem(id: string): Promise<void> {

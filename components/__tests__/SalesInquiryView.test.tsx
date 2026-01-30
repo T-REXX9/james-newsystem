@@ -113,8 +113,9 @@ describe('SalesInquiryView', () => {
     fireEvent.submit(form);
 
     expect(addToastMock).toHaveBeenCalledWith({
-      type: 'error',
-      message: 'Please select a customer'
+      type: 'warning',
+      title: 'Fix validation issues',
+      description: 'Review the highlighted fields and try again.'
     });
     expect(createSalesInquiryMock).not.toHaveBeenCalled();
   });

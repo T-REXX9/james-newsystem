@@ -1,20 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { X, Loader2, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 import { CustomerStatus, DealStage, Contact, ContactPerson } from '../types';
+import ValidationSummary from './ValidationSummary';
+import FieldHelp from './FieldHelp';
+import { validateOptionalEmail, validateOptionalPhone, validateRequired } from '../utils/formValidation';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 interface AddContactModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: Omit<Contact, 'id'>) => Promise<Contact>;
+  mode?: 'create' | 'edit';
+  initialData?: Contact;
 }
 
-const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSubmit }) => {
+const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSubmit, mode = 'create', initialData }) => {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [submitCount, setSubmitCount] = useState(0);
+  const [allowPlaceholderSubmission, setAllowPlaceholderSubmission] = useState(false);
   
   type ContactPersonDraft = Omit<ContactPerson, 'id'>;
 
   const today = new Date().toISOString().split('T')[0];
+  const isEditMode = mode === 'edit';
 
   const createEmptyContactPerson = (): ContactPersonDraft => ({
     enabled: true,
@@ -63,17 +73,76 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
     avatar: `https://i.pravatar.cc/150?u=${Date.now()}`,
   });
 
+  const buildFormDataFromContact = (contact?: Contact): Partial<Contact> => ({
+    ...buildInitialFormData(),
+    company: contact?.company || '',
+    customerSince: contact?.customerSince || today,
+    lastContactDate: contact?.lastContactDate || today,
+    team: contact?.team || '',
+    salesman: contact?.salesman || '',
+    referBy: contact?.referBy || '',
+    address: contact?.address || '',
+    province: contact?.province || '',
+    city: contact?.city || '',
+    deliveryAddress: contact?.deliveryAddress || '',
+    area: contact?.area || '',
+    tin: contact?.tin || '',
+    priceGroup: contact?.priceGroup || 'AA',
+    businessLine: contact?.businessLine || '',
+    terms: contact?.terms || '',
+    transactionType: contact?.transactionType || '',
+    vatType: contact?.vatType || 'Exclusive',
+    vatPercentage: contact?.vatPercentage || '12',
+    dealershipTerms: contact?.dealershipTerms || '',
+    dealershipSince: contact?.dealershipSince || '',
+    dealershipQuota: contact?.dealershipQuota ?? 0,
+    creditLimit: contact?.creditLimit ?? 0,
+    status: (contact?.status as CustomerStatus) || ((CustomerStatus && CustomerStatus.PROSPECTIVE) || 'Prospective'),
+    isHidden: !!contact?.isHidden,
+    debtType: contact?.debtType || 'Good',
+    comment: contact?.comment || '',
+    dealValue: contact?.dealValue ?? 0,
+    stage: (contact?.stage as DealStage) || DealStage.NEW,
+    interactions: contact?.interactions || [],
+    comments: contact?.comments || [],
+    salesHistory: contact?.salesHistory || [],
+    topProducts: contact?.topProducts || [],
+    avatar: contact?.avatar || `https://i.pravatar.cc/150?u=${Date.now()}`,
+  });
+
+  const buildContactPersonsFromContact = (contact?: Contact): ContactPersonDraft[] => {
+    const persons = contact?.contactPersons || [];
+    if (persons.length === 0) return [createEmptyContactPerson()];
+    return persons.map(person => ({
+      enabled: person.enabled ?? true,
+      name: person.name || '',
+      position: person.position || '',
+      birthday: person.birthday || '',
+      telephone: person.telephone || '',
+      mobile: person.mobile || '',
+      email: person.email || '',
+    }));
+  };
+
   const [contactPersons, setContactPersons] = useState<ContactPersonDraft[]>([createEmptyContactPerson()]);
-  const [formData, setFormData] = useState<Partial<Contact>>(buildInitialFormData());
+  const [formData, setFormData] = useState<Partial<Contact>>(
+    isEditMode ? buildFormDataFromContact(initialData) : buildInitialFormData()
+  );
 
   useEffect(() => {
     if (!isOpen) return;
     setLoading(false);
     setSubmitError(null);
-    setFormData(buildInitialFormData());
-    setContactPersons([createEmptyContactPerson()]);
+    setAllowPlaceholderSubmission(false);
+    if (isEditMode && initialData) {
+      setFormData(buildFormDataFromContact(initialData));
+      setContactPersons(buildContactPersonsFromContact(initialData));
+    } else {
+      setFormData(buildInitialFormData());
+      setContactPersons([createEmptyContactPerson()]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, isEditMode, initialData]);
 
   // Safe status options
   const statusOptions = (CustomerStatus && Object.keys(CustomerStatus).length > 0)
@@ -101,11 +170,28 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!validateForm(allowPlaceholderSubmission)) {
+      setSubmitCount((prev) => prev + 1);
+      return;
+    }
     setLoading(true);
     setSubmitError(null);
     try {
+      const resolvedContactPersons = contactPersons.map((cp, idx) => {
+        if (idx !== 0 || !allowPlaceholderSubmission) {
+          return cp;
+        }
+        const emailValidation = validateOptionalEmail(cp.email);
+        const phoneValidation = validateOptionalPhone(cp.mobile);
+        return {
+          ...cp,
+          email: emailValidation.isValid ? cp.email : 'n/a',
+          mobile: phoneValidation.isValid ? cp.mobile : 'n/a',
+        };
+      });
+      const isDeleted = isEditMode ? !!initialData?.is_deleted : false;
       // Construct final object
-      const fullContactPersons: ContactPerson[] = contactPersons.map((cp, idx) => ({
+      const fullContactPersons: ContactPerson[] = resolvedContactPersons.map((cp, idx) => ({
           ...cp,
           id: `cp-${Date.now()}-${idx}`,
           enabled: true
@@ -172,16 +258,53 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
         assignedAgent: formData.salesman || '',
 
         // Soft delete defaults
-        is_deleted: false,
+        is_deleted: isDeleted,
       };
 
       await onSubmit(newContact);
       onClose();
     } catch (error) {
       console.error(error);
-      setSubmitError(error instanceof Error ? error.message : 'Failed to create customer');
+      setSubmitError(parseSupabaseError(error, 'customer'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const validateForm = (allowPlaceholders = false): boolean => {
+    const errors: Record<string, string> = {};
+    const companyValidation = validateRequired(formData.company, 'a customer name');
+    if (!companyValidation.isValid) errors.company = companyValidation.message;
+
+    const primaryPerson = contactPersons[0];
+    if (primaryPerson) {
+      const emailValidation = validateOptionalEmail(primaryPerson.email);
+      if (!emailValidation.isValid && !allowPlaceholders) errors.primaryEmail = emailValidation.message;
+
+      const phoneValidation = validateOptionalPhone(primaryPerson.mobile);
+      if (!phoneValidation.isValid && !allowPlaceholders) errors.primaryMobile = phoneValidation.message;
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleBlur = (field: string, value: unknown) => {
+    let message = '';
+    if (field === 'company') {
+      const result = validateRequired(value, 'a customer name');
+      message = result.isValid ? '' : result.message;
+    }
+    if (field === 'primaryEmail') {
+      const result = validateOptionalEmail(value);
+      message = allowPlaceholderSubmission ? '' : (result.isValid ? '' : result.message);
+    }
+    if (field === 'primaryMobile') {
+      const result = validateOptionalPhone(value);
+      message = allowPlaceholderSubmission ? '' : (result.isValid ? '' : result.message);
+    }
+    if (message || validationErrors[field]) {
+      setValidationErrors((prev) => ({ ...prev, [field]: message }));
     }
   };
 
@@ -191,7 +314,9 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
         
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800 shrink-0">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white">Add New Customer</h2>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-white">
+            {isEditMode ? 'Edit Customer' : 'Add New Customer'}
+          </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
             <X className="w-5 h-5" />
           </button>
@@ -199,6 +324,18 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
 
         {/* Form */}
         <form id="add-contact-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar p-6">
+          <ValidationSummary
+            errors={validationErrors}
+            summaryKey={submitCount}
+            onDismiss={() => {
+              setAllowPlaceholderSubmission(true);
+              setValidationErrors((prev) => ({
+                ...prev,
+                primaryEmail: '',
+                primaryMobile: '',
+              }));
+            }}
+          />
           <div className="space-y-6">
               
               {/* Core Info */}
@@ -207,7 +344,21 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                        <div className="md:col-span-2">
                            <label className="label">Customer Name (Company) *</label>
-                           <input required className="input" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} placeholder="e.g. Acme Corp" />
+                           <input
+                             required
+                             className={`input ${validationErrors.company ? 'border-rose-500' : ''}`}
+                             value={formData.company}
+                             onChange={e => setFormData({...formData, company: e.target.value})}
+                             onBlur={e => handleBlur('company', e.target.value)}
+                             placeholder="e.g. Acme Corp"
+                           />
+                           <FieldHelp
+                             text="Enter the registered business name exactly as it appears on official documents."
+                             example="Acme Corporation Inc."
+                           />
+                           {validationErrors.company && (
+                             <div className="mt-1 text-xs text-rose-600">{validationErrors.company}</div>
+                           )}
                        </div>
                        <div>
                            <label className="label">Customer Since</label>
@@ -386,7 +537,15 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
                                    </div>
                                    <div>
                                        <label className="label">Mobile</label>
-                                       <input className="input" value={person.mobile} onChange={e => handleContactPersonChange(idx, 'mobile', e.target.value)} />
+                                       <input
+                                         className={`input ${idx === 0 && validationErrors.primaryMobile ? 'border-rose-500' : ''}`}
+                                         value={person.mobile}
+                                         onChange={e => handleContactPersonChange(idx, 'mobile', e.target.value)}
+                                         onBlur={e => idx === 0 && handleBlur('primaryMobile', e.target.value)}
+                                       />
+                                       {idx === 0 && validationErrors.primaryMobile && (
+                                         <div className="mt-1 text-xs text-rose-600">{validationErrors.primaryMobile}</div>
+                                       )}
                                    </div>
                                    <div>
                                        <label className="label">Telephone</label>
@@ -394,7 +553,15 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
                                    </div>
                                    <div>
                                        <label className="label">Email</label>
-                                       <input className="input" value={person.email} onChange={e => handleContactPersonChange(idx, 'email', e.target.value)} />
+                                       <input
+                                         className={`input ${idx === 0 && validationErrors.primaryEmail ? 'border-rose-500' : ''}`}
+                                         value={person.email}
+                                         onChange={e => handleContactPersonChange(idx, 'email', e.target.value)}
+                                         onBlur={e => idx === 0 && handleBlur('primaryEmail', e.target.value)}
+                                       />
+                                       {idx === 0 && validationErrors.primaryEmail && (
+                                         <div className="mt-1 text-xs text-rose-600">{validationErrors.primaryEmail}</div>
+                                       )}
                                    </div>
                                </div>
                            </div>
@@ -458,7 +625,7 @@ const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onSu
                 disabled={loading}
                 className="w-full px-4 py-2.5 bg-brand-blue hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Customer'}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (isEditMode ? 'Update Customer' : 'Save Customer')}
               </button>
             </div>
         </div>

@@ -11,8 +11,42 @@ import {
 } from '../types';
 import { createFromOrder as createOrderSlipFromOrder } from './orderSlipService';
 import { createFromOrder as createInvoiceFromOrder } from './invoiceService';
+import { sanitizeArray, sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 const formatSequence = (): string => String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+
+const salesOrderSanitizationConfig: SanitizationConfig<SalesOrderDTO> = {
+  sales_date: { type: 'string', placeholder: 'n/a', required: true },
+  sales_person: { type: 'string', placeholder: 'n/a' },
+  delivery_address: { type: 'string', placeholder: 'n/a' },
+  reference_no: { type: 'string', placeholder: 'n/a' },
+  customer_reference: { type: 'string', placeholder: 'n/a' },
+  send_by: { type: 'string', placeholder: 'n/a' },
+  price_group: { type: 'string', placeholder: 'n/a' },
+  credit_limit: { type: 'number', placeholder: 0 },
+  terms: { type: 'string', placeholder: 'n/a' },
+  promise_to_pay: { type: 'string', placeholder: 'n/a' },
+  po_number: { type: 'string', placeholder: 'n/a' },
+  remarks: { type: 'string', placeholder: 'n/a' },
+  inquiry_type: { type: 'string', placeholder: 'n/a' },
+  urgency: { type: 'string', placeholder: 'n/a' },
+  urgency_date: { type: 'string', placeholder: 'n/a' },
+};
+
+const salesOrderItemSanitizationConfig: SanitizationConfig<
+  Omit<SalesOrderItem, 'id' | 'order_id'>
+> = {
+  item_id: { type: 'string', placeholder: 'n/a', required: true },
+  part_no: { type: 'string', placeholder: 'n/a' },
+  item_code: { type: 'string', placeholder: 'n/a' },
+  location: { type: 'string', placeholder: 'n/a' },
+  description: { type: 'string', placeholder: 'n/a' },
+  qty: { type: 'number', placeholder: 0 },
+  unit_price: { type: 'number', placeholder: 0 },
+  amount: { type: 'number', placeholder: 0 },
+  remark: { type: 'string', placeholder: 'n/a' },
+};
 
 export const ORDER_SLIP_TRANSACTION_TYPES = ['Order Slip', 'PO'];
 export const INVOICE_TRANSACTION_TYPES = ['Invoice', 'Sales Invoice'];
@@ -133,33 +167,42 @@ export const createSalesOrder = async (data: SalesOrderDTO): Promise<SalesOrder>
     const user = authData?.user;
     if (!user) throw new Error('User not authenticated');
 
+    if (!data.items || data.items.length === 0) {
+      throw new Error('Please add at least one line item before saving the order.');
+    }
+
+    const sanitizedData = sanitizeObject(data, salesOrderSanitizationConfig);
+    const sanitizedItems = sanitizeArray(
+      sanitizedData.items,
+      (item) => sanitizeObject(item as Omit<SalesOrderItem, 'id' | 'order_id'>, salesOrderItemSanitizationConfig)
+    );
     const orderNo = generateOrderNumber();
     const status = data.status || SalesOrderStatus.PENDING;
-    const grandTotal = data.items.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const grandTotal = sanitizedItems.reduce((sum, item) => sum + (item.amount || 0), 0);
 
     const payload = {
       order_no: orderNo,
-      inquiry_id: data.inquiry_id || null,
-      contact_id: data.contact_id,
-      sales_date: data.sales_date,
-      sales_person: data.sales_person,
-      delivery_address: data.delivery_address,
-      reference_no: data.reference_no,
-      customer_reference: data.customer_reference,
-      send_by: data.send_by,
-      price_group: data.price_group,
-      credit_limit: data.credit_limit,
-      terms: data.terms,
-      promise_to_pay: data.promise_to_pay,
-      po_number: data.po_number,
-      remarks: data.remarks,
-      inquiry_type: data.inquiry_type,
-      urgency: data.urgency,
-      urgency_date: data.urgency_date,
+      inquiry_id: sanitizedData.inquiry_id || null,
+      contact_id: sanitizedData.contact_id,
+      sales_date: sanitizedData.sales_date,
+      sales_person: sanitizedData.sales_person,
+      delivery_address: sanitizedData.delivery_address,
+      reference_no: sanitizedData.reference_no,
+      customer_reference: sanitizedData.customer_reference,
+      send_by: sanitizedData.send_by,
+      price_group: sanitizedData.price_group,
+      credit_limit: sanitizedData.credit_limit,
+      terms: sanitizedData.terms,
+      promise_to_pay: sanitizedData.promise_to_pay,
+      po_number: sanitizedData.po_number,
+      remarks: sanitizedData.remarks,
+      inquiry_type: sanitizedData.inquiry_type,
+      urgency: sanitizedData.urgency,
+      urgency_date: sanitizedData.urgency_date,
       grand_total: grandTotal,
       status,
-      approved_by: data.approved_by || null,
-      approved_at: data.approved_at || null,
+      approved_by: sanitizedData.approved_by || null,
+      approved_at: sanitizedData.approved_at || null,
       created_by: user.id,
     };
 
@@ -173,7 +216,7 @@ export const createSalesOrder = async (data: SalesOrderDTO): Promise<SalesOrder>
 
     const { data: itemRows, error: itemsError } = await supabase
       .from('sales_order_items')
-      .insert(data.items.map(item => mapOrderItemPayload(item, order.id)))
+      .insert(sanitizedItems.map(item => mapOrderItemPayload(item, order.id)))
       .select();
 
     if (itemsError) throw itemsError;
@@ -184,7 +227,7 @@ export const createSalesOrder = async (data: SalesOrderDTO): Promise<SalesOrder>
     } as SalesOrder;
   } catch (err) {
     console.error('Error creating sales order:', err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'sales order'));
   }
 };
 
@@ -299,6 +342,17 @@ export const updateSalesOrder = async (
   data: Partial<SalesOrderDTO>
 ): Promise<SalesOrder | null> => {
   try {
+    const sanitizedData = sanitizeObject(
+      data as SalesOrderDTO,
+      salesOrderSanitizationConfig,
+      { enforceRequired: false, onlyProvided: true }
+    );
+    const sanitizedItems = sanitizedData.items
+      ? sanitizeArray(
+          sanitizedData.items,
+          (item) => sanitizeObject(item as Omit<SalesOrderItem, 'id' | 'order_id'>, salesOrderItemSanitizationConfig)
+        )
+      : null;
     const updatePayload: Record<string, any> = {};
     const fields = [
       'sales_date',
@@ -322,13 +376,13 @@ export const updateSalesOrder = async (
     ];
 
     fields.forEach(field => {
-      if (field in data) {
-        updatePayload[field] = (data as any)[field];
+      if (field in sanitizedData) {
+        updatePayload[field] = (sanitizedData as any)[field];
       }
     });
 
-    if (data.items) {
-      updatePayload.grand_total = data.items.reduce((sum, item) => sum + (item.amount || 0), 0);
+    if (sanitizedItems) {
+      updatePayload.grand_total = sanitizedItems.reduce((sum, item) => sum + (item.amount || 0), 0);
     }
 
     if (Object.keys(updatePayload).length) {
@@ -340,17 +394,17 @@ export const updateSalesOrder = async (
       if (error) throw error;
     }
 
-    if (data.items) {
+    if (sanitizedItems) {
       await supabase.from('sales_order_items').delete().eq('order_id', id);
       await supabase
         .from('sales_order_items')
-        .insert(data.items.map(item => mapOrderItemPayload(item, id)));
+        .insert(sanitizedItems.map(item => mapOrderItemPayload(item, id)));
     }
 
     return getSalesOrder(id);
   } catch (err) {
     console.error('Error updating sales order:', err);
-    return null;
+    throw new Error(parseSupabaseError(err, 'sales order'));
   }
 };
 

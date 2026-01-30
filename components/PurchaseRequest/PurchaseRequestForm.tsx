@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CreatePRPayload, CreatePRItemPayload, Product, Contact } from '../../purchaseRequest.types';
 import { Save, Plus, Trash2, X } from 'lucide-react';
+import ValidationSummary from '../ValidationSummary';
+import FieldHelp from '../FieldHelp';
+import { validateNumeric, validateRequired } from '../../utils/formValidation';
+import { parseSupabaseError } from '../../utils/errorHandler';
 
 interface PurchaseRequestFormProps {
     onCancel: () => void;
@@ -22,6 +26,9 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     const [referenceNo, setReferenceNo] = useState('');
     const [items, setItems] = useState<CreatePRItemPayload[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+    const [submitCount, setSubmitCount] = useState(0);
+    const [submitError, setSubmitError] = useState('');
 
     // Item Entry State
     const [selectedProductId, setSelectedProductId] = useState('');
@@ -30,7 +37,15 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     const [etaDate, setEtaDate] = useState('');
 
     const handleAddItem = () => {
-        if (!selectedProductId || quantity <= 0) return;
+        const errors: Record<string, string> = {};
+        const productValidation = validateRequired(selectedProductId, 'a product');
+        if (!productValidation.isValid) errors.selectedProductId = productValidation.message;
+        const quantityValidation = validateNumeric(quantity, 'quantity', 1);
+        if (!quantityValidation.isValid) errors.quantity = quantityValidation.message;
+        if (Object.keys(errors).length > 0) {
+            setValidationErrors((prev) => ({ ...prev, ...errors }));
+            return;
+        }
 
         const product = products.find(p => p.id === selectedProductId);
         const supplier = suppliers.find(s => s.id === selectedSupplierId);
@@ -63,10 +78,15 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (items.length === 0) {
-            alert("Please add at least one item.");
+            setValidationErrors((prev) => ({
+                ...prev,
+                items: 'Please add at least one item before submitting the request.'
+            }));
+            setSubmitCount((prev) => prev + 1);
             return;
         }
         setIsSubmitting(true);
+        setSubmitError('');
         try {
             await onSubmit({
                 pr_number: initialPRNumber,
@@ -76,9 +96,22 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                 items
             });
         } catch (err: any) {
-            alert('Error creating PR: ' + err.message);
+            setSubmitError(parseSupabaseError(err, 'purchase request'));
             setIsSubmitting(false);
         }
+    };
+
+    const handleBlur = (field: string, value: unknown) => {
+        let message = '';
+        if (field === 'selectedProductId') {
+            const result = validateRequired(value, 'a product');
+            message = result.isValid ? '' : result.message;
+        }
+        if (field === 'quantity') {
+            const result = validateNumeric(value, 'quantity', 1);
+            message = result.isValid ? '' : result.message;
+        }
+        setValidationErrors((prev) => ({ ...prev, [field]: message }));
     };
 
     return (
@@ -92,6 +125,12 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+                    {submitError && (
+                        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                            {submitError}
+                        </div>
+                    )}
                     {/* Header Fields */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -123,7 +162,10 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                                 <select
                                     value={selectedProductId}
                                     onChange={e => setSelectedProductId(e.target.value)}
-                                    className="w-full text-sm rounded border-gray-300 p-2"
+                                    onBlur={(e) => handleBlur('selectedProductId', e.target.value)}
+                                    className={`w-full text-sm rounded border p-2 ${
+                                        validationErrors.selectedProductId ? 'border-rose-400' : 'border-gray-300'
+                                    }`}
                                 >
                                     <option value="">Select Item...</option>
                                     {products.map(p => (
@@ -133,7 +175,19 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                             </div>
                             <div className="md:col-span-2">
                                 <label className="text-xs font-semibold block mb-1">Qty</label>
-                                <input type="number" min="1" value={quantity} onChange={e => setQuantity(Number(e.target.value))} className="w-full text-sm rounded border-gray-300 p-2" />
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={quantity}
+                                    onChange={e => setQuantity(Number(e.target.value))}
+                                    onBlur={(e) => handleBlur('quantity', e.target.value)}
+                                    className={`w-full text-sm rounded border p-2 ${
+                                        validationErrors.quantity ? 'border-rose-400' : 'border-gray-300'
+                                    }`}
+                                />
+                                {validationErrors.quantity && (
+                                    <p className="mt-1 text-xs text-rose-600">{validationErrors.quantity}</p>
+                                )}
                             </div>
                             <div className="md:col-span-3">
                                 <label className="text-xs font-semibold block mb-1">Supplier (Optional)</label>
@@ -151,6 +205,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                             <div className="md:col-span-2">
                                 <label className="text-xs font-semibold block mb-1">ETA (Optional)</label>
                                 <input type="date" value={etaDate} onChange={e => setEtaDate(e.target.value)} className="w-full text-sm rounded border-gray-300 p-2" />
+                                <FieldHelp text="Set an expected arrival date if the supplier provided one." example="2026-02-05" />
                             </div>
                             <div className="md:col-span-1">
                                 <button type="button" onClick={handleAddItem} className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 flex justify-center">
@@ -161,6 +216,9 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                     </div>
 
                     {/* Items Table */}
+                    {validationErrors.items && (
+                        <div className="text-xs text-rose-600">{validationErrors.items}</div>
+                    )}
                     <div className="overflow-x-auto border border-slate-200 rounded">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 text-slate-500 font-semibold">

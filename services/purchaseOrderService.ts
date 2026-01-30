@@ -12,8 +12,30 @@ import {
     Product,
     Supplier
 } from '../purchaseOrderTypes';
+import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 // Suppressing strict type checks for Supabase query chains due to complexity/depth limits
+const purchaseOrderSanitizationConfig: SanitizationConfig<PurchaseOrderInsert> = {
+    po_number: { type: 'string', placeholder: 'n/a', required: true },
+    order_date: { type: 'string', placeholder: 'n/a', required: true },
+    supplier_id: { type: 'string', placeholder: 'n/a', required: true },
+    warehouse_id: { type: 'string', placeholder: 'n/a' },
+    remarks: { type: 'string', placeholder: 'n/a' },
+    pr_reference: { type: 'string', placeholder: 'n/a' },
+    status: { type: 'string', placeholder: 'Draft' },
+    grand_total: { type: 'number', placeholder: 0 },
+};
+
+const purchaseOrderItemSanitizationConfig: SanitizationConfig<PurchaseOrderItemInsert> = {
+    item_id: { type: 'string', placeholder: 'n/a', required: true },
+    description: { type: 'string', placeholder: 'n/a' },
+    qty: { type: 'number', placeholder: 0 },
+    unit_price: { type: 'number', placeholder: 0 },
+    amount: { type: 'number', placeholder: 0 },
+    remark: { type: 'string', placeholder: 'n/a' },
+};
+
 export const purchaseOrderService = {
     // --- Purchase Orders ---
 
@@ -64,24 +86,40 @@ export const purchaseOrderService = {
     },
 
     async createPurchaseOrder(po: PurchaseOrderInsert): Promise<PurchaseOrder> {
-        const { data, error } = await supabase
-            .from('purchase_orders')
-            .insert(po)
-            .select()
-            .single();
-        if (error) throw error;
-        return data as unknown as PurchaseOrder;
+        try {
+            const sanitizedPO = sanitizeObject(po, purchaseOrderSanitizationConfig);
+            const { data, error } = await supabase
+                .from('purchase_orders')
+                .insert(sanitizedPO)
+                .select()
+                .single();
+            if (error) throw error;
+            return data as unknown as PurchaseOrder;
+        } catch (err) {
+            console.error('Error creating purchase order:', err);
+            throw new Error(parseSupabaseError(err, 'purchase order'));
+        }
     },
 
     async updatePurchaseOrder(id: string, updates: PurchaseOrderUpdate): Promise<PurchaseOrder> {
-        const { data, error } = await supabase
-            .from('purchase_orders')
-            .update(updates)
-            .eq('id', id)
-            .select()
-            .single();
-        if (error) throw error;
-        return data as unknown as PurchaseOrder;
+        try {
+            const sanitizedUpdates = sanitizeObject(
+                updates as PurchaseOrderInsert,
+                purchaseOrderSanitizationConfig,
+                { enforceRequired: false, onlyProvided: true }
+            );
+            const { data, error } = await supabase
+                .from('purchase_orders')
+                .update(sanitizedUpdates)
+                .eq('id', id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data as unknown as PurchaseOrder;
+        } catch (err) {
+            console.error('Error updating purchase order:', err);
+            throw new Error(parseSupabaseError(err, 'purchase order'));
+        }
     },
 
     async deletePurchaseOrder(id: string): Promise<void> {
@@ -104,24 +142,40 @@ export const purchaseOrderService = {
     },
 
     async addPurchaseOrderItem(item: PurchaseOrderItemInsert): Promise<PurchaseOrderItem> {
-        const { data, error } = await supabase
-            .from('purchase_order_items')
-            .insert(item)
-            .select()
-            .single();
-        if (error) throw error;
-        return data as unknown as PurchaseOrderItem;
+        try {
+            const sanitizedItem = sanitizeObject(item, purchaseOrderItemSanitizationConfig);
+            const { data, error } = await supabase
+                .from('purchase_order_items')
+                .insert(sanitizedItem)
+                .select()
+                .single();
+            if (error) throw error;
+            return data as unknown as PurchaseOrderItem;
+        } catch (err) {
+            console.error('Error adding purchase order item:', err);
+            throw new Error(parseSupabaseError(err, 'purchase order item'));
+        }
     },
 
     async updatePurchaseOrderItem(id: string, updates: PurchaseOrderItemUpdate): Promise<PurchaseOrderItem> {
-        const { data, error } = await supabase
-            .from('purchase_order_items')
-            .update(updates)
-            .eq('id', id)
-            .select()
-            .single();
-        if (error) throw error;
-        return data as unknown as PurchaseOrderItem;
+        try {
+            const sanitizedUpdates = sanitizeObject(
+                updates as PurchaseOrderItemInsert,
+                purchaseOrderItemSanitizationConfig,
+                { enforceRequired: false, onlyProvided: true }
+            );
+            const { data, error } = await supabase
+                .from('purchase_order_items')
+                .update(sanitizedUpdates)
+                .eq('id', id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data as unknown as PurchaseOrderItem;
+        } catch (err) {
+            console.error('Error updating purchase order item:', err);
+            throw new Error(parseSupabaseError(err, 'purchase order item'));
+        }
     },
 
     async deletePurchaseOrderItem(id: string): Promise<void> {

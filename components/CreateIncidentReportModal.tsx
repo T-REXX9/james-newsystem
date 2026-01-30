@@ -4,6 +4,10 @@ import { createIncidentReport, fetchContactTransactions } from '../services/supa
 import { useToast } from './ToastProvider';
 import { UserProfile, ContactTransaction } from '../types';
 import TransactionAutocomplete from './TransactionAutocomplete';
+import ValidationSummary from './ValidationSummary';
+import FieldHelp from './FieldHelp';
+import { validateMinLength, validateRequired } from '../utils/formValidation';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 interface CreateIncidentReportModalProps {
   contactId: string;
@@ -20,12 +24,13 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
   onSuccess,
   currentUser,
 }) => {
-  const { showToast } = useToast();
+  const { addToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<ContactTransaction[]>([]);
   const [selectedTransactions, setSelectedTransactions] = useState<ContactTransaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [submitCount, setSubmitCount] = useState(0);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -66,28 +71,41 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
+  const validateField = (field: string, value: unknown): string => {
+    switch (field) {
+      case 'incidentDate': {
+        const requiredCheck = validateRequired(value, 'an incident date');
+        if (!requiredCheck.isValid) return requiredCheck.message;
+        if (value && new Date(value as string) > new Date()) {
+          return 'Please choose an incident date that is not in the future.';
+        }
+        return '';
+      }
+      case 'issueType': {
+        const result = validateRequired(value, 'an issue type');
+        return result.isValid ? '' : result.message;
+      }
+      case 'description': {
+        const requiredCheck = validateRequired(value, 'a description');
+        if (!requiredCheck.isValid) return requiredCheck.message;
+        const lengthCheck = validateMinLength(value, 'description', 10);
+        return lengthCheck.isValid ? '' : lengthCheck.message;
+      }
+      case 'reportedBy': {
+        const result = validateRequired(value, 'a reporter name');
+        return result.isValid ? '' : result.message;
+      }
+      default:
+        return '';
+    }
+  };
+
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-
-    if (!formData.incidentDate) {
-      errors.incidentDate = 'Incident date is required';
-    } else if (new Date(formData.incidentDate) > new Date()) {
-      errors.incidentDate = 'Incident date cannot be in the future';
-    }
-
-    if (!formData.issueType) {
-      errors.issueType = 'Issue type is required';
-    }
-
-    if (!formData.description.trim()) {
-      errors.description = 'Description is required';
-    } else if (formData.description.trim().length < 10) {
-      errors.description = 'Description must be at least 10 characters';
-    }
-
-    if (!formData.reportedBy.trim()) {
-      errors.reportedBy = 'Reported by field is required';
-    }
+    (['incidentDate', 'issueType', 'description', 'reportedBy'] as const).forEach((field) => {
+      const message = validateField(field, (formData as Record<string, unknown>)[field]);
+      if (message) errors[field] = message;
+    });
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -98,6 +116,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
     setError(null);
 
     if (!validateForm()) {
+      setSubmitCount((prev) => prev + 1);
       return;
     }
 
@@ -127,16 +146,26 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
         notes: formData.notes.trim() || undefined,
       });
 
-      showToast('Incident report created successfully and submitted for approval', 'success');
+      addToast({
+        type: 'success',
+        title: 'Incident report submitted',
+        description: 'Your report has been created and routed for approval.',
+      });
       onSuccess();
       handleClose();
     } catch (err) {
       console.error('Error creating incident report:', err);
-      setError('Failed to create incident report. Please try again.');
-      showToast('Failed to create incident report. Please try again.', 'error');
+      const friendlyMessage = parseSupabaseError(err, 'incident report');
+      setError(friendlyMessage);
+      addToast({ type: 'error', title: 'Unable to submit report', description: friendlyMessage, durationMs: 6000 });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleBlur = (field: string, value: unknown) => {
+    const message = validateField(field, value);
+    setValidationErrors((prev) => ({ ...prev, [field]: message }));
   };
 
   const handleClose = () => {
@@ -185,6 +214,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
@@ -217,12 +247,17 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
                   setFormData({ ...formData, incidentDate: e.target.value });
                   setValidationErrors({ ...validationErrors, incidentDate: '' });
                 }}
+                onBlur={(e) => handleBlur('incidentDate', e.target.value)}
                 disabled={isSubmitting}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 ${
                   validationErrors.incidentDate
                     ? 'border-red-500 dark:border-red-500'
                     : 'border-gray-300 dark:border-gray-600'
                 }`}
+              />
+              <FieldHelp
+                text="Select the date the incident occurred, not the date you are reporting it."
+                example="2026-01-15"
               />
               {validationErrors.incidentDate && (
                 <p className="text-sm text-red-600 dark:text-red-400 mt-1">
@@ -242,6 +277,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
                 setFormData({ ...formData, issueType: e.target.value as any });
                 setValidationErrors({ ...validationErrors, issueType: '' });
               }}
+              onBlur={(e) => handleBlur('issueType', e.target.value)}
               disabled={isSubmitting}
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 ${
                 validationErrors.issueType
@@ -299,6 +335,7 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
                 setFormData({ ...formData, description: e.target.value });
                 setValidationErrors({ ...validationErrors, description: '' });
               }}
+              onBlur={(e) => handleBlur('description', e.target.value)}
               disabled={isSubmitting}
               placeholder="Describe the incident in detail (minimum 10 characters)"
               rows={4}
@@ -394,4 +431,3 @@ const CreateIncidentReportModal: React.FC<CreateIncidentReportModalProps> = ({
 };
 
 export default CreateIncidentReportModal;
-
