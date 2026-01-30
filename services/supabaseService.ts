@@ -4,13 +4,93 @@
 
 import { supabase } from '../lib/supabaseClient';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STAFF_ROLES } from '../constants';
-import { Contact, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer } from '../types';
+import { Contact, ContactPerson, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer } from '../types';
+import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 // Helper to generate restore token and expiry for recycle bin items
 const generateRecycleBinMeta = () => ({
   restore_token: crypto.randomUUID(),
   expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
 });
+
+const contactPersonSanitizationConfig: SanitizationConfig<Omit<ContactPerson, 'id'>> = {
+  name: { type: 'string', placeholder: 'n/a' },
+  position: { type: 'string', placeholder: 'n/a' },
+  birthday: { type: 'string', placeholder: 'n/a' },
+  telephone: { type: 'string', placeholder: 'n/a' },
+  mobile: { type: 'string', placeholder: 'n/a' },
+  email: { type: 'string', placeholder: 'n/a' },
+};
+
+const contactSanitizationConfig: SanitizationConfig<Omit<Contact, 'id'>> = {
+  company: { type: 'string', placeholder: 'n/a', required: true },
+  address: { type: 'string', placeholder: 'n/a' },
+  deliveryAddress: { type: 'string', placeholder: 'n/a' },
+  province: { type: 'string', placeholder: 'n/a' },
+  city: { type: 'string', placeholder: 'n/a' },
+  area: { type: 'string', placeholder: 'n/a' },
+  tin: { type: 'string', placeholder: 'n/a' },
+  businessLine: { type: 'string', placeholder: 'n/a' },
+  terms: { type: 'string', placeholder: 'n/a' },
+  transactionType: { type: 'string', placeholder: 'n/a' },
+  vatType: { type: 'string', placeholder: 'n/a' },
+  vatPercentage: { type: 'string', placeholder: 'n/a' },
+  dealershipTerms: { type: 'string', placeholder: 'n/a' },
+  dealershipSince: { type: 'string', placeholder: 'n/a' },
+  creditLimit: { type: 'number', placeholder: 0 },
+  dealershipQuota: { type: 'number', placeholder: 0 },
+  dealValue: { type: 'number', placeholder: 0 },
+  email: { type: 'string', placeholder: 'n/a' },
+  phone: { type: 'string', placeholder: 'n/a' },
+  mobile: { type: 'string', placeholder: 'n/a' },
+  name: { type: 'string', placeholder: 'n/a' },
+  title: { type: 'string', placeholder: 'n/a' },
+  status: { type: 'string', placeholder: 'n/a' },
+  debtType: { type: 'string', placeholder: 'n/a' },
+  comment: { type: 'string', placeholder: 'n/a' },
+  contactPersons: {
+    type: 'array',
+    itemSanitizer: (person) =>
+      sanitizeObject(
+        (person || {}) as Omit<ContactPerson, 'id'>,
+        contactPersonSanitizationConfig,
+        { enforceRequired: false }
+      ),
+  },
+};
+
+const dealSanitizationConfig: SanitizationConfig<Omit<PipelineDeal, 'id' | 'createdAt' | 'updatedAt'>> = {
+  title: { type: 'string', placeholder: 'n/a', required: true },
+  company: { type: 'string', placeholder: 'n/a' },
+  contactName: { type: 'string', placeholder: 'n/a' },
+  value: { type: 'number', placeholder: 0 },
+  currency: { type: 'string', placeholder: '₱' },
+  ownerName: { type: 'string', placeholder: 'n/a' },
+  ownerId: { type: 'string', placeholder: 'n/a' },
+  customerType: { type: 'string', placeholder: 'n/a' },
+  nextStep: { type: 'string', placeholder: 'n/a' },
+  entryEvidence: { type: 'string', placeholder: 'n/a' },
+  exitEvidence: { type: 'string', placeholder: 'n/a' },
+  riskFlag: { type: 'string', placeholder: 'n/a' },
+  avatar: { type: 'string', placeholder: 'n/a' },
+};
+
+const productSanitizationConfig: SanitizationConfig<Omit<Product, 'id'>> = {
+  part_no: { type: 'string', placeholder: 'n/a', required: true },
+  description: { type: 'string', placeholder: 'n/a', required: true },
+  item_code: { type: 'string', placeholder: 'n/a' },
+  oem_no: { type: 'string', placeholder: 'n/a' },
+  brand: { type: 'string', placeholder: 'n/a' },
+  category: { type: 'string', placeholder: 'n/a' },
+  cost: { type: 'number', placeholder: 0 },
+  price_aa: { type: 'number', placeholder: 0 },
+  price_bb: { type: 'number', placeholder: 0 },
+  price_cc: { type: 'number', placeholder: 0 },
+  price_dd: { type: 'number', placeholder: 0 },
+  price_vip1: { type: 'number', placeholder: 0 },
+  price_vip2: { type: 'number', placeholder: 0 },
+};
 
 // With our local mock DB, we can just query directly.
 // The Mock DB handles the seeding from constants, so we trust it returns data.
@@ -31,41 +111,52 @@ export const fetchContacts = async (): Promise<Contact[]> => {
 
 export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Contact> => {
   try {
+    const sanitizedContact = sanitizeObject(contact as Omit<Contact, 'id'>, contactSanitizationConfig);
     const { data, error } = await supabase
       .from('contacts')
-      .insert(contact as any)
+      .insert(sanitizedContact as any)
       .select('*')
       .single();
     if (error) throw error;
     return data as unknown as Contact;
   } catch (err) {
     console.error('Error creating contact:', err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'contact'));
   }
 };
 
 export const updateContact = async (id: string, updates: Partial<Contact>): Promise<void> => {
   try {
-    const { error } = await supabase.from('contacts').update(updates as any).eq('id', id);
+    const sanitizedUpdates = sanitizeObject(
+      updates as Contact,
+      contactSanitizationConfig,
+      { enforceRequired: false, onlyProvided: true }
+    );
+    const { error } = await supabase.from('contacts').update(sanitizedUpdates as any).eq('id', id);
     if (error) throw error;
   } catch (err) {
     console.error("Error updating contact:", err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'contact'));
   }
 };
 
 export const bulkUpdateContacts = async (ids: string[], updates: Partial<Contact>): Promise<void> => {
   try {
+    const sanitizedUpdates = sanitizeObject(
+      updates as Contact,
+      contactSanitizationConfig,
+      { enforceRequired: false, onlyProvided: true }
+    );
     // Use Supabase's .in() method for efficient bulk updates
     const { error } = await supabase
       .from('contacts')
-      .update(updates as any)
+      .update(sanitizedUpdates as any)
       .in('id', ids);
 
     if (error) throw error;
   } catch (err) {
     console.error("Error bulk updating contacts:", err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'contact'));
   }
 }
 
@@ -85,10 +176,14 @@ export const createDeal = async (
   deal: Omit<PipelineDeal, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<PipelineDeal> => {
   try {
+    const sanitizedDeal = sanitizeObject(
+      deal as Omit<PipelineDeal, 'id' | 'createdAt' | 'updatedAt'>,
+      dealSanitizationConfig
+    );
     const { data: { user } } = await supabase.auth.getUser();
     const now = new Date().toISOString();
     const payload = {
-      ...deal,
+      ...sanitizedDeal,
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
@@ -105,7 +200,7 @@ export const createDeal = async (
     return data as PipelineDeal;
   } catch (err) {
     console.error('Error creating deal:', err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'deal'));
   }
 };
 
@@ -114,7 +209,12 @@ export const updateDeal = async (
   updates: Partial<PipelineDeal>
 ): Promise<PipelineDeal | null> => {
   try {
-    const payload: Record<string, unknown> = { ...updates, updatedAt: new Date().toISOString() };
+    const sanitizedUpdates = sanitizeObject(
+      updates as PipelineDeal,
+      dealSanitizationConfig,
+      { enforceRequired: false, onlyProvided: true }
+    );
+    const payload: Record<string, unknown> = { ...sanitizedUpdates, updatedAt: new Date().toISOString() };
     delete payload.id;
     delete payload.createdAt;
     const { data, error } = await supabase
@@ -127,7 +227,7 @@ export const updateDeal = async (
     return data as PipelineDeal;
   } catch (err) {
     console.error('Error updating deal:', err);
-    return null;
+    throw new Error(parseSupabaseError(err, 'deal'));
   }
 };
 
@@ -324,21 +424,27 @@ export const fetchReorderReportEntries = async (): Promise<ReorderReportEntry[]>
 
 export const createProduct = async (product: Omit<Product, 'id'>): Promise<void> => {
   try {
-    const { error } = await supabase.from('products').insert(product);
+    const sanitizedProduct = sanitizeObject(product as Omit<Product, 'id'>, productSanitizationConfig);
+    const { error } = await supabase.from('products').insert(sanitizedProduct);
     if (error) throw error;
   } catch (err) {
     console.error("Error creating product:", err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'product'));
   }
 };
 
 export const updateProduct = async (id: string, updates: Partial<Product>): Promise<void> => {
   try {
-    const { error } = await supabase.from('products').update(updates).eq('id', id);
+    const sanitizedUpdates = sanitizeObject(
+      updates as Product,
+      productSanitizationConfig,
+      { enforceRequired: false, onlyProvided: true }
+    );
+    const { error } = await supabase.from('products').update(sanitizedUpdates).eq('id', id);
     if (error) throw error;
   } catch (err) {
     console.error("Error updating product:", err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'product'));
   }
 };
 
@@ -347,15 +453,20 @@ export const bulkUpdateProducts = async (
   updates: Partial<Product>
 ): Promise<void> => {
   try {
+    const sanitizedUpdates = sanitizeObject(
+      updates as Product,
+      productSanitizationConfig,
+      { enforceRequired: false, onlyProvided: true }
+    );
     const { error } = await supabase
       .from('products')
-      .update(updates)
+      .update(sanitizedUpdates)
       .in('id', ids);
 
     if (error) throw error;
   } catch (err) {
     console.error("Error bulk updating products:", err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'product'));
   }
 };
 
@@ -1146,6 +1257,21 @@ export const fetchUpdatedContactDetails = async (contactId: string) => {
     return data || [];
   } catch (err) {
     console.error('Error fetching updated contact details:', err);
+    return [];
+  }
+};
+
+export const fetchPendingContactUpdates = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('updated_contact_details')
+      .select('*, contacts:contact_id (id, company, name)')
+      .eq('approval_status', 'pending')
+      .order('submitted_date', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching pending contact updates:', err);
     return [];
   }
 };

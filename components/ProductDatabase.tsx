@@ -8,6 +8,10 @@ import { fetchProductMovementClassifications } from '../services/inventoryMoveme
 import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
 import ConfirmModal from './ConfirmModal';
+import ValidationSummary from './ValidationSummary';
+import FieldHelp from './FieldHelp';
+import { validateMinLength, validateRequired } from '../utils/formValidation';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 interface ProductDatabaseProps {
   currentUser: UserProfile | null;
@@ -24,6 +28,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [submitCount, setSubmitCount] = useState(0);
+  const [submitError, setSubmitError] = useState('');
 
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -145,7 +152,12 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      setSubmitCount((prev) => prev + 1);
+      return;
+    }
     setIsSaving(true);
+    setSubmitError('');
     try {
       if (editingProduct) {
         // Optimistic update
@@ -157,11 +169,40 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
       setIsModalOpen(false);
     } catch (error) {
       console.error(error);
-      alert('Failed to save product');
+      setSubmitError(parseSupabaseError(error, 'product'));
       // Real-time subscription will correct the state
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    const partNoCheck = validateRequired(formData.part_no, 'a part number');
+    if (!partNoCheck.isValid) errors.part_no = partNoCheck.message;
+    const descriptionCheck = validateRequired(formData.description, 'a description');
+    if (!descriptionCheck.isValid) errors.description = descriptionCheck.message;
+    const descriptionLength = validateMinLength(formData.description, 'description', 3);
+    if (!descriptionLength.isValid) errors.description = descriptionLength.message;
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleBlur = (field: keyof Product, value: unknown) => {
+    let message = '';
+    if (field === 'part_no') {
+      const result = validateRequired(value, 'a part number');
+      message = result.isValid ? '' : result.message;
+    }
+    if (field === 'description') {
+      const requiredCheck = validateRequired(value, 'a description');
+      message = requiredCheck.isValid ? '' : requiredCheck.message;
+      if (!message) {
+        const lengthCheck = validateMinLength(value, 'description', 3);
+        message = lengthCheck.isValid ? '' : lengthCheck.message;
+      }
+    }
+    setValidationErrors((prev) => ({ ...prev, [field]: message }));
   };
 
   const handleBulkUpdate = async (e: React.FormEvent) => {
@@ -657,6 +698,12 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+              <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+              {submitError && (
+                <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {submitError}
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                 {/* Core Identifiers */}
@@ -667,7 +714,19 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">Part No *</label>
-                      <input required name="part_no" value={formData.part_no} onChange={handleInputChange} className="input-field" placeholder="e.g. 123-ABC" />
+                      <input
+                        required
+                        name="part_no"
+                        value={formData.part_no}
+                        onChange={handleInputChange}
+                        onBlur={(e) => handleBlur('part_no', e.target.value)}
+                        className={`input-field ${validationErrors.part_no ? 'border-rose-400' : ''}`}
+                        placeholder="e.g. 123-ABC"
+                      />
+                      <FieldHelp text="Use the primary manufacturer part number for quick lookup." example="123-ABC" />
+                      {validationErrors.part_no && (
+                        <p className="mt-1 text-xs text-rose-600">{validationErrors.part_no}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">OEM No</label>
@@ -786,7 +845,18 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-slate-500 mb-1">Description *</label>
-                      <input required name="description" value={formData.description} onChange={handleInputChange} className="input-field" />
+                      <input
+                        required
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        onBlur={(e) => handleBlur('description', e.target.value)}
+                        className={`input-field ${validationErrors.description ? 'border-rose-400' : ''}`}
+                      />
+                      <FieldHelp text="Describe the product in plain language for easy scanning." example="Brake pad set for Honda Civic" />
+                      {validationErrors.description && (
+                        <p className="mt-1 text-xs text-rose-600">{validationErrors.description}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">Brand</label>

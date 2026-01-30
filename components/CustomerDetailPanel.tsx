@@ -2,10 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
     Building2, User, Phone, Mail, MapPin, Calendar, CreditCard,
     TrendingUp, AlertCircle, ShoppingBag, MessageSquare, RotateCcw,
-    FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon
+    FileText, DollarSign, Activity, Clock, UserCog, Save, X as XIcon, Pencil
 } from 'lucide-react';
 import { Contact, CustomerStatus, UserProfile } from '../types';
-import { fetchContactTransactions, fetchCustomerMetrics, fetchSalesAgents, updateContact } from '../services/supabaseService';
+import { fetchContactTransactions, fetchCustomerMetrics, fetchSalesAgents, updateContact, fetchUpdatedContactDetails } from '../services/supabaseService';
 import CompanyName from './CompanyName';
 import { toast } from 'sonner';
 
@@ -14,6 +14,7 @@ interface CustomerDetailPanelProps {
     initialData?: Contact;
     onClose: () => void;
     onUpdate: (updated: Contact) => void;
+    onEditContact?: (contact: Contact) => void;
 }
 
 // Transaction Icon Helper
@@ -32,7 +33,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     contactId,
     initialData,
     onClose,
-    onUpdate
+    onUpdate,
+    onEditContact
 }) => {
     const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'inquiries' | 'financials' | 'profile'>('overview');
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -43,6 +45,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
     const [isEditingSalesAgent, setIsEditingSalesAgent] = useState(false);
     const [selectedSalesAgent, setSelectedSalesAgent] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
+    const [pendingUpdates, setPendingUpdates] = useState<any[]>([]);
 
     // Sync prop data
     useEffect(() => {
@@ -57,14 +60,17 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         const loadData = async () => {
             setLoading(true);
             try {
-                const [txs, mets, agents] = await Promise.all([
+                const [txs, mets, agents, updates] = await Promise.all([
                     fetchContactTransactions(contactId),
                     fetchCustomerMetrics(contactId),
-                    fetchSalesAgents()
+                    fetchSalesAgents(),
+                    fetchUpdatedContactDetails(contactId)
                 ]);
                 setTransactions(txs);
                 setMetrics(mets);
                 setSalesAgents(agents);
+                const pending = (updates || []).filter((u: any) => u.approval_status === 'pending');
+                setPendingUpdates(pending);
             } catch (err) {
                 console.error("Failed to load customer details", err);
             } finally {
@@ -160,6 +166,15 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                                 {contact.priceGroup || 'No Group'}
                             </span>
                         </div>
+                        {onEditContact && (
+                            <button
+                                onClick={() => onEditContact(contact)}
+                                className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-brand-blue hover:text-blue-700 border border-blue-100 hover:border-blue-200 rounded-lg bg-blue-50/60 dark:bg-blue-900/20 dark:border-blue-900/40 transition-colors"
+                            >
+                                <Pencil className="w-3.5 h-3.5" />
+                                Edit Details
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -346,6 +361,32 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
 
                 {!loading && activeTab === 'profile' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {pendingUpdates.length > 0 && (
+                            <div className="md:col-span-2 bg-amber-50/80 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-900/40 shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                                        <AlertCircle className="w-4 h-4" />
+                                        <h3 className="font-bold text-sm">Pending update requests</h3>
+                                    </div>
+                                    <span className="text-xs font-semibold text-amber-700 dark:text-amber-200">
+                                        {pendingUpdates.length} pending
+                                    </span>
+                                </div>
+                                <div className="space-y-2">
+                                    {pendingUpdates.slice(0, 3).map((update: any) => (
+                                        <div key={update.id} className="flex items-center justify-between text-xs text-amber-900 dark:text-amber-100">
+                                            <span className="font-semibold">Submitted by {update.submitted_by || 'Staff'}</span>
+                                            <span>{update.submitted_date ? new Date(update.submitted_date).toLocaleDateString() : 'Unknown date'}</span>
+                                        </div>
+                                    ))}
+                                    {pendingUpdates.length > 3 && (
+                                        <div className="text-xs text-amber-700 dark:text-amber-200">
+                                            +{pendingUpdates.length - 3} more pending updates
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                             <h3 className="font-bold text-slate-800 dark:text-white mb-6 border-b pb-2">Contact Information</h3>
                             <div className="space-y-4">

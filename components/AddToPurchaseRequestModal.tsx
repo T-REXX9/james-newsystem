@@ -10,6 +10,9 @@ import {
   PurchaseOrderOption,
   SuggestedStockItem,
 } from '../services/suggestedStockService';
+import ValidationSummary from './ValidationSummary';
+import FieldHelp from './FieldHelp';
+import { validateNumeric, validateRequired } from '../utils/formValidation';
 
 interface AddToPurchaseRequestModalProps {
   item: SuggestedStockItem;
@@ -38,6 +41,8 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [submitCount, setSubmitCount] = useState(0);
 
   const [selectedPO, setSelectedPO] = useState<string>('');
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
@@ -71,6 +76,10 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      setSubmitCount((prev) => prev + 1);
+      return;
+    }
     setError(null);
     setIsSubmitting(true);
 
@@ -113,6 +122,45 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
     }
   };
 
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (mode === 'existing') {
+      const result = validateRequired(selectedPO, 'a purchase order');
+      if (!result.isValid) errors.selectedPO = result.message;
+    }
+    if (mode === 'new') {
+      const supplierResult = validateRequired(selectedSupplier, 'a supplier');
+      if (!supplierResult.isValid) errors.selectedSupplier = supplierResult.message;
+    }
+    const qtyResult = validateNumeric(qty, 'quantity', 1);
+    if (!qtyResult.isValid) errors.qty = qtyResult.message;
+    const priceResult = validateNumeric(unitPrice, 'unit price', 0);
+    if (!priceResult.isValid) errors.unitPrice = priceResult.message;
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleBlur = (field: string, value: unknown) => {
+    let message = '';
+    if (field === 'selectedPO') {
+      const result = validateRequired(value, 'a purchase order');
+      message = result.isValid ? '' : result.message;
+    }
+    if (field === 'selectedSupplier') {
+      const result = validateRequired(value, 'a supplier');
+      message = result.isValid ? '' : result.message;
+    }
+    if (field === 'qty') {
+      const result = validateNumeric(value, 'quantity', 1);
+      message = result.isValid ? '' : result.message;
+    }
+    if (field === 'unitPrice') {
+      const result = validateNumeric(value, 'unit price', 0);
+      message = result.isValid ? '' : result.message;
+    }
+    setValidationErrors((prev) => ({ ...prev, [field]: message }));
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fadeIn">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -150,6 +198,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
         ) : (
           <form onSubmit={handleSubmit}>
             <div className="p-6 space-y-6">
+              <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
               <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
                 <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider mb-2">
                   Item Details
@@ -208,7 +257,10 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                     <select
                       value={selectedPO}
                       onChange={(e) => setSelectedPO(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent"
+                      onBlur={(e) => handleBlur('selectedPO', e.target.value)}
+                      className={`w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent ${
+                        validationErrors.selectedPO ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
+                      }`}
                       required
                     >
                       {purchaseOrders.map((po) => (
@@ -230,12 +282,15 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                         No suppliers found. Please add suppliers first.
                       </p>
                     ) : (
-                      <select
-                        value={selectedSupplier}
-                        onChange={(e) => setSelectedSupplier(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent"
-                        required
-                      >
+                    <select
+                      value={selectedSupplier}
+                      onChange={(e) => setSelectedSupplier(e.target.value)}
+                      onBlur={(e) => handleBlur('selectedSupplier', e.target.value)}
+                      className={`w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent ${
+                        validationErrors.selectedSupplier ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
+                      }`}
+                      required
+                    >
                         {suppliers.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.company}
@@ -274,9 +329,15 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                     min="1"
                     value={qty}
                     onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent"
+                    onBlur={(e) => handleBlur('qty', e.target.value)}
+                    className={`w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent ${
+                      validationErrors.qty ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
+                    }`}
                     required
                   />
+                  {validationErrors.qty && (
+                    <p className="mt-1 text-xs text-rose-600">{validationErrors.qty}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -288,9 +349,16 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
                     step="0.01"
                     value={unitPrice}
                     onChange={(e) => setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent"
+                    onBlur={(e) => handleBlur('unitPrice', e.target.value)}
+                    className={`w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800/50 border rounded-xl text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent ${
+                      validationErrors.unitPrice ? 'border-rose-400' : 'border-slate-200 dark:border-slate-700'
+                    }`}
                     placeholder="0.00"
                   />
+                  <FieldHelp text="Use the latest quoted unit price if available." example="1250.50" />
+                  {validationErrors.unitPrice && (
+                    <p className="mt-1 text-xs text-rose-600">{validationErrors.unitPrice}</p>
+                  )}
                 </div>
               </div>
 

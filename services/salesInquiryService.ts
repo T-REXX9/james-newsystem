@@ -2,11 +2,14 @@ import { supabase } from '../lib/supabaseClient';
 import {
   SalesInquiry,
   SalesInquiryDTO,
+  SalesInquiryItem,
   SalesInquiryStatus,
   SalesOrder,
   RecycleBinItemType,
 } from '../types';
 import { createFromInquiry as createSalesOrderFromInquiry } from './salesOrderService';
+import { sanitizeArray, sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 /**
  * Generate a unique inquiry number with format INQYYYYMMDD-XXXXX
@@ -20,6 +23,38 @@ const generateInquiryNumber = (): string => {
   return `INQ${year}${month}${day}-${random}`;
 };
 
+const inquirySanitizationConfig: SanitizationConfig<SalesInquiryDTO> = {
+  sales_date: { type: 'string', placeholder: 'n/a', required: true },
+  sales_person: { type: 'string', placeholder: 'n/a' },
+  delivery_address: { type: 'string', placeholder: 'n/a' },
+  reference_no: { type: 'string', placeholder: 'n/a' },
+  customer_reference: { type: 'string', placeholder: 'n/a' },
+  send_by: { type: 'string', placeholder: 'n/a' },
+  price_group: { type: 'string', placeholder: 'n/a' },
+  credit_limit: { type: 'number', placeholder: 0 },
+  terms: { type: 'string', placeholder: 'n/a' },
+  promise_to_pay: { type: 'string', placeholder: 'n/a' },
+  po_number: { type: 'string', placeholder: 'n/a' },
+  remarks: { type: 'string', placeholder: 'n/a' },
+  inquiry_type: { type: 'string', placeholder: 'n/a' },
+  urgency: { type: 'string', placeholder: 'n/a' },
+  urgency_date: { type: 'string', placeholder: 'n/a' },
+};
+
+const salesInquiryItemSanitizationConfig: SanitizationConfig<
+  Omit<SalesInquiryItem, 'id' | 'inquiry_id'>
+> = {
+  item_id: { type: 'string', placeholder: 'n/a', required: true },
+  part_no: { type: 'string', placeholder: 'n/a' },
+  item_code: { type: 'string', placeholder: 'n/a' },
+  location: { type: 'string', placeholder: 'n/a' },
+  description: { type: 'string', placeholder: 'n/a' },
+  qty: { type: 'number', placeholder: 0 },
+  unit_price: { type: 'number', placeholder: 0 },
+  amount: { type: 'number', placeholder: 0 },
+  remark: { type: 'string', placeholder: 'n/a' },
+};
+
 /**
  * Create a new sales inquiry
  */
@@ -28,6 +63,15 @@ export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesIn
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
+    if (!data.items || data.items.length === 0) {
+      throw new Error('Please add at least one line item before saving the inquiry.');
+    }
+
+    const sanitizedData = sanitizeObject(data, inquirySanitizationConfig);
+    const sanitizedItems = sanitizeArray(
+      sanitizedData.items,
+      (item) => sanitizeObject(item as Omit<SalesInquiryItem, 'id' | 'inquiry_id'>, salesInquiryItemSanitizationConfig)
+    );
     const inquiryNo = generateInquiryNumber();
 
     // Create the main inquiry record
@@ -35,24 +79,24 @@ export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesIn
       .from('sales_inquiries')
       .insert({
         inquiry_no: inquiryNo,
-        contact_id: data.contact_id,
-        sales_date: data.sales_date,
-        sales_person: data.sales_person,
-        delivery_address: data.delivery_address,
-        reference_no: data.reference_no,
-        customer_reference: data.customer_reference,
-        send_by: data.send_by,
-        price_group: data.price_group,
-        credit_limit: data.credit_limit,
-        terms: data.terms,
-        promise_to_pay: data.promise_to_pay,
-        po_number: data.po_number,
-        remarks: data.remarks,
-        inquiry_type: data.inquiry_type,
-        urgency: data.urgency,
-        urgency_date: data.urgency_date,
-        grand_total: data.items.reduce((sum, item) => sum + (item.amount || 0), 0),
-        status: data.status || SalesInquiryStatus.DRAFT,
+        contact_id: sanitizedData.contact_id,
+        sales_date: sanitizedData.sales_date,
+        sales_person: sanitizedData.sales_person,
+        delivery_address: sanitizedData.delivery_address,
+        reference_no: sanitizedData.reference_no,
+        customer_reference: sanitizedData.customer_reference,
+        send_by: sanitizedData.send_by,
+        price_group: sanitizedData.price_group,
+        credit_limit: sanitizedData.credit_limit,
+        terms: sanitizedData.terms,
+        promise_to_pay: sanitizedData.promise_to_pay,
+        po_number: sanitizedData.po_number,
+        remarks: sanitizedData.remarks,
+        inquiry_type: sanitizedData.inquiry_type,
+        urgency: sanitizedData.urgency,
+        urgency_date: sanitizedData.urgency_date,
+        grand_total: sanitizedItems.reduce((sum, item) => sum + (item.amount || 0), 0),
+        status: sanitizedData.status || SalesInquiryStatus.DRAFT,
         created_by: user.id,
       })
       .select()
@@ -64,7 +108,7 @@ export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesIn
     const { data: items, error: itemsError } = await supabase
       .from('sales_inquiry_items')
       .insert(
-        data.items.map(item => ({
+        sanitizedItems.map(item => ({
           inquiry_id: inquiry.id,
           item_id: item.item_id,
           qty: item.qty,
@@ -88,7 +132,7 @@ export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesIn
     } as SalesInquiry;
   } catch (err) {
     console.error('Error creating sales inquiry:', err);
-    throw err;
+    throw new Error(parseSupabaseError(err, 'sales inquiry'));
   }
 };
 

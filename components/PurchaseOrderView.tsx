@@ -4,6 +4,10 @@ import { PurchaseOrderWithDetails, PurchaseOrderInsert, PurchaseOrderItemInsert,
 import { Plus, Trash2, Printer, Filter, ListFilter, Search, RefreshCw, ChevronLeft, ChevronRight, Save, CheckCircle, XCircle, ArrowLeft } from 'lucide-react';
 import StatusBadge from './StatusBadge'; // Assuming this exists or I'll inline the style
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates'; // Assuming usage
+import ValidationSummary from './ValidationSummary';
+import FieldHelp from './FieldHelp';
+import { validateRequired } from '../utils/formValidation';
+import { parseSupabaseError } from '../utils/errorHandler';
 
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic. 
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
@@ -37,6 +41,9 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) =>
 
   // Form State (New PO)
   const [createForm, setCreateForm] = useState<Partial<PurchaseOrderInsert>>({ status: 'Draft', order_date: new Date().toISOString().split('T')[0] });
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [submitCount, setSubmitCount] = useState(0);
+  const [submitError, setSubmitError] = useState('');
   const [newPONumber, setNewPONumber] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
@@ -124,6 +131,10 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) =>
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateCreateForm()) {
+      setSubmitCount((prev) => prev + 1);
+      return;
+    }
     try {
       const newPO = await purchaseOrderService.createPurchaseOrder({
         ...createForm,
@@ -137,8 +148,31 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) =>
       setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
       setIsCreating(false);
     } catch (err: any) {
-      alert('Error creating PO: ' + err.message);
+      setSubmitError(parseSupabaseError(err, 'purchase order'));
     }
+  };
+
+  const validateCreateForm = () => {
+    const errors: Record<string, string> = {};
+    const dateCheck = validateRequired(createForm.order_date, 'an order date');
+    if (!dateCheck.isValid) errors.order_date = dateCheck.message;
+    const supplierCheck = validateRequired(createForm.supplier_id, 'a supplier');
+    if (!supplierCheck.isValid) errors.supplier_id = supplierCheck.message;
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleCreateBlur = (field: string, value: unknown) => {
+    let message = '';
+    if (field === 'order_date') {
+      const result = validateRequired(value, 'an order date');
+      message = result.isValid ? '' : result.message;
+    }
+    if (field === 'supplier_id') {
+      const result = validateRequired(value, 'a supplier');
+      message = result.isValid ? '' : result.message;
+    }
+    setValidationErrors((prev) => ({ ...prev, [field]: message }));
   };
 
   const handleStatusChange = async (newStatus: string) => {
@@ -308,24 +342,50 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) =>
             <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 max-w-2xl mx-auto">
               <h2 className="text-xl font-bold mb-6 text-slate-800 dark:text-white">Create New Purchase Order</h2>
               <form onSubmit={handleCreateSubmit} className="space-y-4">
+                <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+                {submitError && (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {submitError}
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-semibold mb-1">PO Number</label>
                   <input type="text" value={newPONumber} disabled className="w-full bg-slate-100 border border-slate-300 rounded p-2 text-slate-500" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1">Order Date</label>
-                  <input type="date" required value={createForm.order_date} onChange={e => setCreateForm({ ...createForm, order_date: e.target.value })} className="w-full border border-slate-300 rounded p-2" />
+                  <input
+                    type="date"
+                    required
+                    value={createForm.order_date}
+                    onChange={e => setCreateForm({ ...createForm, order_date: e.target.value })}
+                    onBlur={e => handleCreateBlur('order_date', e.target.value)}
+                    className={`w-full border rounded p-2 ${validationErrors.order_date ? 'border-rose-400' : 'border-slate-300'}`}
+                  />
+                  {validationErrors.order_date && (
+                    <p className="mt-1 text-xs text-rose-600">{validationErrors.order_date}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1">Supplier</label>
-                  <select required value={createForm.supplier_id || ''} onChange={e => setCreateForm({ ...createForm, supplier_id: e.target.value })} className="w-full border border-slate-300 rounded p-2">
+                  <select
+                    required
+                    value={createForm.supplier_id || ''}
+                    onChange={e => setCreateForm({ ...createForm, supplier_id: e.target.value })}
+                    onBlur={e => handleCreateBlur('supplier_id', e.target.value)}
+                    className={`w-full border rounded p-2 ${validationErrors.supplier_id ? 'border-rose-400' : 'border-slate-300'}`}
+                  >
                     <option value="">Select Supplier...</option>
                     {suppliers.map(s => <option key={s.id} value={s.id}>{s.company}</option>)}
                   </select>
+                  {validationErrors.supplier_id && (
+                    <p className="mt-1 text-xs text-rose-600">{validationErrors.supplier_id}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-semibold mb-1">Remarks</label>
                   <textarea value={createForm.remarks || ''} onChange={e => setCreateForm({ ...createForm, remarks: e.target.value })} className="w-full border border-slate-300 rounded p-2 rows-3"></textarea>
+                  <FieldHelp text="Add any delivery or payment notes needed for the supplier." example="Deliver to WH2, payment terms net 30." />
                 </div>
                 <div className="flex justify-end gap-2 pt-4">
                   <button type="button" onClick={() => setIsCreating(false)} className="px-4 py-2 border rounded text-slate-600 hover:bg-slate-50">Cancel</button>

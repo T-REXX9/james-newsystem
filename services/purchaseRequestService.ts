@@ -6,6 +6,27 @@ import {
     CreatePRPayload,
     CreatePRItemPayload
 } from '../purchaseRequest.types';
+import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
+import { parseSupabaseError } from '../utils/errorHandler';
+
+const purchaseRequestSanitizationConfig: SanitizationConfig<CreatePRPayload> = {
+    pr_number: { type: 'string', placeholder: 'n/a', required: true },
+    request_date: { type: 'string', placeholder: 'n/a', required: true },
+    notes: { type: 'string', placeholder: 'n/a' },
+    reference_no: { type: 'string', placeholder: 'n/a' },
+};
+
+const purchaseRequestItemSanitizationConfig: SanitizationConfig<CreatePRItemPayload> = {
+    item_id: { type: 'string', placeholder: 'n/a', required: true },
+    item_code: { type: 'string', placeholder: 'n/a' },
+    part_number: { type: 'string', placeholder: 'n/a' },
+    description: { type: 'string', placeholder: 'n/a' },
+    quantity: { type: 'number', placeholder: 0 },
+    unit_cost: { type: 'number', placeholder: 0 },
+    supplier_id: { type: 'string', placeholder: 'n/a' },
+    supplier_name: { type: 'string', placeholder: 'n/a' },
+    eta_date: { type: 'string', placeholder: 'n/a' },
+};
 
 export const purchaseRequestService = {
     // --- Purchase Requests ---
@@ -51,58 +72,75 @@ export const purchaseRequestService = {
     },
 
     async createPurchaseRequest(payload: CreatePRPayload): Promise<PurchaseRequestWithItems> {
-        // 1. Create Header
-        const { data: prData, error: prError } = await supabase
-            .from('purchase_requests')
-            .insert({
-                pr_number: payload.pr_number,
-                request_date: payload.request_date,
-                notes: payload.notes,
-                reference_no: payload.reference_no,
-                status: 'Draft'
-            })
-            .select()
-            .single();
+        try {
+            const sanitizedPayload = sanitizeObject(payload, purchaseRequestSanitizationConfig);
+            // 1. Create Header
+            const { data: prData, error: prError } = await supabase
+                .from('purchase_requests')
+                .insert({
+                    pr_number: sanitizedPayload.pr_number,
+                    request_date: sanitizedPayload.request_date,
+                    notes: sanitizedPayload.notes,
+                    reference_no: sanitizedPayload.reference_no,
+                    status: 'Draft'
+                })
+                .select()
+                .single();
 
-        if (prError) throw prError;
-        if (!prData) throw new Error('Failed to create purchase request');
+            if (prError) throw prError;
+            if (!prData) throw new Error('Failed to create purchase request');
 
-        // 2. Create Items
-        if (payload.items.length > 0) {
-            const itemsToInsert = payload.items.map(item => ({
-                pr_id: prData.id,
-                item_id: item.item_id,
-                item_code: item.item_code,
-                part_number: item.part_number,
-                description: item.description,
-                quantity: item.quantity,
-                unit_cost: item.unit_cost,
-                supplier_id: item.supplier_id,
-                supplier_name: item.supplier_name,
-                eta_date: item.eta_date
-            }));
+            // 2. Create Items
+            if (payload.items.length > 0) {
+                const itemsToInsert = payload.items.map(item => {
+                    const sanitizedItem = sanitizeObject(item, purchaseRequestItemSanitizationConfig);
+                    return {
+                        pr_id: prData.id,
+                        item_id: sanitizedItem.item_id,
+                        item_code: sanitizedItem.item_code,
+                        part_number: sanitizedItem.part_number,
+                        description: sanitizedItem.description,
+                        quantity: sanitizedItem.quantity,
+                        unit_cost: sanitizedItem.unit_cost,
+                        supplier_id: sanitizedItem.supplier_id,
+                        supplier_name: sanitizedItem.supplier_name,
+                        eta_date: sanitizedItem.eta_date
+                    };
+                });
 
-            const { error: itemsError } = await supabase
-                .from('purchase_request_items')
-                .insert(itemsToInsert);
+                const { error: itemsError } = await supabase
+                    .from('purchase_request_items')
+                    .insert(itemsToInsert);
 
-            if (itemsError) {
-                // Rollback header if items fail? 
-                // For simplicity, we just throw for now, manually delete prData id?
-                await supabase.from('purchase_requests').delete().eq('id', prData.id);
-                throw itemsError;
+                if (itemsError) {
+                    await supabase.from('purchase_requests').delete().eq('id', prData.id);
+                    throw itemsError;
+                }
             }
-        }
 
-        return await this.getPurchaseRequestById(prData.id);
+            return await this.getPurchaseRequestById(prData.id);
+        } catch (err) {
+            console.error('Error creating purchase request:', err);
+            throw new Error(parseSupabaseError(err, 'purchase request'));
+        }
     },
 
     async updatePurchaseRequest(id: string, updates: Partial<PurchaseRequest>): Promise<void> {
-        const { error } = await supabase
-            .from('purchase_requests')
-            .update(updates)
-            .eq('id', id);
-        if (error) throw error;
+        try {
+            const sanitizedUpdates = sanitizeObject(
+                updates as CreatePRPayload,
+                purchaseRequestSanitizationConfig,
+                { enforceRequired: false, onlyProvided: true }
+            );
+            const { error } = await supabase
+                .from('purchase_requests')
+                .update(sanitizedUpdates)
+                .eq('id', id);
+            if (error) throw error;
+        } catch (err) {
+            console.error('Error updating purchase request:', err);
+            throw new Error(parseSupabaseError(err, 'purchase request'));
+        }
     },
 
     async deletePurchaseRequest(id: string): Promise<void> {
@@ -115,21 +153,37 @@ export const purchaseRequestService = {
 
     // --- PR Items (Individual Management) ---
     async addPRItem(prId: string, item: CreatePRItemPayload): Promise<void> {
-        const { error } = await supabase
-            .from('purchase_request_items')
-            .insert({
-                pr_id: prId,
-                ...item
-            });
-        if (error) throw error;
+        try {
+            const sanitizedItem = sanitizeObject(item, purchaseRequestItemSanitizationConfig);
+            const { error } = await supabase
+                .from('purchase_request_items')
+                .insert({
+                    pr_id: prId,
+                    ...sanitizedItem
+                });
+            if (error) throw error;
+        } catch (err) {
+            console.error('Error adding purchase request item:', err);
+            throw new Error(parseSupabaseError(err, 'purchase request item'));
+        }
     },
 
     async updatePRItem(itemId: string, updates: any): Promise<void> {
-        const { error } = await supabase
-            .from('purchase_request_items')
-            .update(updates)
-            .eq('id', itemId);
-        if (error) throw error;
+        try {
+            const sanitizedUpdates = sanitizeObject(
+                updates as CreatePRItemPayload,
+                purchaseRequestItemSanitizationConfig,
+                { enforceRequired: false, onlyProvided: true }
+            );
+            const { error } = await supabase
+                .from('purchase_request_items')
+                .update(sanitizedUpdates)
+                .eq('id', itemId);
+            if (error) throw error;
+        } catch (err) {
+            console.error('Error updating purchase request item:', err);
+            throw new Error(parseSupabaseError(err, 'purchase request item'));
+        }
     },
 
     async deletePRItem(itemId: string): Promise<void> {

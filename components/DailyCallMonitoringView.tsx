@@ -22,6 +22,7 @@ import {
   Search,
   ShieldAlert,
   Target,
+  FileText,
   TrendingUp,
   UserCheck,
   UserPlus,
@@ -32,6 +33,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
 import PatientChartModal from './PatientChartModal';
+import ContactDetails from './ContactDetails';
 import { useToast } from './ToastProvider';
 import {
   countCallLogsByChannelInRange,
@@ -273,6 +275,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [density, setDensity] = useState<'comfortable' | 'compact' | 'ultra-compact'>('compact');
   const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
+  const [showContactDetails, setShowContactDetails] = useState(false);
 
   const handleOpenPatientChart = (contactId: string) => {
     setSelectedClientId(contactId);
@@ -1396,6 +1399,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 <ClipboardList className="w-5 h-5" />
               </button>
               <button
+                onClick={() => setShowContactDetails(true)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-brand-blue transition-colors"
+                title="Open Full Details"
+              >
+                <FileText className="w-5 h-5" />
+              </button>
+              <button
                 onClick={() => setDetailsPanelOpen(false)}
                 className="p-1 rounded-full text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white"
                 aria-label="Close details panel"
@@ -1605,6 +1615,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           currentUser={currentUser}
           onClose={() => setShowPatientChart(false)}
         />
+      )}
+
+      {showContactDetails && selectedClient && (
+        <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950">
+          <ContactDetails
+            contact={selectedClient}
+            currentUser={currentUser}
+            onClose={() => setShowContactDetails(false)}
+            onUpdate={(updated) => {
+              setContacts((prev) => prev.map((c) => c.id === updated.id ? updated : c));
+            }}
+          />
+        </div>
       )}
     </div>
   );

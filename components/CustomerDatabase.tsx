@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRealtimeList } from '../hooks/useRealtimeList';
-import { fetchContacts, bulkUpdateContacts, createContact } from '../services/supabaseService';
+import { fetchContacts, bulkUpdateContacts, createContact, updateContact } from '../services/supabaseService';
 import { Contact } from '../types';
 import CustomerListSidebar from './CustomerListSidebar';
 import CustomerDetailPanel from './CustomerDetailPanel';
@@ -27,6 +27,8 @@ const CustomerDatabase: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAssignAgentModal, setShowAssignAgentModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Contact | null>(null);
 
   // Handlers
   const handleSelectCustomer = (id: string) => {
@@ -101,6 +103,11 @@ const CustomerDatabase: React.FC = () => {
     setShowAddCustomerModal(true);
   };
 
+  const handleEditCustomer = (contact: Contact) => {
+    setEditingCustomer(contact);
+    setShowEditCustomerModal(true);
+  };
+
   const handleSubmitNewCustomer = async (data: Omit<Contact, 'id'>) => {
     try {
       const created = await createContact(data);
@@ -117,6 +124,25 @@ const CustomerDatabase: React.FC = () => {
     }
   };
 
+  const handleSubmitEditCustomer = async (data: Omit<Contact, 'id'>) => {
+    if (!editingCustomer) return;
+    try {
+      await updateContact(editingCustomer.id, data);
+      const updated = { ...editingCustomer, ...data, id: editingCustomer.id };
+      setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? updated : c));
+      setSelectedCustomerId(editingCustomer.id);
+      toast.success(`Updated customer: ${updated.company}`);
+      await reload();
+      setShowEditCustomerModal(false);
+      setEditingCustomer(null);
+      return updated;
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      toast.error(`Failed to update customer: ${errorMessage}`);
+      throw e;
+    }
+  };
+
   // Layout
   return (
     <div className="flex h-full w-full bg-slate-50 dark:bg-slate-950 overflow-hidden relative">
@@ -126,6 +152,18 @@ const CustomerDatabase: React.FC = () => {
         isOpen={showAddCustomerModal}
         onClose={() => setShowAddCustomerModal(false)}
         onSubmit={handleSubmitNewCustomer}
+        mode="create"
+      />
+
+      <AddContactModal
+        isOpen={showEditCustomerModal}
+        onClose={() => {
+          setShowEditCustomerModal(false);
+          setEditingCustomer(null);
+        }}
+        onSubmit={handleSubmitEditCustomer}
+        mode="edit"
+        initialData={editingCustomer || undefined}
       />
 
       {/* Left Sidebar */}
@@ -153,6 +191,7 @@ const CustomerDatabase: React.FC = () => {
             initialData={customers.find(c => c.id === selectedCustomerId)}
             onClose={() => setSelectedCustomerId(null)}
             onUpdate={handleUpdateContact}
+            onEditContact={handleEditCustomer}
           />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-slate-400">
