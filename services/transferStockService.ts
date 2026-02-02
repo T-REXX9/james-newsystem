@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import type { TransferStock, TransferStockDTO, TransferStockItem } from '../types';
+import { ENTITY_TYPES, logDelete, logStatusChange, logUpdate, logCreate } from './activityLogService';
 
 /**
  * Generate next transfer number
@@ -64,6 +65,15 @@ export async function createTransferStock(data: TransferStockDTO): Promise<Trans
     // Rollback: delete the transfer
     await supabase.from('branch_inventory_transfers').delete().eq('id', transfer.id);
     throw itemsError;
+  }
+
+  try {
+    await logCreate(ENTITY_TYPES.TRANSFER_STOCK, transfer.id, {
+      transfer_no: transfer.transfer_no,
+      transfer_date: transfer.transfer_date,
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
   }
 
   // Fetch the complete transfer with items
@@ -172,6 +182,14 @@ export async function updateTransferStock(
     throw error;
   }
 
+  try {
+    await logUpdate(ENTITY_TYPES.TRANSFER_STOCK, id, {
+      updated_fields: Object.keys(updates),
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+  }
+
   return await getTransferStock(id);
 }
 
@@ -205,6 +223,12 @@ export async function submitTransferStock(id: string): Promise<TransferStock | n
   if (error) {
     console.error('Error submitting transfer stock:', error);
     throw error;
+  }
+
+  try {
+    await logStatusChange(ENTITY_TYPES.TRANSFER_STOCK, id, 'pending', 'submitted');
+  } catch (error) {
+    console.error('Failed to log activity:', error);
   }
 
   return await getTransferStock(id);
@@ -247,6 +271,12 @@ export async function approveTransferStock(id: string): Promise<TransferStock | 
     throw error;
   }
 
+  try {
+    await logStatusChange(ENTITY_TYPES.TRANSFER_STOCK, id, 'submitted', 'approved');
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+  }
+
   return await getTransferStock(id);
 }
 
@@ -277,6 +307,14 @@ export async function deleteTransferStock(id: string): Promise<void> {
   if (error) {
     console.error('Error deleting transfer stock:', error);
     throw error;
+  }
+
+  try {
+    await logDelete(ENTITY_TYPES.TRANSFER_STOCK, id, {
+      transfer_no: existingTransfer.transfer_no,
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
   }
 }
 

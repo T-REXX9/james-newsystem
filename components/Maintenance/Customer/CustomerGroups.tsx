@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { CustomerGroup } from '../../../maintenance.types';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
 
 const CustomerGroupForm: React.FC<{
     initialData?: CustomerGroup | null;
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<CustomerGroup>>(
         initialData || { name: '', description: '', color: '#3b82f6' }
     );
@@ -27,10 +30,23 @@ const CustomerGroupForm: React.FC<{
                 const { error } = await supabase.from('customer_groups' as any).insert([formData]);
                 if (error) throw error;
             }
+            addToast({
+                type: 'success',
+                title: initialData?.id ? 'Customer group updated' : 'Customer group created',
+                description: initialData?.id
+                    ? 'Customer group has been updated successfully.'
+                    : 'New customer group has been added to the database.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving group:', error);
-            alert('Error saving group');
+            addToast({
+                type: 'error',
+                title: initialData?.id ? 'Unable to update customer group' : 'Unable to create customer group',
+                description: parseSupabaseError(error, 'customer group'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

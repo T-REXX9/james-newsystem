@@ -13,6 +13,8 @@ import {
 import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { validateNumeric, validateRequired } from '../utils/formValidation';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 interface AddToPurchaseRequestModalProps {
   item: SuggestedStockItem;
@@ -34,6 +36,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
   onClose,
   currentUser,
 }) => {
+  const { addToast } = useToast();
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderOption[]>([]);
@@ -108,6 +111,12 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
       }
 
       if (result) {
+        addToast({ 
+          type: 'success', 
+          title: 'Items added to purchase request',
+          description: 'The items have been added successfully.',
+          durationMs: 4000,
+        });
         setSuccess(true);
         setTimeout(() => {
           onClose();
@@ -117,6 +126,12 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
+      addToast({ 
+        type: 'error', 
+        title: 'Unable to add items',
+        description: parseSupabaseError(err, 'purchase request'),
+        durationMs: 6000,
+      });
     } finally {
       setIsSubmitting(false);
     }

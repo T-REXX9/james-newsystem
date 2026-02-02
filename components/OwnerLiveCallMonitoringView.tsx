@@ -131,6 +131,7 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
     // Incident Reports State
     const [pendingIncidentReports, setPendingIncidentReports] = useState<IncidentReportWithCustomer[]>([]);
     const [incidentReportsLoading, setIncidentReportsLoading] = useState(false);
+    const [selectedIncidentReport, setSelectedIncidentReport] = useState<IncidentReportWithCustomer | null>(null);
     const [pendingContactUpdates, setPendingContactUpdates] = useState<any[]>([]);
     const [pendingContactUpdatesLoading, setPendingContactUpdatesLoading] = useState(false);
     const [updateReviewContact, setUpdateReviewContact] = useState<Contact | null>(null);
@@ -761,6 +762,36 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
         if (!selectedActivityItem) return null;
         return contactsMap.get(selectedActivityItem.contact_id) || null;
     }, [selectedActivityItem, contactsMap]);
+
+    const getIssueTypeBadge = useCallback((type: IncidentReportWithCustomer['issue_type']) => {
+        const badges = {
+            product_quality: { label: 'Product Quality', color: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' },
+            service_quality: { label: 'Service Quality', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' },
+            delivery: { label: 'Delivery', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
+            other: { label: 'Other', color: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400' }
+        };
+        return badges[type] || badges.other;
+    }, []);
+
+    const openIncidentReportModal = useCallback((report: IncidentReportWithCustomer) => {
+        setSelectedIncidentReport(report);
+    }, []);
+
+    const closeIncidentReportModal = useCallback(() => {
+        setSelectedIncidentReport(null);
+    }, []);
+
+    const handleApproveSelectedIncidentReport = useCallback(async () => {
+        if (!selectedIncidentReport) return;
+        await handleApproveIncidentReport(selectedIncidentReport.id);
+        setSelectedIncidentReport(null);
+    }, [selectedIncidentReport, handleApproveIncidentReport]);
+
+    const handleRejectSelectedIncidentReport = useCallback(async () => {
+        if (!selectedIncidentReport) return;
+        await handleRejectIncidentReport(selectedIncidentReport.id);
+        setSelectedIncidentReport(null);
+    }, [selectedIncidentReport, handleRejectIncidentReport]);
 
     const CompactMetric = ({ title, value, subtext, icon: Icon, colorClass, bgClass, onClick }: any) => {
         const inner = (
@@ -1504,16 +1535,6 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                             ) : (
                                 <div className="space-y-3">
                                     {pendingIncidentReports.map((report) => {
-                                        const getIssueTypeBadge = (type: string) => {
-                                            const badges = {
-                                                product_quality: { label: 'Product Quality', color: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' },
-                                                service_quality: { label: 'Service Quality', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400' },
-                                                delivery: { label: 'Delivery', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' },
-                                                other: { label: 'Other', color: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400' }
-                                            };
-                                            return badges[type as keyof typeof badges] || badges.other;
-                                        };
-
                                         const badge = getIssueTypeBadge(report.issue_type);
                                         const incidentDate = new Date(report.incident_date).toLocaleDateString();
                                         const reportDate = new Date(report.report_date).toLocaleDateString();
@@ -1521,7 +1542,16 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                                         return (
                                             <div
                                                 key={report.id}
-                                                className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-slate-50/40 dark:bg-slate-800/50 hover:border-amber-300 dark:hover:border-amber-700 transition-colors"
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => openIncidentReportModal(report)}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                        event.preventDefault();
+                                                        openIncidentReportModal(report);
+                                                    }
+                                                }}
+                                                className="border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-slate-50/40 dark:bg-slate-800/50 hover:border-amber-300 dark:hover:border-amber-700 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400/60"
                                             >
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div className="flex-1 min-w-0">
@@ -1554,14 +1584,20 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                                                     </div>
                                                     <div className="flex flex-col gap-2 shrink-0">
                                                         <button
-                                                            onClick={() => handleApproveIncidentReport(report.id)}
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                handleApproveIncidentReport(report.id);
+                                                            }}
                                                             className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
                                                         >
                                                             <CheckCircle className="w-3.5 h-3.5" />
                                                             Approve
                                                         </button>
                                                         <button
-                                                            onClick={() => handleRejectIncidentReport(report.id)}
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                handleRejectIncidentReport(report.id);
+                                                            }}
                                                             className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
                                                         >
                                                             <XCircle className="w-3.5 h-3.5" />
@@ -1782,6 +1818,108 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
                         </div>
                     ) : (
                         <div className="text-sm text-slate-500 dark:text-slate-400">No activity selected.</div>
+                    )}
+                </ActionModal>
+
+                <ActionModal
+                    open={Boolean(selectedIncidentReport)}
+                    title="Incident Report Details"
+                    confirmLabel="Close"
+                    onClose={closeIncidentReportModal}
+                    onConfirm={closeIncidentReportModal}
+                >
+                    {selectedIncidentReport ? (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-bold text-slate-800 dark:text-white truncate">
+                                        {selectedIncidentReport.customer_company}
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        {selectedIncidentReport.customer_city} • Salesman: {selectedIncidentReport.customer_salesman}
+                                    </p>
+                                </div>
+                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getIssueTypeBadge(selectedIncidentReport.issue_type).color}`}>
+                                    {getIssueTypeBadge(selectedIncidentReport.issue_type).label}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Incident Date</p>
+                                    <p className="text-sm font-bold text-slate-800 dark:text-white">
+                                        {new Date(selectedIncidentReport.incident_date).toLocaleDateString()}
+                                    </p>
+                                </div>
+                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Reported Date</p>
+                                    <p className="text-sm font-bold text-slate-800 dark:text-white">
+                                        {new Date(selectedIncidentReport.report_date).toLocaleDateString()}
+                                    </p>
+                                </div>
+                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3 sm:col-span-2">
+                                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Reported By</p>
+                                    <p className="text-sm font-bold text-slate-800 dark:text-white">
+                                        {selectedIncidentReport.reported_by || '—'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Description</p>
+                                <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">
+                                    {selectedIncidentReport.description || '—'}
+                                </p>
+                            </div>
+
+                            {selectedIncidentReport.notes && (
+                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Internal Notes</p>
+                                    <p className="text-sm text-slate-700 dark:text-slate-200 mt-1 whitespace-pre-wrap">
+                                        {selectedIncidentReport.notes}
+                                    </p>
+                                </div>
+                            )}
+
+                            {selectedIncidentReport.related_transactions && selectedIncidentReport.related_transactions.length > 0 && (
+                                <div className="border border-slate-200 dark:border-slate-800 rounded-lg p-3">
+                                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-2">Related Transactions</p>
+                                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                                        {selectedIncidentReport.related_transactions.map((transaction) => (
+                                            <div key={`${transaction.transaction_type}-${transaction.transaction_id}`} className="flex items-center justify-between text-xs">
+                                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                                    {transaction.transaction_number}
+                                                </span>
+                                                <span className="text-slate-500 dark:text-slate-400 uppercase">
+                                                    {transaction.transaction_type.replace('_', ' ')}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleApproveSelectedIncidentReport}
+                                    className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                                >
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    Approve Report
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleRejectSelectedIncidentReport}
+                                    className="px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                                >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    Deny Report
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-sm text-slate-500 dark:text-slate-400">No incident report selected.</div>
                     )}
                 </ActionModal>
 

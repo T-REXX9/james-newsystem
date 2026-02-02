@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { RemarkTemplate } from '../../../maintenance.types';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
 
 const RemarkTemplateForm: React.FC<{
     initialData?: RemarkTemplate | null;
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<RemarkTemplate>>(
         initialData || { title: '', content: '', type: 'invoice' }
     );
@@ -27,10 +30,23 @@ const RemarkTemplateForm: React.FC<{
                 const { error } = await supabase.from('remark_templates' as any).insert([formData]);
                 if (error) throw error;
             }
+            addToast({
+                type: 'success',
+                title: initialData?.id ? 'Remark template updated' : 'Remark template created',
+                description: initialData?.id
+                    ? 'Remark template has been updated successfully.'
+                    : 'New remark template has been added to the database.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving template:', error);
-            alert('Error saving template');
+            addToast({
+                type: 'error',
+                title: initialData?.id ? 'Unable to update remark template' : 'Unable to create remark template',
+                description: parseSupabaseError(error, 'remark template'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

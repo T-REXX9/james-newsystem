@@ -7,6 +7,7 @@ import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STA
 import { Contact, ContactPerson, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer } from '../types';
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogService';
 
 // Helper to generate restore token and expiry for recycle bin items
 const generateRecycleBinMeta = () => ({
@@ -118,6 +119,14 @@ export const createContact = async (contact: Omit<Contact, 'id'>): Promise<Conta
       .select('*')
       .single();
     if (error) throw error;
+    try {
+      await logCreate(ENTITY_TYPES.CONTACT, data.id, {
+        company: data.company,
+        contact_type: data.transactionType,
+      });
+    } catch (logError) {
+      console.error('Failed to log activity:', logError);
+    }
     return data as unknown as Contact;
   } catch (err) {
     console.error('Error creating contact:', err);
@@ -134,6 +143,13 @@ export const updateContact = async (id: string, updates: Partial<Contact>): Prom
     );
     const { error } = await supabase.from('contacts').update(sanitizedUpdates as any).eq('id', id);
     if (error) throw error;
+    try {
+      await logUpdate(ENTITY_TYPES.CONTACT, id, {
+        updated_fields: Object.keys(sanitizedUpdates),
+      });
+    } catch (logError) {
+      console.error('Failed to log activity:', logError);
+    }
   } catch (err) {
     console.error("Error updating contact:", err);
     throw new Error(parseSupabaseError(err, 'contact'));
@@ -425,8 +441,19 @@ export const fetchReorderReportEntries = async (): Promise<ReorderReportEntry[]>
 export const createProduct = async (product: Omit<Product, 'id'>): Promise<void> => {
   try {
     const sanitizedProduct = sanitizeObject(product as Omit<Product, 'id'>, productSanitizationConfig);
-    const { error } = await supabase.from('products').insert(sanitizedProduct);
+    const { data, error } = await supabase.from('products').insert(sanitizedProduct).select().single();
     if (error) throw error;
+    try {
+      if (data) {
+        await logCreate(ENTITY_TYPES.PRODUCT, data.id, {
+          part_no: data.part_no,
+          item_code: data.item_code,
+          description: data.description,
+        });
+      }
+    } catch (logError) {
+      console.error('Failed to log activity:', logError);
+    }
   } catch (err) {
     console.error("Error creating product:", err);
     throw new Error(parseSupabaseError(err, 'product'));
@@ -442,6 +469,13 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
     );
     const { error } = await supabase.from('products').update(sanitizedUpdates).eq('id', id);
     if (error) throw error;
+    try {
+      await logUpdate(ENTITY_TYPES.PRODUCT, id, {
+        updated_fields: Object.keys(sanitizedUpdates),
+      });
+    } catch (logError) {
+      console.error('Failed to log activity:', logError);
+    }
   } catch (err) {
     console.error("Error updating product:", err);
     throw new Error(parseSupabaseError(err, 'product'));
@@ -510,6 +544,16 @@ export const deleteProduct = async (id: string): Promise<void> => {
       .eq('id', id);
 
     if (error) throw error;
+
+    try {
+      await logDelete(ENTITY_TYPES.PRODUCT, id, {
+        part_no: product.part_no,
+        item_code: product.item_code,
+        description: product.description,
+      });
+    } catch (logError) {
+      console.error('Failed to log activity:', logError);
+    }
   } catch (err) {
     console.error("Error deleting product:", err);
     throw err;
@@ -2578,6 +2622,14 @@ export const deleteContact = async (id: string): Promise<void> => {
       .eq('id', id);
 
     if (error) throw error;
+    try {
+      await logDelete(ENTITY_TYPES.CONTACT, id, {
+        company: contact.company,
+        contact_type: contact.transactionType,
+      });
+    } catch (logError) {
+      console.error('Failed to log activity:', logError);
+    }
   } catch (err) {
     console.error("Error deleting contact:", err);
     throw err;

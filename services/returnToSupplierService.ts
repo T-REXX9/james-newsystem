@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { SupplierReturn, CreateReturnDTO, RRItemForReturn } from '../returnToSupplier.types';
+import { ENTITY_TYPES, logCreate, logDelete, logStatusChange } from './activityLogService';
 
 export const returnToSupplierService = {
     // 1. Fetch all returns
@@ -101,17 +102,49 @@ export const returnToSupplierService = {
             }
         }
 
+        if (returnRecord) {
+            try {
+                await logCreate(ENTITY_TYPES.RETURN_TO_SUPPLIER, returnRecord.id, {
+                    return_no: returnRecord.return_no || returnNo,
+                    supplier_id: returnRecord.supplier_id,
+                    grand_total: returnRecord.grand_total,
+                });
+            } catch (logError) {
+                console.error('Failed to log activity:', logError);
+            }
+        }
+
         return returnRecord;
     },
 
     // 5. Finalize Return
     finalizeReturn: async (returnId: string) => {
+        const { data: existing } = await supabase
+            .from('supplier_returns')
+            .select('status')
+            .eq('id', returnId)
+            .single();
         const { error } = await supabase.rpc('finalize_supplier_return', { p_return_id: returnId });
         if (error) throw error;
+        try {
+            await logStatusChange(
+                ENTITY_TYPES.RETURN_TO_SUPPLIER,
+                returnId,
+                existing?.status || 'PENDING',
+                'FINALIZED'
+            );
+        } catch (logError) {
+            console.error('Failed to log activity:', logError);
+        }
     },
 
     // 6. Delete Return (only if Pending)
     deleteReturn: async (id: string) => {
+        const { data: existing } = await supabase
+            .from('supplier_returns')
+            .select('return_no')
+            .eq('id', id)
+            .single();
         const { error } = await supabase
             .from('supplier_returns')
             .delete()
@@ -119,6 +152,13 @@ export const returnToSupplierService = {
             .eq('status', 'Pending'); // Safety check
 
         if (error) throw error;
+        try {
+            await logDelete(ENTITY_TYPES.RETURN_TO_SUPPLIER, id, {
+                return_no: existing?.return_no ?? null,
+            });
+        } catch (logError) {
+            console.error('Failed to log activity:', logError);
+        }
     },
 
     // 7. Get Available Items for RR

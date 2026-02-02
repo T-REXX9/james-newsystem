@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { Product } from '../types';
+import { createProduct, updateProduct, deleteProduct } from './supabaseService';
 
 /**
  * Search products by description, part_no, or item_code
@@ -56,4 +57,10 @@ export const getProductPrice = (product: Product, priceGroup?: string): number =
         case 'VIP2': return product.price_vip2 || 0;
         default: return product.price_aa || 0;
     }
+};
+
+export {
+    createProduct,
+    updateProduct,
+    deleteProduct
 };

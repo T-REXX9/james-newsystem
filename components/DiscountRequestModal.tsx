@@ -5,6 +5,7 @@ import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { validateMinLength, validateNumeric, validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 interface DiscountRequestModalProps {
   contactId: string;
@@ -21,6 +22,7 @@ const DiscountRequestModal: React.FC<DiscountRequestModalProps> = ({
   inquiryId,
   onSuccess
 }) => {
+  const { addToast } = useToast();
   const [formData, setFormData] = useState({
     discountPercentage: 5,
     reason: ''
@@ -77,12 +79,24 @@ const DiscountRequestModal: React.FC<DiscountRequestModalProps> = ({
         status: 'pending'
       });
 
+      addToast({ 
+        type: 'success', 
+        title: 'Discount request submitted',
+        description: 'Your discount request has been submitted for approval.',
+        durationMs: 4000,
+      });
       onSuccess?.();
       onClose();
       setFormData({ discountPercentage: 5, reason: '' });
     } catch (err: any) {
       setError(parseSupabaseError(err, 'discount request'));
       console.error('Error submitting discount request:', err);
+      addToast({ 
+        type: 'error', 
+        title: 'Unable to submit discount request',
+        description: parseSupabaseError(err, 'discount request'),
+        durationMs: 6000,
+      });
     } finally {
       setSubmitting(false);
     }

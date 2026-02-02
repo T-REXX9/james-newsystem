@@ -5,6 +5,7 @@ import ValidationSummary from '../ValidationSummary';
 import FieldHelp from '../FieldHelp';
 import { validateNumeric, validateRequired } from '../../utils/formValidation';
 import { parseSupabaseError } from '../../utils/errorHandler';
+import { useToast } from '../ToastProvider';
 
 interface PurchaseRequestFormProps {
     onCancel: () => void;
@@ -21,6 +22,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     suppliers,
     initialPRNumber
 }) => {
+    const { addToast } = useToast();
     const [requestDate, setRequestDate] = useState(new Date().toISOString().split('T')[0]);
     const [notes, setNotes] = useState('');
     const [referenceNo, setReferenceNo] = useState('');
@@ -95,8 +97,20 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
                 reference_no: referenceNo, // Added reference_no
                 items
             });
+            addToast({ 
+                type: 'success', 
+                title: 'Purchase request created',
+                description: `PR ${initialPRNumber} has been submitted successfully.`,
+                durationMs: 4000,
+            });
         } catch (err: any) {
             setSubmitError(parseSupabaseError(err, 'purchase request'));
+            addToast({ 
+                type: 'error', 
+                title: 'Unable to create purchase request',
+                description: parseSupabaseError(err, 'purchase request'),
+                durationMs: 6000,
+            });
             setIsSubmitting(false);
         }
     };

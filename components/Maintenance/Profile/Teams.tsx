@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { Team } from '../../../maintenance.types';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
 
 const TeamForm: React.FC<{
     initialData?: Team | null;
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<Team>>(
         initialData || { name: '', description: '' }
     );
@@ -27,10 +30,23 @@ const TeamForm: React.FC<{
                 const { error } = await supabase.from('teams' as any).insert([formData]);
                 if (error) throw error;
             }
+            addToast({
+                type: 'success',
+                title: initialData?.id ? 'Team updated' : 'Team created',
+                description: initialData?.id
+                    ? 'Team has been updated successfully.'
+                    : 'New team has been added to the database.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving team:', error);
-            alert('Error saving team');
+            addToast({
+                type: 'error',
+                title: initialData?.id ? 'Unable to update team' : 'Unable to create team',
+                description: parseSupabaseError(error, 'team'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

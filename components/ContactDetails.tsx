@@ -89,24 +89,28 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
     if (!currentUser?.id) {
       throw new Error('User not authenticated');
     }
-    if (isOwner) {
-      await updateContact(contact.id, data);
-      const updated = { ...contact, ...data };
-      onUpdate(updated);
-      return updated;
-    }
-    const changedFields = buildChangedFields(contact, data);
-    if (Object.keys(changedFields).length === 0) {
+    try {
+      if (isOwner) {
+        await updateContact(contact.id, data);
+        const updated = { ...contact, ...data };
+        onUpdate(updated);
+        return updated;
+      }
+      const changedFields = buildChangedFields(contact, data);
+      if (Object.keys(changedFields).length === 0) {
+        return contact;
+      }
+      await createUpdatedContactDetails({
+        contact_id: contact.id,
+        changed_fields: changedFields,
+        submitted_by: currentUser.id,
+        submitted_date: new Date().toISOString(),
+        approval_status: 'pending',
+      });
       return contact;
+    } catch (error) {
+      throw error;
     }
-    await createUpdatedContactDetails({
-      contact_id: contact.id,
-      changed_fields: changedFields,
-      submitted_by: currentUser.id,
-      submitted_date: new Date().toISOString(),
-      approval_status: 'pending',
-    });
-    return contact;
   };
 
   const handleAddComment = () => {
@@ -548,6 +552,20 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, o
         onSubmit={handleSubmitContactEdit}
         mode="edit"
         initialData={contact}
+        enableToasts
+        toastOverrides={{
+          success: isOwner
+            ? {
+                title: 'Customer updated',
+                description: 'Customer information has been updated successfully.',
+                durationMs: 4000,
+              }
+            : {
+                title: 'Update request submitted',
+                description: 'Customer update request has been submitted for approval.',
+                durationMs: 4000,
+              },
+        }}
       />
     </div>
   );

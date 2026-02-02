@@ -1,6 +1,15 @@
 import { supabase } from '../lib/supabaseClient';
 import { Invoice, InvoiceDTO, InvoiceItem, InvoiceStatus, RecycleBinItemType, SalesOrderStatus } from '../types';
 import { createInventoryLogFromInvoice } from './inventoryLogService';
+import {
+  ENTITY_TYPES,
+  logActivity,
+  logCreate,
+  logDelete,
+  logRestore,
+  logStatusChange,
+  logUpdate,
+} from './activityLogService';
 
 const randomSequence = () => String(Math.floor(Math.random() * 100000)).padStart(5, '0');
 
@@ -107,6 +116,15 @@ export const createInvoice = async (data: InvoiceDTO): Promise<Invoice> => {
       .select();
 
     if (itemsError) throw itemsError;
+
+    try {
+      await logCreate(ENTITY_TYPES.INVOICE, invoice.id, {
+        invoice_no: invoice.invoice_no || invoiceNo,
+        grand_total: invoice.grand_total || grandTotal,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
 
     return {
       ...invoice,
@@ -247,6 +265,16 @@ export const updateInvoice = async (
         .insert(updates.items.map(item => invoiceItemPayload(item, id)));
     }
 
+    try {
+      const updatedFields = [
+        ...Object.keys(payload),
+        ...(updates.items ? ['items'] : []),
+      ];
+      await logUpdate(ENTITY_TYPES.INVOICE, id, { updated_fields: updatedFields });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
     return getInvoice(id);
   } catch (err) {
     console.error('Error updating invoice:', err);
@@ -268,6 +296,17 @@ export const sendInvoice = async (id: string): Promise<Invoice | null> => {
         sent_at: new Date().toISOString(),
       })
       .eq('id', id);
+
+    try {
+      await logStatusChange(
+        ENTITY_TYPES.INVOICE,
+        id,
+        InvoiceStatus.DRAFT,
+        InvoiceStatus.SENT
+      );
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
 
     // Create inventory logs
     try {
@@ -293,11 +332,13 @@ export const recordPayment = async (
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) throw new Error('User not authenticated');
 
+    const existingInvoice = await getInvoice(id);
+
     // Check if inventory logs already exist for this invoice
     const { data: existingLogs } = await supabase
       .from('inventory_logs')
       .select('id')
-      .eq('reference_no', (await getInvoice(id))?.invoice_no)
+      .eq('reference_no', existingInvoice?.invoice_no)
       .limit(1);
 
     // Update invoice status
@@ -309,6 +350,16 @@ export const recordPayment = async (
         payment_method: paymentData.payment_method,
       })
       .eq('id', id);
+
+    try {
+      await logActivity('RECORD_PAYMENT', ENTITY_TYPES.INVOICE, id, {
+        payment_date: paymentData.payment_date,
+        payment_method: paymentData.payment_method,
+        amount: existingInvoice?.grand_total ?? null,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
 
     // Create inventory logs only if they don't already exist
     if (!existingLogs || existingLogs.length === 0) {
@@ -348,7 +399,16 @@ export const printInvoice = async (id: string): Promise<Invoice | null> => {
       .update({ printed_at: new Date().toISOString() })
       .eq('id', id);
 
-    return getInvoice(id);
+    const invoice = await getInvoice(id);
+    try {
+      await logActivity('PRINT', ENTITY_TYPES.INVOICE, id, {
+        invoice_no: invoice?.invoice_no ?? null,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
+    return invoice;
   } catch (err) {
     console.error('Error printing invoice:', err);
     throw err;
@@ -389,6 +449,12 @@ export const deleteInvoice = async (id: string): Promise<boolean> => {
       .eq('id', id);
 
     if (error) throw error;
+
+    try {
+      await logDelete(ENTITY_TYPES.INVOICE, id, { invoice_no: invoice.invoice_no });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
     return true;
   } catch (err) {
     console.error('Error deleting invoice:', err);
@@ -435,7 +501,15 @@ export const restoreInvoice = async (id: string): Promise<Invoice | null> => {
       .eq('id', id);
 
     if (error) throw error;
-    return getInvoice(id);
+    const restored = await getInvoice(id);
+    if (restored) {
+      try {
+        await logRestore(ENTITY_TYPES.INVOICE, id, { invoice_no: restored.invoice_no });
+      } catch (error) {
+        console.error('Failed to log activity:', error);
+      }
+    }
+    return restored;
   } catch (err) {
     console.error('Error restoring invoice:', err);
     return null;

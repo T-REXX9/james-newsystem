@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { ProductCategory } from '../../../maintenance.types';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
 
 const CategoryForm: React.FC<{
     initialData?: ProductCategory | null;
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<ProductCategory>>(
         initialData || { name: '', description: '' }
     );
@@ -27,10 +30,23 @@ const CategoryForm: React.FC<{
                 const { error } = await supabase.from('product_categories' as any).insert([formData]);
                 if (error) throw error;
             }
+            addToast({
+                type: 'success',
+                title: initialData?.id ? 'Category updated' : 'Category created',
+                description: initialData?.id
+                    ? 'Category has been updated successfully.'
+                    : 'New category has been added to the database.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving category:', error);
-            alert('Error saving category');
+            addToast({
+                type: 'error',
+                title: initialData?.id ? 'Unable to update category' : 'Unable to create category',
+                description: parseSupabaseError(error, 'category'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

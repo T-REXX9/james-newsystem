@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Sun, Moon } from 'lucide-react';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
+import { logAuth } from '../services/activityLogService';
 
 export default function Login() {
+  const { addToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'signin' | 'signup'>('signin');
   const [showPassword, setShowPassword] = useState(false);
@@ -71,10 +75,27 @@ export default function Login() {
 
     if (error) {
       setMessage({ type: 'error', text: error.message });
+      addToast({
+        type: 'error',
+        title: 'Unable to create account',
+        description: parseSupabaseError(error, 'account'),
+        durationMs: 6000,
+      });
     } else {
       setMessage({ 
         type: 'success', 
         text: 'Account created! You can now sign in.' 
+      });
+      try {
+        await logAuth('SIGNUP', { email: getEmail(formData.email) });
+      } catch (logError) {
+        console.error('Failed to log activity:', logError);
+      }
+      addToast({
+        type: 'success',
+        title: 'Account created',
+        description: 'Account created successfully. You can now sign in.',
+        durationMs: 4000,
       });
       setView('signin');
     }
@@ -94,15 +115,38 @@ export default function Login() {
 
       if (error) {
         setMessage({ type: 'error', text: error.message });
+        addToast({
+          type: 'error',
+          title: 'Unable to sign in',
+          description: parseSupabaseError(error, 'authentication'),
+          durationMs: 6000,
+        });
         setLoading(false);
       } else {
         // Success: The supabase client 'onAuthStateChange' event will fire,
         // causing App.tsx to update the session state and remove this component.
         // We keep loading=true to prevent the user from interacting while the swap happens.
+        try {
+          await logAuth('LOGIN', { email: getEmail(formData.email) });
+        } catch (logError) {
+          console.error('Failed to log activity:', logError);
+        }
+        addToast({
+          type: 'success',
+          title: 'Welcome back!',
+          description: 'You have signed in successfully.',
+          durationMs: 4000,
+        });
       }
     } catch (err: any) {
        console.error("Unexpected Login Error:", err);
        setMessage({ type: 'error', text: "An unexpected error occurred." });
+       addToast({
+         type: 'error',
+         title: 'Unable to sign in',
+         description: parseSupabaseError(err, 'authentication'),
+         durationMs: 6000,
+       });
        setLoading(false);
     }
   };

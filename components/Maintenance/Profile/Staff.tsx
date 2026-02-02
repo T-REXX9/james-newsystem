@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { supabase } from '../../../lib/supabaseClient';
+import { parseSupabaseError } from '../../../utils/errorHandler';
+import { useToast } from '../../ToastProvider';
+import { ENTITY_TYPES, logActivity } from '../../../services/activityLogService';
 
 interface Profile {
     id: string;
@@ -22,6 +25,7 @@ const StaffForm: React.FC<{
     onClose: () => void;
     onSuccess: () => void;
 }> = ({ initialData, onClose, onSuccess }) => {
+    const { addToast } = useToast();
     const [formData, setFormData] = useState<Partial<Profile>>(
         initialData || { full_name: '', email: '', role: 'Sales Agent', mobile: '', team_id: '' }
     );
@@ -46,6 +50,31 @@ const StaffForm: React.FC<{
                     .update(formData)
                     .eq('id', initialData.id);
                 if (error) throw error;
+                const updatedFields = Object.entries(formData).reduce<string[]>((acc, [key, value]) => {
+                    const originalValue = initialData[key as keyof Profile];
+                    if (value !== undefined && value !== originalValue) {
+                        acc.push(key);
+                    }
+                    return acc;
+                }, []);
+                try {
+                    await logActivity('UPDATE_STAFF', ENTITY_TYPES.USER_PROFILE, initialData.id, {
+                        updated_fields: updatedFields,
+                        role: formData.role || initialData.role,
+                    });
+                } catch (logError) {
+                    console.error('Failed to log activity:', logError);
+                }
+                if (initialData.role && formData.role && initialData.role !== formData.role) {
+                    try {
+                        await logActivity('CHANGE_ROLE', ENTITY_TYPES.USER_PROFILE, initialData.id, {
+                            old_role: initialData.role,
+                            new_role: formData.role,
+                        });
+                    } catch (logError) {
+                        console.error('Failed to log activity:', logError);
+                    }
+                }
             } else {
                 // Note: Creating a profile usually happens via Auth Sign Up. 
                 // Direct insert might fail if no auth user associated, but allowing for now or this could be "Edit Only" page.
@@ -55,10 +84,21 @@ const StaffForm: React.FC<{
                 alert("Creating new users should be done via Auth Sign Up. This form only updates profile details.");
                 return;
             }
+            addToast({
+                type: 'success',
+                title: 'Staff updated',
+                description: 'Staff profile has been updated successfully.',
+                durationMs: 4000,
+            });
             onSuccess();
         } catch (error) {
             console.error('Error saving profile:', error);
-            alert('Error saving profile');
+            addToast({
+                type: 'error',
+                title: 'Unable to update staff',
+                description: parseSupabaseError(error, 'staff profile'),
+                durationMs: 6000,
+            });
         } finally {
             setLoading(false);
         }

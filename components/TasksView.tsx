@@ -5,6 +5,8 @@ import { fetchTasks, createTask, updateTask, deleteTask, fetchProfiles } from '.
 import { Task, UserProfile } from '../types';
 import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate, applyOptimisticDelete } from '../utils/optimisticUpdates';
+import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 interface TasksViewProps {
   currentUser: UserProfile | null;
@@ -14,6 +16,7 @@ interface TasksViewProps {
 }
 
 const TasksView: React.FC<TasksViewProps> = ({ currentUser, variant = 'full', maxVisibleTasks, onTasksLoaded }) => {
+  const { addToast } = useToast();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [filter, setFilter] = useState<'my' | 'all'>('my');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Todo' | 'In Progress' | 'Done'>('All');
@@ -77,17 +80,33 @@ const TasksView: React.FC<TasksViewProps> = ({ currentUser, variant = 'full', ma
       status: 'Todo'
     } as Omit<Task, 'id'>;
 
-    await createTask(taskToCreate);
-    setIsModalOpen(false);
-    setNewTask({
-        title: '',
-        description: '',
-        assignedTo: currentUser?.full_name || '',
-        priority: 'Medium',
-        dueDate: new Date().toISOString().split('T')[0],
-        status: 'Todo'
-    });
-    // No need to reload - real-time subscription will update
+    try {
+      await createTask(taskToCreate);
+      addToast({
+        type: 'success',
+        title: 'Task created',
+        description: 'Task has been created successfully.',
+        durationMs: 4000,
+      });
+      setIsModalOpen(false);
+      setNewTask({
+          title: '',
+          description: '',
+          assignedTo: currentUser?.full_name || '',
+          priority: 'Medium',
+          dueDate: new Date().toISOString().split('T')[0],
+          status: 'Todo'
+      });
+      // No need to reload - real-time subscription will update
+    } catch (error) {
+      console.error('Error creating task:', error);
+      addToast({
+        type: 'error',
+        title: 'Unable to create task',
+        description: parseSupabaseError(error, 'task'),
+        durationMs: 6000,
+      });
+    }
   };
 
   const handleStatusChange = async (task: Task, newStatus: Task['status']) => {

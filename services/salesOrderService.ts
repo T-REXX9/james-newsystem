@@ -13,6 +13,15 @@ import { createFromOrder as createOrderSlipFromOrder } from './orderSlipService'
 import { createFromOrder as createInvoiceFromOrder } from './invoiceService';
 import { sanitizeArray, sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
+import {
+  ENTITY_TYPES,
+  logActivity,
+  logCreate,
+  logDelete,
+  logRestore,
+  logStatusChange,
+  logUpdate,
+} from './activityLogService';
 
 const formatSequence = (): string => String(Math.floor(Math.random() * 100000)).padStart(5, '0');
 
@@ -221,6 +230,16 @@ export const createSalesOrder = async (data: SalesOrderDTO): Promise<SalesOrder>
 
     if (itemsError) throw itemsError;
 
+    try {
+      await logCreate(ENTITY_TYPES.SALES_ORDER, order.id, {
+        order_no: order.order_no || orderNo,
+        contact_id: order.contact_id || sanitizedData.contact_id,
+        grand_total: order.grand_total || grandTotal,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
     return {
       ...order,
       items: (itemRows as SalesOrderItem[]) || [],
@@ -401,6 +420,16 @@ export const updateSalesOrder = async (
         .insert(sanitizedItems.map(item => mapOrderItemPayload(item, id)));
     }
 
+    try {
+      const updatedFields = [
+        ...Object.keys(updatePayload),
+        ...(sanitizedItems ? ['items'] : []),
+      ];
+      await logUpdate(ENTITY_TYPES.SALES_ORDER, id, { updated_fields: updatedFields });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
     return getSalesOrder(id);
   } catch (err) {
     console.error('Error updating sales order:', err);
@@ -428,6 +457,17 @@ export const confirmSalesOrder = async (id: string): Promise<SalesOrder | null> 
         approved_at: new Date().toISOString(),
       })
       .eq('id', id);
+
+    try {
+      await logStatusChange(
+        ENTITY_TYPES.SALES_ORDER,
+        id,
+        SalesOrderStatus.PENDING,
+        SalesOrderStatus.CONFIRMED
+      );
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
 
     return getSalesOrder(id);
   } catch (err) {
@@ -473,6 +513,14 @@ export const deleteSalesOrder = async (id: string): Promise<boolean> => {
       .eq('id', id);
 
     if (error) throw error;
+
+    try {
+      await logDelete(ENTITY_TYPES.SALES_ORDER, id, {
+        order_no: order.order_no,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
     return true;
   } catch (err) {
     console.error('Error deleting sales order:', err);
@@ -519,7 +567,17 @@ export const restoreSalesOrder = async (id: string): Promise<SalesOrder | null> 
       .eq('id', id);
 
     if (error) throw error;
-    return getSalesOrder(id);
+    const restored = await getSalesOrder(id);
+    if (restored) {
+      try {
+        await logRestore(ENTITY_TYPES.SALES_ORDER, id, {
+          order_no: restored.order_no,
+        });
+      } catch (error) {
+        console.error('Failed to log activity:', error);
+      }
+    }
+    return restored;
   } catch (err) {
     console.error('Error restoring sales order:', err);
     return null;
@@ -595,6 +653,14 @@ export const convertToDocument = async (orderId: string): Promise<OrderSlip | In
     .from('sales_orders')
     .update({ status: SalesOrderStatus.CONVERTED_TO_DOCUMENT })
     .eq('id', orderId);
+
+  try {
+    await logActivity('CONVERT_TO_DOCUMENT', ENTITY_TYPES.SALES_ORDER, orderId, {
+      document_type: typeToUse,
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+  }
 
   return document;
 };

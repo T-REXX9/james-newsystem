@@ -8,6 +8,7 @@ import ValidationSummary from './ValidationSummary';
 import FieldHelp from './FieldHelp';
 import { validateRequired } from '../utils/formValidation';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { useToast } from './ToastProvider';
 
 // Inline StatusBadge if generic one is not suitable for POs, but I'll use simple spans for now to be safe, or try to use the imported one if generic. 
 // I'll stick to my own badge logic or reuse if I knew it works. I'll use my own for safety.
@@ -28,6 +29,7 @@ interface PurchaseOrderViewProps {
 const PAGE_SIZE = 10;
 
 const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) => {
+  const { addToast } = useToast();
   // List State
   const [orders, setOrders] = useState<PurchaseOrderWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,8 +149,20 @@ const PurchaseOrderView: React.FC<PurchaseOrderViewProps> = ({ initialPOId }) =>
       const fullPO = await purchaseOrderService.getPurchaseOrderById(newPO.id);
       setSelectedPO(fullPO as unknown as PurchaseOrderWithDetails);
       setIsCreating(false);
+      addToast({ 
+        type: 'success', 
+        title: 'Purchase order created',
+        description: 'Purchase order has been submitted successfully.',
+        durationMs: 4000,
+      });
     } catch (err: any) {
       setSubmitError(parseSupabaseError(err, 'purchase order'));
+      addToast({ 
+        type: 'error', 
+        title: 'Unable to create purchase order',
+        description: parseSupabaseError(err, 'purchase order'),
+        durationMs: 6000,
+      });
     }
   };
 

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { RecycleBinItem, RecycleBinItemType } from '../types';
+import { ENTITY_TYPES, logActivity, logRestore } from './activityLogService';
 
 /**
  * Get all recycle bin items (Owner/Developer only)
@@ -143,6 +144,12 @@ export const restoreItem = async (itemType: RecycleBinItemType, itemId: string):
 
     if (updateError) throw updateError;
 
+    try {
+      await logRestore(resolveEntityType(itemType), itemId, { restored_from: 'recycle_bin' });
+    } catch (logError) {
+      console.error('Failed to log activity:', logError);
+    }
+
     return true;
   } catch (err) {
     console.error('Error restoring item:', err);
@@ -209,6 +216,14 @@ export const permanentlyDeleteItem = async (itemType: RecycleBinItemType, itemId
         await supabase.from('notifications').delete().eq('id', itemId);
         break;
       // No action for COMMENT as it's handled differently
+    }
+
+    try {
+      await logActivity('PERMANENT_DELETE', resolveEntityType(itemType), itemId, {
+        warning: 'irreversible',
+      });
+    } catch (logError) {
+      console.error('Failed to log activity:', logError);
     }
 
     return true;
@@ -290,5 +305,24 @@ const getTableNameForItemType = (itemType: RecycleBinItemType): string | null =>
       return 'notifications';
     default:
       return null;
+  }
+};
+
+const resolveEntityType = (itemType: RecycleBinItemType): string => {
+  switch (itemType) {
+    case RecycleBinItemType.ORDER:
+      return ENTITY_TYPES.SALES_ORDER;
+    case RecycleBinItemType.INQUIRY:
+      return ENTITY_TYPES.SALES_INQUIRY;
+    case RecycleBinItemType.ORDERSLIP:
+      return ENTITY_TYPES.ORDER_SLIP;
+    case RecycleBinItemType.INVOICE:
+      return ENTITY_TYPES.INVOICE;
+    case RecycleBinItemType.PRODUCT:
+      return ENTITY_TYPES.PRODUCT;
+    case RecycleBinItemType.CONTACT:
+      return ENTITY_TYPES.CONTACT;
+    default:
+      return String(itemType);
   }
 };
