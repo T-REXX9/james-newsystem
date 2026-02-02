@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Sun, Moon } from 'lucide-react';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
+import { logAuth } from '../services/activityLogService';
 
 export default function Login() {
   const { addToast } = useToast();
@@ -85,6 +86,11 @@ export default function Login() {
         type: 'success', 
         text: 'Account created! You can now sign in.' 
       });
+      try {
+        await logAuth('SIGNUP', { email: getEmail(formData.email) });
+      } catch (logError) {
+        console.error('Failed to log activity:', logError);
+      }
       addToast({
         type: 'success',
         title: 'Account created',
@@ -120,6 +126,11 @@ export default function Login() {
         // Success: The supabase client 'onAuthStateChange' event will fire,
         // causing App.tsx to update the session state and remove this component.
         // We keep loading=true to prevent the user from interacting while the swap happens.
+        try {
+          await logAuth('LOGIN', { email: getEmail(formData.email) });
+        } catch (logError) {
+          console.error('Failed to log activity:', logError);
+        }
         addToast({
           type: 'success',
           title: 'Welcome back!',

@@ -14,6 +14,13 @@ import {
 } from '../purchaseOrderTypes';
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
+import {
+    ENTITY_TYPES,
+    logCreate,
+    logDelete,
+    logStatusChange,
+    logUpdate
+} from './activityLogService';
 
 // Suppressing strict type checks for Supabase query chains due to complexity/depth limits
 const purchaseOrderSanitizationConfig: SanitizationConfig<PurchaseOrderInsert> = {
@@ -94,6 +101,15 @@ export const purchaseOrderService = {
                 .select()
                 .single();
             if (error) throw error;
+            try {
+                await logCreate(ENTITY_TYPES.PURCHASE_ORDER, data.id, {
+                    po_number: data.po_number,
+                    supplier_id: data.supplier_id,
+                    grand_total: data.grand_total,
+                });
+            } catch (logError) {
+                console.error('Failed to log activity:', logError);
+            }
             return data as unknown as PurchaseOrder;
         } catch (err) {
             console.error('Error creating purchase order:', err);
@@ -115,6 +131,13 @@ export const purchaseOrderService = {
                 .select()
                 .single();
             if (error) throw error;
+            try {
+                await logUpdate(ENTITY_TYPES.PURCHASE_ORDER, id, {
+                    updated_fields: Object.keys(sanitizedUpdates),
+                });
+            } catch (logError) {
+                console.error('Failed to log activity:', logError);
+            }
             return data as unknown as PurchaseOrder;
         } catch (err) {
             console.error('Error updating purchase order:', err);
@@ -123,11 +146,23 @@ export const purchaseOrderService = {
     },
 
     async deletePurchaseOrder(id: string): Promise<void> {
+        const { data: existing } = await supabase
+            .from('purchase_orders')
+            .select('po_number')
+            .eq('id', id)
+            .single();
         const { error } = await supabase
             .from('purchase_orders')
             .delete()
             .eq('id', id);
         if (error) throw error;
+        try {
+            await logDelete(ENTITY_TYPES.PURCHASE_ORDER, id, {
+                po_number: existing?.po_number ?? null,
+            });
+        } catch (logError) {
+            console.error('Failed to log activity:', logError);
+        }
     },
 
     // --- Purchase Order Items ---
@@ -302,6 +337,16 @@ export const createPurchaseOrder = async (data: PurchaseOrderInsert & { items?: 
         }
     }
 
+    try {
+        await logCreate(ENTITY_TYPES.PURCHASE_ORDER, created.id, {
+            po_number: created.po_number,
+            supplier_id: created.supplier_id,
+            grand_total: created.grand_total,
+        });
+    } catch (logError) {
+        console.error('Failed to log activity:', logError);
+    }
+
     return await getPurchaseOrder(created.id);
 };
 
@@ -351,6 +396,16 @@ export const updatePurchaseOrder = async (
         if (itemsError) throw itemsError;
     }
 
+    try {
+        const updatedFields = [
+            ...Object.keys(poUpdates),
+            ...(items.length > 0 ? ['items'] : []),
+        ];
+        await logUpdate(ENTITY_TYPES.PURCHASE_ORDER, id, { updated_fields: updatedFields });
+    } catch (logError) {
+        console.error('Failed to log activity:', logError);
+    }
+
     return updated ? await getPurchaseOrder(id) : null;
 };
 
@@ -388,6 +443,17 @@ export const markAsDelivered = async (id: string) => {
 
     const { createInventoryLogFromPO } = await import('./inventoryLogService');
     await createInventoryLogFromPO(id, user.id);
+
+    try {
+        await logStatusChange(
+            ENTITY_TYPES.PURCHASE_ORDER,
+            id,
+            existing.status || 'ordered',
+            'delivered'
+        );
+    } catch (logError) {
+        console.error('Failed to log activity:', logError);
+    }
 
     return await getPurchaseOrder(id);
 };

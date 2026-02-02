@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import type { InventoryLog, InventoryLogFilters, InventoryLogWithProduct, PurchaseOrder, StockAdjustment, Invoice, OrderSlip } from '../types';
+import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogService';
 
 // Helper type for Supabase query results when table is not in generated types
 type SupabaseAnyTable = ReturnType<typeof supabase.from>;
@@ -86,6 +87,17 @@ export async function createInventoryLog(
     throw error;
   }
 
+  try {
+    await logCreate(ENTITY_TYPES.INVENTORY_LOG, newLog.id, {
+      transaction_type: newLog.transaction_type,
+      reference_no: newLog.reference_no,
+      qty_in: newLog.qty_in,
+      qty_out: newLog.qty_out,
+    });
+  } catch (logError) {
+    console.error('Failed to log activity:', logError);
+  }
+
   return newLog as InventoryLog;
 }
 
@@ -111,6 +123,14 @@ export async function updateInventoryLog(
     throw error;
   }
 
+  try {
+    await logUpdate(ENTITY_TYPES.INVENTORY_LOG, id, {
+      updated_fields: Object.keys(updates),
+    });
+  } catch (logError) {
+    console.error('Failed to log activity:', logError);
+  }
+
   return data as InventoryLog;
 }
 
@@ -129,6 +149,12 @@ export async function deleteInventoryLog(id: string): Promise<boolean> {
   if (error) {
     console.error('Error deleting inventory log:', error);
     throw error;
+  }
+
+  try {
+    await logDelete(ENTITY_TYPES.INVENTORY_LOG, id, { reason: 'soft_delete' });
+  } catch (logError) {
+    console.error('Failed to log activity:', logError);
   }
 
   return true;

@@ -71,6 +71,7 @@ import ProfitThresholdSettings from './components/ProfitThresholdSettings';
 import AIMessageTemplatesView from './components/AIMessageTemplatesView';
 
 import { supabase } from './lib/supabaseClient';
+import { logAuth } from './services/activityLogService';
 import { UserProfile } from './types';
 import { Filter, Loader2, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
@@ -202,6 +203,11 @@ const App: React.FC = () => {
   };
 
   const handleSignOut = async () => {
+    try {
+      await logAuth('LOGOUT');
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
     await supabase.auth.signOut();
     setSession(null);
     setUserProfile(null);

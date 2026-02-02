@@ -1,6 +1,15 @@
 import { supabase } from '../lib/supabaseClient';
 import { OrderSlip, OrderSlipDTO, OrderSlipItem, OrderSlipStatus, RecycleBinItemType, SalesOrderStatus } from '../types';
 import { createInventoryLogFromOrderSlip } from './inventoryLogService';
+import {
+  ENTITY_TYPES,
+  logActivity,
+  logCreate,
+  logDelete,
+  logRestore,
+  logStatusChange,
+  logUpdate,
+} from './activityLogService';
 
 const generateSequence = () => String(Math.floor(Math.random() * 100000)).padStart(5, '0');
 
@@ -105,6 +114,15 @@ export const createOrderSlip = async (data: OrderSlipDTO): Promise<OrderSlip> =>
       .select();
 
     if (itemsError) throw itemsError;
+
+    try {
+      await logCreate(ENTITY_TYPES.ORDER_SLIP, slip.id, {
+        slip_no: slip.slip_no || slipNo,
+        grand_total: slip.grand_total || grandTotal,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
 
     return {
       ...slip,
@@ -244,6 +262,16 @@ export const updateOrderSlip = async (
         .insert(updates.items.map(item => orderSlipItemPayload(item, id)));
     }
 
+    try {
+      const updatedFields = [
+        ...Object.keys(payload),
+        ...(updates.items ? ['items'] : []),
+      ];
+      await logUpdate(ENTITY_TYPES.ORDER_SLIP, id, { updated_fields: updatedFields });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
     return getOrderSlip(id);
   } catch (err) {
     console.error('Error updating order slip:', err);
@@ -280,6 +308,17 @@ export const finalizeOrderSlip = async (id: string): Promise<OrderSlip | null> =
       // This might require manual intervention or a retry mechanism for logs in a real prod env
     }
 
+    try {
+      await logStatusChange(
+        ENTITY_TYPES.ORDER_SLIP,
+        id,
+        OrderSlipStatus.DRAFT,
+        OrderSlipStatus.FINALIZED
+      );
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
     return updatedSlip;
   } catch (err) {
     console.error('Error finalizing order slip:', err);
@@ -301,7 +340,16 @@ export const printOrderSlip = async (id: string): Promise<OrderSlip | null> => {
       })
       .eq('id', id);
 
-    return getOrderSlip(id);
+    const slip = await getOrderSlip(id);
+    try {
+      await logActivity('PRINT', ENTITY_TYPES.ORDER_SLIP, id, {
+        slip_no: slip?.slip_no ?? null,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
+    return slip;
   } catch (err) {
     console.error('Error printing order slip:', err);
     throw err;
@@ -342,6 +390,12 @@ export const deleteOrderSlip = async (id: string): Promise<boolean> => {
       .eq('id', id);
 
     if (error) throw error;
+
+    try {
+      await logDelete(ENTITY_TYPES.ORDER_SLIP, id, { slip_no: slip.slip_no });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
     return true;
   } catch (err) {
     console.error('Error deleting order slip:', err);
@@ -388,7 +442,15 @@ export const restoreOrderSlip = async (id: string): Promise<OrderSlip | null> =>
       .eq('id', id);
 
     if (error) throw error;
-    return getOrderSlip(id);
+    const restored = await getOrderSlip(id);
+    if (restored) {
+      try {
+        await logRestore(ENTITY_TYPES.ORDER_SLIP, id, { slip_no: restored.slip_no });
+      } catch (error) {
+        console.error('Failed to log activity:', error);
+      }
+    }
+    return restored;
   } catch (err) {
     console.error('Error restoring order slip:', err);
     return null;

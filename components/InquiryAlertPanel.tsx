@@ -79,13 +79,13 @@ const InquiryAlertPanel: React.FC<InquiryAlertPanelProps> = ({ currentUser, onVi
     return (
         <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 rounded-2xl border-2 border-amber-200 dark:border-amber-800 shadow-lg">
             {/* Header */}
-            <div className="px-5 py-4 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-amber-500 rounded-lg">
-                        <AlertTriangle className="w-5 h-5 text-white" />
+                    <div className="p-1.5 bg-amber-500 rounded-lg">
+                        <AlertTriangle className="w-4 h-4 text-white" />
                     </div>
                     <div>
-                        <h3 className="text-base font-bold text-slate-800 dark:text-white">
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-white">
                             Price Alert: High Inquiry, Low Conversion
                         </h3>
                         <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
@@ -104,16 +104,16 @@ const InquiryAlertPanel: React.FC<InquiryAlertPanelProps> = ({ currentUser, onVi
             </div>
 
             {/* Alert List */}
-            <div className="p-5 space-y-3 max-h-96 overflow-y-auto">
+            <div className="p-4 grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
                 {alerts.map((alert) => (
                     <div
                         key={alert.item_code}
-                        className="bg-white dark:bg-slate-900 rounded-xl border border-amber-200 dark:border-amber-800 p-4 shadow-sm hover:shadow-md transition-shadow"
+                        className="bg-white dark:bg-slate-900 rounded-xl border border-amber-200 dark:border-amber-800 p-3 shadow-sm hover:shadow-md transition-shadow h-full"
                     >
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex-1 min-w-0">
                                 {/* Product Info */}
-                                <div className="mb-3">
+                                <div className="mb-2.5">
                                     <h4 className="font-bold text-slate-800 dark:text-white text-sm truncate">
                                         {alert.description || 'Unknown Product'}
                                     </h4>
@@ -123,7 +123,7 @@ const InquiryAlertPanel: React.FC<InquiryAlertPanelProps> = ({ currentUser, onVi
                                 </div>
 
                                 {/* Stats Grid */}
-                                <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div className="grid grid-cols-2 gap-1.5 mb-2.5">
                                     <div className="flex items-center gap-1.5 text-xs">
                                         <TrendingDown className="w-3.5 h-3.5 text-red-500" />
                                         <span className="text-slate-600 dark:text-slate-400">

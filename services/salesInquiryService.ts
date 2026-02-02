@@ -10,6 +10,14 @@ import {
 import { createFromInquiry as createSalesOrderFromInquiry } from './salesOrderService';
 import { sanitizeArray, sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
+import {
+  ENTITY_TYPES,
+  logActivity,
+  logCreate,
+  logDelete,
+  logStatusChange,
+  logUpdate,
+} from './activityLogService';
 
 /**
  * Generate a unique inquiry number with format INQYYYYMMDD-XXXXX
@@ -126,6 +134,16 @@ export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesIn
 
     if (itemsError) throw itemsError;
 
+    try {
+      await logCreate(ENTITY_TYPES.SALES_INQUIRY, inquiry.id, {
+        inquiry_no: inquiry.inquiry_no || inquiryNo,
+        contact_id: inquiry.contact_id || sanitizedData.contact_id,
+        grand_total: inquiry.grand_total,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
     return {
       ...inquiry,
       items: (items || []) as any,
@@ -212,6 +230,21 @@ export const updateInquiryStatus = async (id: string, status: SalesInquiryStatus
       .from('sales_inquiries')
       .update({ status })
       .eq('id', id);
+
+    try {
+      if (inquiry.status !== status) {
+        await logStatusChange(
+          ENTITY_TYPES.SALES_INQUIRY,
+          id,
+          inquiry.status,
+          status
+        );
+      } else {
+        await logUpdate(ENTITY_TYPES.SALES_INQUIRY, id, { updated_fields: ['status'] });
+      }
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
   } catch (err) {
     console.error('Error updating inquiry status:', err);
     throw err;
@@ -234,6 +267,14 @@ export const approveInquiry = async (id: string): Promise<SalesInquiry | null> =
   }
 
   await updateInquiryStatus(id, SalesInquiryStatus.APPROVED);
+  try {
+    await logActivity('APPROVE', ENTITY_TYPES.SALES_INQUIRY, id, {
+      old_status: SalesInquiryStatus.DRAFT,
+      new_status: SalesInquiryStatus.APPROVED,
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+  }
   return getSalesInquiry(id);
 };
 
@@ -254,6 +295,14 @@ export const convertToOrder = async (inquiryId: string): Promise<SalesOrder> => 
 
   const order = await createSalesOrderFromInquiry(inquiryId);
   await updateInquiryStatus(inquiryId, SalesInquiryStatus.CONVERTED_TO_ORDER);
+  try {
+    await logActivity('CONVERT_TO_ORDER', ENTITY_TYPES.SALES_INQUIRY, inquiryId, {
+      order_id: order.id,
+      order_no: order.order_no,
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
+  }
   return order;
 };
 
@@ -292,6 +341,14 @@ export const deleteSalesInquiry = async (id: string): Promise<boolean> => {
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
         permanent_delete_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
+
+    try {
+      await logDelete(ENTITY_TYPES.SALES_INQUIRY, id, {
+        inquiry_no: inquiry.inquiry_no,
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
 
     return true;
   } catch (err) {

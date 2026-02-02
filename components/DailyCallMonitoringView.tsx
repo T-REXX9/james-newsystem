@@ -277,6 +277,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [showContactDetails, setShowContactDetails] = useState(false);
 
+  const handleOpenSalesInquiry = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'salesinquiry' } }));
+  }, []);
+
   const handleOpenPatientChart = (contactId: string) => {
     setSelectedClientId(contactId);
     setShowPatientChart(true);
@@ -930,6 +934,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
+          <button
+            onClick={handleOpenSalesInquiry}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            title="Open Sales Inquiry"
+          >
+            <FileText className="w-4 h-4" />
+            Sales Inquiry
+          </button>
           {callForwardingEnabled ? (
             <button
               onClick={handleDisableCallForwarding}
@@ -1214,7 +1226,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                     <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-left text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '10%' }}>
                       Priority
                     </th>
-                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '6%' }}>
+                    <th className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center text-[11px] font-semibold uppercase tracking-wide`} style={{ width: '160px' }}>
                       Actions
                     </th>
                   </tr>
@@ -1268,37 +1280,40 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                           {Math.round(row.priority)}
                         </span>
                       </td>
-                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} align-middle`}>
+                        <div className="flex items-center justify-center gap-2.5">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleCallContact(row.contact);
                             }}
-                            className={`inline-flex items-center justify-center p-1.5 rounded hover:bg-brand-blue hover:text-white transition-colors text-slate-600 dark:text-slate-300 leading-none shrink-0 ${densityConfig.iconSize}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-brand-blue/20 hover:text-brand-blue active:scale-95 active:bg-brand-blue/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 leading-none shrink-0"
                             title="Call"
+                            aria-label={`Call ${row.contact.company}`}
                           >
-                            <Phone className={densityConfig.iconSize} />
+                            <Phone className="w-5 h-5" />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenSMSModal(row.contact);
                             }}
-                            className={`inline-flex items-center justify-center p-1.5 rounded hover:bg-emerald-500 hover:text-white transition-colors text-slate-600 dark:text-slate-300 leading-none shrink-0 ${densityConfig.iconSize}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 active:scale-95 active:bg-emerald-200 dark:active:bg-emerald-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 leading-none shrink-0"
                             title="SMS"
+                            aria-label={`Send SMS to ${row.contact.company}`}
                           >
-                            <MessageSquare className={densityConfig.iconSize} />
+                            <MessageSquare className="w-5 h-5" />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenPatientChart(row.contact.id);
                             }}
-                            className={`inline-flex items-center justify-center p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-300 leading-none shrink-0 ${densityConfig.iconSize}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white active:scale-95 active:bg-slate-300/80 dark:active:bg-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/40 leading-none shrink-0"
                             title="Details"
+                            aria-label={`Open details for ${row.contact.company}`}
                           >
-                            <ClipboardList className={densityConfig.iconSize} />
+                            <ClipboardList className="w-5 h-5" />
                           </button>
                         </div>
                       </td>
@@ -1442,6 +1457,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               >
                 <Mail className="w-4 h-4" />
                 Email
+              </button>
+              <button
+                onClick={handleOpenSalesInquiry}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                Sales Inquiry
               </button>
             </div>
             <div className="space-y-3">

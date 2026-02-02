@@ -13,6 +13,7 @@ import {
 } from '../receiving.types';
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { ENTITY_TYPES, logCreate, logDelete, logStatusChange, logUpdate } from './activityLogService';
 
 const receivingReportSanitizationConfig: SanitizationConfig<ReceivingReportInsert> = {
     rr_no: { type: 'string', placeholder: 'n/a', required: true },
@@ -102,6 +103,15 @@ export const receivingService = {
                 .select()
                 .single();
             if (error) throw error;
+            try {
+                await logCreate(ENTITY_TYPES.RECEIVING_STOCK, data.id, {
+                    rr_no: data.rr_no,
+                    supplier_id: data.supplier_id,
+                    grand_total: data.grand_total,
+                });
+            } catch (logError) {
+                console.error('Failed to log activity:', logError);
+            }
             return data as unknown as ReceivingReport;
         } catch (err) {
             console.error('Error creating receiving report:', err);
@@ -123,6 +133,13 @@ export const receivingService = {
                 .select()
                 .single();
             if (error) throw error;
+            try {
+                await logUpdate(ENTITY_TYPES.RECEIVING_STOCK, id, {
+                    updated_fields: Object.keys(sanitizedUpdates),
+                });
+            } catch (logError) {
+                console.error('Failed to log activity:', logError);
+            }
             return data as unknown as ReceivingReport;
         } catch (err) {
             console.error('Error updating receiving report:', err);
@@ -131,16 +148,43 @@ export const receivingService = {
     },
 
     async deleteReceivingReport(id: string): Promise<void> {
+        const { data: existing } = await supabase
+            .from('receiving_reports')
+            .select('rr_no')
+            .eq('id', id)
+            .single();
         const { error } = await supabase
             .from('receiving_reports')
             .delete()
             .eq('id', id);
         if (error) throw error;
+        try {
+            await logDelete(ENTITY_TYPES.RECEIVING_STOCK, id, {
+                rr_no: existing?.rr_no ?? null,
+            });
+        } catch (logError) {
+            console.error('Failed to log activity:', logError);
+        }
     },
 
     async finalizeReceivingReport(id: string): Promise<void> {
+        const { data: existing } = await supabase
+            .from('receiving_reports')
+            .select('status')
+            .eq('id', id)
+            .single();
         const { error } = await supabase.rpc('finalize_receiving_report', { p_rr_id: id });
         if (error) throw error;
+        try {
+            await logStatusChange(
+                ENTITY_TYPES.RECEIVING_STOCK,
+                id,
+                existing?.status || 'DRAFT',
+                'FINALIZED'
+            );
+        } catch (logError) {
+            console.error('Failed to log activity:', logError);
+        }
     },
 
     // --- Receiving Report Items ---

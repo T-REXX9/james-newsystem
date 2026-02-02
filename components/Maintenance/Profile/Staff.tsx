@@ -3,6 +3,7 @@ import { GenericMaintenanceTable } from '../GenericMaintenanceTable';
 import { supabase } from '../../../lib/supabaseClient';
 import { parseSupabaseError } from '../../../utils/errorHandler';
 import { useToast } from '../../ToastProvider';
+import { ENTITY_TYPES, logActivity } from '../../../services/activityLogService';
 
 interface Profile {
     id: string;
@@ -49,6 +50,31 @@ const StaffForm: React.FC<{
                     .update(formData)
                     .eq('id', initialData.id);
                 if (error) throw error;
+                const updatedFields = Object.entries(formData).reduce<string[]>((acc, [key, value]) => {
+                    const originalValue = initialData[key as keyof Profile];
+                    if (value !== undefined && value !== originalValue) {
+                        acc.push(key);
+                    }
+                    return acc;
+                }, []);
+                try {
+                    await logActivity('UPDATE_STAFF', ENTITY_TYPES.USER_PROFILE, initialData.id, {
+                        updated_fields: updatedFields,
+                        role: formData.role || initialData.role,
+                    });
+                } catch (logError) {
+                    console.error('Failed to log activity:', logError);
+                }
+                if (initialData.role && formData.role && initialData.role !== formData.role) {
+                    try {
+                        await logActivity('CHANGE_ROLE', ENTITY_TYPES.USER_PROFILE, initialData.id, {
+                            old_role: initialData.role,
+                            new_role: formData.role,
+                        });
+                    } catch (logError) {
+                        console.error('Failed to log activity:', logError);
+                    }
+                }
             } else {
                 // Note: Creating a profile usually happens via Auth Sign Up. 
                 // Direct insert might fail if no auth user associated, but allowing for now or this could be "Edit Only" page.

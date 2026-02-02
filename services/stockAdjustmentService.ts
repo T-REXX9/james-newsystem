@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabaseClient';
 import type { StockAdjustment, StockAdjustmentDTO } from '../types';
 import { createInventoryLogFromStockAdjustment } from './inventoryLogService';
+import { ENTITY_TYPES, logCreate, logStatusChange } from './activityLogService';
 
 /**
  * Create a new Stock Adjustment
@@ -53,6 +54,15 @@ export async function createStockAdjustment(data: StockAdjustmentDTO): Promise<S
     // Rollback: delete the adjustment
     await supabase.from('stock_adjustments').delete().eq('id', adjustment.id);
     throw itemsError;
+  }
+
+  try {
+    await logCreate(ENTITY_TYPES.STOCK_ADJUSTMENT, adjustment.id, {
+      adjustment_no: adjustment.adjustment_no,
+      adjustment_type: adjustment.adjustment_type,
+    });
+  } catch (error) {
+    console.error('Failed to log activity:', error);
   }
 
   // Fetch the complete adjustment with items
@@ -119,6 +129,12 @@ export async function finalizeAdjustment(id: string): Promise<StockAdjustment | 
   if (adjustmentError || !adjustment) {
     console.error('Error finalizing stock adjustment:', adjustmentError);
     throw adjustmentError || new Error('Failed to finalize stock adjustment');
+  }
+
+  try {
+    await logStatusChange(ENTITY_TYPES.STOCK_ADJUSTMENT, id, 'draft', 'finalized');
+  } catch (error) {
+    console.error('Failed to log activity:', error);
   }
 
   // Create inventory logs

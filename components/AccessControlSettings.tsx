@@ -14,10 +14,12 @@ import {
 } from '../constants';
 import { Loader2, Shield, Save, CheckCircle, AlertTriangle, User, UserPlus, X } from 'lucide-react';
 import { useToast } from './ToastProvider';
+import { ENTITY_TYPES, logActivity } from '../services/activityLogService';
 
 const AccessControlSettings: React.FC = () => {
   const { addToast } = useToast();
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
+  const [originalProfiles, setOriginalProfiles] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
@@ -73,6 +75,7 @@ const AccessControlSettings: React.FC = () => {
     setIsLoading(true);
     const data = await fetchProfiles();
     setProfiles(data);
+    setOriginalProfiles(data);
     setIsLoading(false);
   };
 
@@ -109,8 +112,23 @@ const AccessControlSettings: React.FC = () => {
 
   const savePermissions = async (user: UserProfile) => {
     setSavingId(user.id);
+    const original = originalProfiles.find(profile => profile.id === user.id);
     try {
         await updateProfile(user.id, { access_rights: user.access_rights });
+        try {
+          await logActivity('UPDATE_ACCESS_RIGHTS', ENTITY_TYPES.USER_PROFILE, user.id, {
+            old_rights: original?.access_rights || [],
+            new_rights: user.access_rights || [],
+            role: user.role,
+          });
+        } catch (logError) {
+          console.error('Failed to log activity:', logError);
+        }
+        setOriginalProfiles(prev =>
+          prev.map(profile =>
+            profile.id === user.id ? { ...profile, access_rights: user.access_rights } : profile
+          )
+        );
         // Simulating delay for UX
         await new Promise(resolve => setTimeout(resolve, 500)); 
         addToast({ 

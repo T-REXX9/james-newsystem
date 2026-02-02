@@ -8,6 +8,7 @@ import {
 } from '../purchaseRequest.types';
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogService';
 
 const purchaseRequestSanitizationConfig: SanitizationConfig<CreatePRPayload> = {
     pr_number: { type: 'string', placeholder: 'n/a', required: true },
@@ -112,17 +113,26 @@ export const purchaseRequestService = {
                     .from('purchase_request_items')
                     .insert(itemsToInsert);
 
-                if (itemsError) {
-                    await supabase.from('purchase_requests').delete().eq('id', prData.id);
-                    throw itemsError;
-                }
+            if (itemsError) {
+                await supabase.from('purchase_requests').delete().eq('id', prData.id);
+                throw itemsError;
             }
-
-            return await this.getPurchaseRequestById(prData.id);
-        } catch (err) {
-            console.error('Error creating purchase request:', err);
-            throw new Error(parseSupabaseError(err, 'purchase request'));
         }
+
+        try {
+            await logCreate(ENTITY_TYPES.PURCHASE_REQUEST, prData.id, {
+                pr_number: prData.pr_number,
+                reference_no: prData.reference_no,
+            });
+        } catch (logError) {
+            console.error('Failed to log activity:', logError);
+        }
+
+        return await this.getPurchaseRequestById(prData.id);
+    } catch (err) {
+        console.error('Error creating purchase request:', err);
+        throw new Error(parseSupabaseError(err, 'purchase request'));
+    }
     },
 
     async updatePurchaseRequest(id: string, updates: Partial<PurchaseRequest>): Promise<void> {
@@ -137,6 +147,13 @@ export const purchaseRequestService = {
                 .update(sanitizedUpdates)
                 .eq('id', id);
             if (error) throw error;
+            try {
+                await logUpdate(ENTITY_TYPES.PURCHASE_REQUEST, id, {
+                    updated_fields: Object.keys(sanitizedUpdates),
+                });
+            } catch (logError) {
+                console.error('Failed to log activity:', logError);
+            }
         } catch (err) {
             console.error('Error updating purchase request:', err);
             throw new Error(parseSupabaseError(err, 'purchase request'));
@@ -144,11 +161,23 @@ export const purchaseRequestService = {
     },
 
     async deletePurchaseRequest(id: string): Promise<void> {
+        const { data: existing } = await supabase
+            .from('purchase_requests')
+            .select('pr_number')
+            .eq('id', id)
+            .single();
         const { error } = await supabase
             .from('purchase_requests')
             .delete()
             .eq('id', id);
         if (error) throw error;
+        try {
+            await logDelete(ENTITY_TYPES.PURCHASE_REQUEST, id, {
+                pr_number: existing?.pr_number ?? null,
+            });
+        } catch (logError) {
+            console.error('Failed to log activity:', logError);
+        }
     },
 
     // --- PR Items (Individual Management) ---
