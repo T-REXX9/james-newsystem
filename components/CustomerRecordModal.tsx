@@ -7,7 +7,6 @@ import {
     Clock,
     CreditCard,
     FileText,
-    Loader2,
     Mail,
     MapPin,
     MessageSquare,
@@ -17,6 +16,7 @@ import {
     User,
     X,
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import {
     fetchCallLogs,
     fetchIncidentReports,
@@ -322,7 +322,7 @@ const CustomerRecordModal: React.FC<CustomerRecordModalProps> = ({
 	                <div className="flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable] p-5">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
-                            <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+                            <CustomLoadingSpinner label="Loading" />
                         </div>
                     ) : (
                         <>

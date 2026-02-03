@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, ShoppingCart, Plus, Check } from 'lucide-react';
 import { UserProfile } from '../types';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import {
   fetchSuppliers,
   fetchPurchaseOrders,
@@ -257,7 +258,7 @@ const AddToPurchaseRequestModal: React.FC<AddToPurchaseRequestModalProps> = ({
 
               {isLoadingOptions ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
+                  <CustomLoadingSpinner label="Loading" />
                 </div>
               ) : mode === 'existing' ? (
                 <div>

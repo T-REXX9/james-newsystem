@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Package, Hash, Tag, DollarSign } from 'lucide-react';
+import { X, Package, Hash, Tag, DollarSign } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { SalesReportTransaction } from '../types';
 import { getTransactionDetails } from '../services/salesReportService';
 
@@ -108,7 +109,7 @@ const SalesReportDetailModal: React.FC<SalesReportDetailModalProps> = ({
 
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+                <CustomLoadingSpinner label="Loading" />
               </div>
             ) : items.length === 0 ? (
               <div className="text-center py-12 text-slate-500 dark:text-slate-400">

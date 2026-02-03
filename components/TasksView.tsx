@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Loader2, Plus, CheckCircle, Trash2, X } from 'lucide-react';
+import { Plus, CheckCircle, Trash2, X } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import AgentTasksList from './AgentTasksList';
 import { fetchTasks, createTask, updateTask, deleteTask, fetchProfiles } from '../services/supabaseService';
 import { Task, UserProfile } from '../types';
@@ -138,7 +139,7 @@ const TasksView: React.FC<TasksViewProps> = ({ currentUser, variant = 'full', ma
   if (isLoading) {
     return (
         <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+            <CustomLoadingSpinner label="Loading" />
         </div>
     );
   }

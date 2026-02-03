@@ -3,6 +3,7 @@ import { ReceivingReportWithDetails, RR_STATUS_COLORS } from '../../receiving.ty
 import { receivingService } from '../../services/receivingService';
 import { useToast } from '../ToastProvider';
 import { ArrowLeft, Printer, CheckCircle, Trash2, Calendar, User, FileText, Loader2, AlertCircle } from 'lucide-react';
+import CustomLoadingSpinner from '../CustomLoadingSpinner';
 
 interface ReceivingViewProps {
     rrId: string;
@@ -54,7 +55,9 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack }) => {
     if (loading) {
         return (
             <div className="h-full flex flex-col items-center justify-center p-20">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
+                <div className="mb-4">
+                    <CustomLoadingSpinner label="Loading" />
+                </div>
                 <p className="text-slate-500">Loading details...</p>
             </div>
         );

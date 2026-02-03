@@ -15,7 +15,6 @@ import {
   Plus,
   Search,
   ChevronRight,
-  Loader2,
   Clock3,
   Activity,
   BarChart3,
@@ -27,6 +26,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { fetchDeals, moveDealToStage, deleteDeal } from '../services/supabaseService';
 import { PIPELINE_COLUMNS } from '../constants';
 import { PipelineDeal, UserProfile } from '../types';
@@ -386,7 +386,7 @@ const PipelineView: React.FC<PipelineViewProps> = ({ currentUser }) => {
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center bg-gray-50 dark:bg-slate-950 w-full">
-        <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+        <CustomLoadingSpinner label="Loading" />
       </div>
     );
   }

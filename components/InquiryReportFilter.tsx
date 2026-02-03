@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { fetchContacts } from '../services/supabaseService';
 import { Contact, InquiryReportFilters } from '../types';
-import { FileText, Calendar, Users, ArrowRight, Loader2, Search } from 'lucide-react';
+import { FileText, Calendar, Users, ArrowRight, Search } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import InquiryReportView from './InquiryReportView';
 
 const InquiryReportFilter: React.FC = () => {
@@ -77,7 +78,7 @@ const InquiryReportFilter: React.FC = () => {
     if (isLoading) {
         return (
             <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-                <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
+                <CustomLoadingSpinner label="Loading" />
             </div>
         );
     }

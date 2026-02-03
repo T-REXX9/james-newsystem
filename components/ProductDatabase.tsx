@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, Plus, Edit2, Trash2, Filter, Package, AlertCircle, X, Check, Loader2, Save, Eye, EyeOff, Archive, TrendingUp, TrendingDown, Settings, DollarSign, Percent
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { Product, UserProfile } from '../types';
 import { fetchProducts, createProduct, updateProduct, deleteProduct, bulkUpdateProducts } from '../services/supabaseService';
 import { fetchProductMovementClassifications } from '../services/inventoryMovementService';
@@ -352,7 +353,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({ currentUser }) => {
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+        <CustomLoadingSpinner label="Loading" />
       </div>
     );
   }

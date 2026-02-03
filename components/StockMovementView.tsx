@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Search, Calendar, Filter, RefreshCw, Package, ArrowRight, ArrowLeft,
-  ChevronDown, Loader2, AlertCircle, FileText, X
+  ChevronDown, AlertCircle, FileText, X
 } from 'lucide-react';
 import type { Product, InventoryLog, InventoryLogWithProduct, InventoryLogFilters } from '../types';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { fetchProducts } from '../services/supabaseService';
 import { getInventoryLogsByItem, fetchInventoryLogs } from '../services/inventoryLogService';
 import { useRealtimeList } from '../hooks/useRealtimeList';
@@ -395,8 +396,8 @@ const StockMovementView: React.FC = () => {
               </div>
             ) : isLoadingLogs ? (
               <div className="flex-1 flex items-center justify-center">
-                <div className="flex items-center gap-3 text-slate-500">
-                  <Loader2 className="w-6 h-6 animate-spin" />
+                <div className="flex flex-col items-center gap-3 text-slate-500">
+                  <CustomLoadingSpinner label="Loading" />
                   <span>Loading movement logs...</span>
                 </div>
               </div>

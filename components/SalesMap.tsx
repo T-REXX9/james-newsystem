@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, GeoJSON, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Loader2, AlertCircle, Map, Users, Sparkles, Zap } from 'lucide-react';
+import { AlertCircle, Map, Users, Sparkles, Zap } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import SalesMapSidebar from './SalesMapSidebar';
 
 // Using the valid GeoJSON Source we found
@@ -250,7 +251,9 @@ const SalesMap = () => {
                             <div className="absolute inset-0 flex flex-col items-center justify-center z-[500] bg-white/90 backdrop-blur-sm">
                                 <div className="relative">
                                     <div className="absolute inset-0 bg-indigo-200 rounded-full blur-xl animate-pulse" />
-                                    <Loader2 className="relative h-12 w-12 text-indigo-500 animate-spin mb-4" />
+                                    <div className="relative mb-4">
+                                        <CustomLoadingSpinner label="Loading" />
+                                    </div>
                                 </div>
                                 <span className="text-slate-600 font-medium">Loading Topology...</span>
                                 <div className="flex gap-1 mt-3">

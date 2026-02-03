@@ -3,6 +3,7 @@ import { ReceivingReportInsert, ReceivingReportItemInsert, Supplier } from '../.
 import { receivingService } from '../../services/receivingService';
 import { useToast } from '../ToastProvider';
 import { ArrowLeft, Save, Plus, Trash2, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
+import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import ProductAutocomplete from '../ProductAutocomplete';
 import { Product } from '../../types'; // Import from main types for compatibility with ProductAutocomplete
 import ValidationSummary from '../ValidationSummary';
@@ -197,7 +198,9 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
     if (initializing) {
         return (
             <div className="flex flex-col items-center justify-center p-20">
-                <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
+                <div className="mb-4">
+                    <CustomLoadingSpinner label="Loading" />
+                </div>
                 <p className="text-slate-500">Initializing form...</p>
             </div>
         );

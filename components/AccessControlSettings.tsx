@@ -13,6 +13,7 @@ import {
   MODULE_ID_ALIASES,
 } from '../constants';
 import { Loader2, Shield, Save, CheckCircle, AlertTriangle, User, UserPlus, X } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { useToast } from './ToastProvider';
 import { ENTITY_TYPES, logActivity } from '../services/activityLogService';
 
@@ -243,7 +244,7 @@ const AccessControlSettings: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+        <CustomLoadingSpinner label="Loading" />
       </div>
     );
   }

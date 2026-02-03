@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle, Loader2, Mail, MessageSquare, Phone, Users } from 'lucide-react';
+import { CheckCircle, Mail, MessageSquare, Phone, Users } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import MetricsCard from './MetricsCard';
 import TasksView from './TasksView';
 import AgentCallActivity from './AgentCallActivity';
@@ -147,7 +148,7 @@ const SalesAgentDashboard: React.FC<SalesAgentDashboardProps> = ({ currentUser }
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full p-6">
-        <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+        <CustomLoadingSpinner label="Loading" />
       </div>
     );
   }

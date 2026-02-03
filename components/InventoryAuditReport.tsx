@@ -11,6 +11,7 @@ import {
   Search,
   Package,
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { generateInventoryAuditReport, fetchProducts } from '../services/inventoryAuditService';
 import type {
   InventoryAuditFilters,
@@ -267,7 +268,7 @@ const InventoryAuditReport: React.FC = () => {
       {isLoading && (
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
+            <CustomLoadingSpinner label="Loading" />
             <p className="text-slate-500 dark:text-slate-400">Loading audit records...</p>
           </div>
         </div>

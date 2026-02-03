@@ -73,9 +73,10 @@ import AIMessageTemplatesView from './components/AIMessageTemplatesView';
 import { supabase } from './lib/supabaseClient';
 import { logAuth } from './services/activityLogService';
 import { UserProfile } from './types';
-import { Filter, Loader2, Lock } from 'lucide-react';
+import { Filter, Lock } from 'lucide-react';
 import { ToastProvider } from './components/ToastProvider';
 import { NotificationProvider } from './components/NotificationProvider';
+import CustomLoadingSpinner from './components/CustomLoadingSpinner';
 import { AVAILABLE_APP_MODULES, DEFAULT_STAFF_ACCESS_RIGHTS, MODULE_ID_ALIASES } from './constants';
 
 const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_ALIASES).reduce(
@@ -651,7 +652,7 @@ const App: React.FC = () => {
       {/* Show loading spinner when app is loading OR when session exists but profile is still being fetched */}
       {(appLoading || (session && !userProfile)) && (
         <div className="h-screen w-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950">
-          <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
+          <CustomLoadingSpinner label="Loading application" />
         </div>
       )}
       {!session && !appLoading && <Login />}
