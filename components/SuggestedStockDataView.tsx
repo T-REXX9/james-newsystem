@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { UserProfile } from '../types';
 import {
   fetchSuggestedStockSummary,
@@ -190,7 +191,7 @@ const SuggestedStockDataView: React.FC<SuggestedStockDataViewProps> = ({
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
-        <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
+        <CustomLoadingSpinner label="Loading" />
         <p className="mt-4 text-slate-500 dark:text-slate-400">Loading report data...</p>
       </div>
     );

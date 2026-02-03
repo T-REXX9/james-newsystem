@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   ChevronLeft,
-  Loader2,
   Printer,
   FileText,
   TrendingUp,
@@ -9,6 +8,7 @@ import {
   DollarSign,
   Users,
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { UserProfile, SalesReportData, SalesReportTransaction, CategoryTotal } from '../types';
 import { getSalesReportData } from '../services/salesReportService';
 import SalesReportDetailModal from './SalesReportDetailModal';
@@ -90,7 +90,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
           <div className="relative">
             <div className="absolute inset-0 bg-brand-blue blur-2xl opacity-15 animate-pulse rounded-full"></div>
             <div className="relative">
-              <Loader2 className="w-14 h-14 text-brand-blue animate-spin" />
+              <CustomLoadingSpinner label="Loading" />
             </div>
           </div>
           <div className="text-center space-y-2">

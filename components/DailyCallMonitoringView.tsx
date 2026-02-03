@@ -30,6 +30,7 @@ import {
   Users,
   X
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
 import PatientChartModal from './PatientChartModal';
@@ -898,7 +899,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full p-6">
-        <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+        <CustomLoadingSpinner label="Loading" />
       </div>
     );
   }

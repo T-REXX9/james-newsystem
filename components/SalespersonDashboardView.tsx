@@ -6,7 +6,6 @@ import {
     Building2,
     ChevronDown,
     Clock,
-    Loader2,
     MapPin,
     Phone,
     PhilippinePeso,
@@ -19,6 +18,7 @@ import {
     Users,
     UserX,
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import CustomerRecordModal from './CustomerRecordModal';
 import {
     fetchCallLogs,
@@ -268,7 +268,7 @@ const SalespersonDashboardView: React.FC<SalespersonDashboardViewProps> = ({
     if (loading) {
         return (
             <div className="flex items-center justify-center h-full p-6">
-                <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+                <CustomLoadingSpinner label="Loading" />
             </div>
         );
     }

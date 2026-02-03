@@ -7,7 +7,6 @@ import {
     ChevronLeft,
     ChevronDown,
     ChevronRight,
-    Loader2,
     FileText,
     LayoutList,
     List,
@@ -19,6 +18,7 @@ import {
     Clock,
     Sparkles
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 
 interface InquiryReportViewProps {
     filters: InquiryReportFilters;
@@ -93,7 +93,7 @@ const InquiryReportView: React.FC<InquiryReportViewProps> = ({ filters, onBack }
                     <div className="relative">
                         <div className="absolute inset-0 bg-brand-blue blur-2xl opacity-15 animate-pulse rounded-full"></div>
                         <div className="relative">
-                            <Loader2 className="w-14 h-14 text-brand-blue animate-spin" />
+                            <CustomLoadingSpinner label="Loading" />
                             <div className="absolute inset-0 bg-brand-blue/20 blur-xl rounded-full animate-pulse"></div>
                         </div>
                     </div>

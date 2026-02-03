@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchReorderReportEntries } from '../services/supabaseService';
 import { ReorderReportEntry } from '../types';
-import { Printer, Loader2, AlertTriangle, CheckCircle, Package, Zap, Turtle, MessageSquareWarning } from 'lucide-react';
+import { Printer, AlertTriangle, CheckCircle, Package, Zap, Turtle, MessageSquareWarning } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 
 const ReorderReport: React.FC = () => {
   const [reportEntries, setReportEntries] = useState<ReorderReportEntry[]>([]);
@@ -39,7 +40,7 @@ const ReorderReport: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
+        <CustomLoadingSpinner label="Loading" />
       </div>
     );
   }

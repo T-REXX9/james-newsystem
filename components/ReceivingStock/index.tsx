@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ReceivingReportWithDetails } from '../../receiving.types';
 import { receivingService } from '../../services/receivingService';
-import { Plus, Search, Filter, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter } from 'lucide-react';
+import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import ReceivingList from './ReceivingList';
 import ReceivingForm from './ReceivingForm';
 import ReceivingView from './ReceivingView';
@@ -156,7 +157,7 @@ const ReceivingStock: React.FC = () => {
             <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
                 {loading ? (
                     <div className="flex-1 flex items-center justify-center">
-                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                        <CustomLoadingSpinner label="Loading" />
                     </div>
                 ) : (
                     <ReceivingList rrs={rrs} onView={handleViewRR} />

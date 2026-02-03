@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, AlertCircle } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { createDeal, updateDeal, fetchContacts, fetchProfiles } from '../services/supabaseService';
 import { useToast } from './ToastProvider';
 import { PipelineDeal, UserProfile, Contact } from '../types';
@@ -233,7 +234,7 @@ const DealFormModal: React.FC<DealFormModalProps> = ({
 
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
+              <CustomLoadingSpinner label="Loading" />
             </div>
           ) : (
             <>

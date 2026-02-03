@@ -19,6 +19,7 @@ import {
   X,
   AlertCircle,
 } from 'lucide-react';
+import CustomLoadingSpinner from './CustomLoadingSpinner';
 
 const InventoryReport: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -154,7 +155,7 @@ const InventoryReport: React.FC = () => {
   if (isInitializing) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
+        <CustomLoadingSpinner label="Loading" />
       </div>
     );
   }
