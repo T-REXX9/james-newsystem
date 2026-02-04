@@ -155,6 +155,110 @@ export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesIn
 };
 
 /**
+ * Update an existing sales inquiry (fields + line items)
+ * Note: This replaces all existing line items with the provided items.
+ */
+export const updateSalesInquiry = async (id: string, data: SalesInquiryDTO): Promise<SalesInquiry> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const existing = await getSalesInquiry(id);
+    if (!existing) throw new Error('Inquiry not found');
+    if (existing.is_deleted) throw new Error('Cannot update a deleted inquiry');
+    if (existing.status === SalesInquiryStatus.CONVERTED_TO_ORDER) {
+      throw new Error('Cannot update an inquiry that has been converted to a sales order');
+    }
+
+    if (!data.items || data.items.length === 0) {
+      throw new Error('Please add at least one line item before saving the inquiry.');
+    }
+
+    const sanitizedData = sanitizeObject(data, inquirySanitizationConfig);
+    const sanitizedItems = sanitizeArray(
+      sanitizedData.items,
+      (item) => sanitizeObject(item as Omit<SalesInquiryItem, 'id' | 'inquiry_id'>, salesInquiryItemSanitizationConfig)
+    );
+
+    const updatePayload = {
+      contact_id: sanitizedData.contact_id,
+      sales_date: sanitizedData.sales_date,
+      sales_person: sanitizedData.sales_person,
+      delivery_address: sanitizedData.delivery_address,
+      reference_no: sanitizedData.reference_no,
+      customer_reference: sanitizedData.customer_reference,
+      send_by: sanitizedData.send_by,
+      price_group: sanitizedData.price_group,
+      credit_limit: sanitizedData.credit_limit,
+      terms: sanitizedData.terms,
+      promise_to_pay: sanitizedData.promise_to_pay,
+      po_number: sanitizedData.po_number,
+      remarks: sanitizedData.remarks,
+      inquiry_type: sanitizedData.inquiry_type,
+      urgency: sanitizedData.urgency,
+      urgency_date: sanitizedData.urgency_date,
+      grand_total: sanitizedItems.reduce((sum, item) => sum + (item.amount || 0), 0),
+      status: sanitizedData.status || existing.status,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: inquiry, error: inquiryError } = await supabase
+      .from('sales_inquiries')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (inquiryError) throw inquiryError;
+
+    const { error: deleteError } = await supabase
+      .from('sales_inquiry_items')
+      .delete()
+      .eq('inquiry_id', id);
+
+    if (deleteError) throw deleteError;
+
+    const { data: items, error: itemsError } = await supabase
+      .from('sales_inquiry_items')
+      .insert(
+        sanitizedItems.map(item => ({
+          inquiry_id: id,
+          item_id: item.item_id,
+          qty: item.qty,
+          part_no: item.part_no,
+          item_code: item.item_code,
+          location: item.location,
+          description: item.description,
+          unit_price: item.unit_price,
+          amount: item.amount,
+          remark: item.remark,
+          approval_status: item.approval_status || 'pending',
+        }))
+      )
+      .select();
+
+    if (itemsError) throw itemsError;
+
+    try {
+      await logUpdate(ENTITY_TYPES.SALES_INQUIRY, id, {
+        inquiry_no: inquiry.inquiry_no,
+        updated_fields: Object.keys(updatePayload),
+      });
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+
+    return {
+      ...inquiry,
+      items: (items || []) as any,
+    } as SalesInquiry;
+  } catch (err) {
+    console.error('Error updating sales inquiry:', err);
+    throw new Error(parseSupabaseError(err, 'sales inquiry'));
+  }
+};
+
+/**
  * Get a single inquiry by ID with items
  */
 export const getSalesInquiry = async (id: string): Promise<SalesInquiry | null> => {

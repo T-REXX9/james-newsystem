@@ -132,11 +132,11 @@ describe('SalesInquiryView', () => {
     expect(customerSelect).toBeTruthy();
     await user.selectOptions(customerSelect, 'c-1');
 
-    await user.click(screen.getByRole('button', { name: /^add$/i }));
+    await user.click(screen.getByRole('button', { name: /add item/i }));
     await user.click(screen.getByText(/click to search product/i));
     await user.click(screen.getByRole('button', { name: 'Select Product' }));
 
-    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await user.click(screen.getByRole('button', { name: /create inquiry/i }));
 
     await waitFor(() => expect(createSalesInquiryMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(refetchInquiriesMock).toHaveBeenCalledTimes(1));
