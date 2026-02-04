@@ -32,6 +32,7 @@ const generateInquiryNumber = (): string => {
 };
 
 const inquirySanitizationConfig: SanitizationConfig<SalesInquiryDTO> = {
+  contact_id: { type: 'string', placeholder: 'n/a', required: true },
   sales_date: { type: 'string', placeholder: 'n/a', required: true },
   sales_person: { type: 'string', placeholder: 'n/a' },
   delivery_address: { type: 'string', placeholder: 'n/a' },

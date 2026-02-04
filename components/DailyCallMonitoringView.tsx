@@ -1666,27 +1666,40 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             try {
               console.log('[v0] Creating inquiry for contact:', contact.id);
               
-              // Create a new inquiry with minimal data
+              // Create a new inquiry with all required fields
               const newInquiry = await createSalesInquiry({
                 contact_id: contact.id,
                 sales_date: new Date().toISOString().split('T')[0],
                 sales_person: currentUser?.name || 'Agent',
+                delivery_address: contact.shipping_address || '',
+                reference_no: '',
+                customer_reference: '',
+                send_by: 'Email',
+                price_group: '',
+                credit_limit: 0,
+                terms: '',
+                promise_to_pay: '',
+                po_number: '',
+                remarks: '',
+                inquiry_type: 'General',
+                urgency: 'N/A',
                 status: SalesInquiryStatus.DRAFT,
                 items: [
                   {
-                    item_id: 'temp-1',
+                    item_id: '',
                     qty: 1,
                     unit_price: 0,
                     amount: 0,
+                    part_no: '',
+                    item_code: '',
+                    location: '',
+                    description: '',
                   },
                 ],
               });
               
               console.log('[v0] Inquiry created:', newInquiry.id);
               addToast('success', `Inquiry ${newInquiry.inquiry_no} created successfully`);
-              
-              // Optionally navigate to the inquiry editor
-              // window.location.href = `/sales-inquiry/${newInquiry.id}`;
             } catch (error) {
               console.error('[v0] Error creating inquiry:', error);
               addToast('error', `Failed to create inquiry: ${error instanceof Error ? error.message : 'Unknown error'}`);
