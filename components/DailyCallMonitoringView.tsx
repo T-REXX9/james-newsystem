@@ -1666,7 +1666,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             try {
               console.log('[v0] Creating inquiry for contact:', contact.id);
               
-              // Create a new inquiry with all required fields
               const newInquiry = await createSalesInquiry({
                 contact_id: contact.id,
                 sales_date: new Date().toISOString().split('T')[0],
@@ -1698,7 +1697,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 ],
               });
               
-              console.log('[v0] Inquiry created:', newInquiry.id);
+              console.log('[v0] Inquiry created successfully:', newInquiry.id);
               addToast('success', `Inquiry ${newInquiry.inquiry_no} created successfully`);
             } catch (error) {
               console.error('[v0] Error creating inquiry:', error);

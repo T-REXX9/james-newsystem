@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -44,6 +46,16 @@ interface CustomerProfileModalProps {
 }
 
 type SidebarTab = 'log' | 'purchases' | 'returns' | 'inquiries' | 'calls' | 'ledger';
+
+interface TimelineEvent {
+  id: string;
+  type: 'call' | 'inquiry' | 'purchase' | 'system_event' | 'risk_alert';
+  title: string;
+  date: string;
+  time: string;
+  detail?: string;
+  meta?: string;
+}
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-PH', {
@@ -96,19 +108,6 @@ const statusBadgeClasses = (status: CustomerStatus) => {
   }
 };
 
-const riskLevelBadge = (level: string) => {
-  switch (level?.toLowerCase()) {
-    case 'high':
-      return 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300';
-    case 'medium':
-      return 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300';
-    case 'low':
-      return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300';
-    default:
-      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
-  }
-};
-
 const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
   contact,
   currentUser,
@@ -127,32 +126,17 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
       setLoading(true);
       try {
         const [purchaseData, incidentData, callLogData, inquiryData] = await Promise.all([
-          fetchPurchases(),
+          fetchPurchases(contact.id),
           fetchIncidentReports(contact.id),
-          fetchCallLogs(),
-          fetchInquiries(),
+          fetchCallLogs(contact.id),
+          fetchInquiries(contact.id),
         ]);
-
-        setPurchases(
-          purchaseData
-            .filter((p) => p.contact_id === contact.id)
-            .sort((a, b) => Date.parse(b.purchased_at) - Date.parse(a.purchased_at))
-        );
-        setIncidents(
-          incidentData.sort((a, b) => Date.parse(b.report_date) - Date.parse(a.report_date))
-        );
-        setCallLogs(
-          callLogData
-            .filter((log) => log.contact_id === contact.id)
-            .sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))
-        );
-        setInquiries(
-          inquiryData
-            .filter((inq) => inq.contact_id === contact.id)
-            .sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))
-        );
+        setPurchases(purchaseData);
+        setIncidents(incidentData);
+        setCallLogs(callLogData);
+        setInquiries(inquiryData);
       } catch (error) {
-        console.error('Error loading customer profile:', error);
+        console.error('Error loading customer data:', error);
       } finally {
         setLoading(false);
       }
@@ -161,40 +145,18 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
     loadData();
   }, [contact.id]);
 
-  // Build combined timeline
-  const timeline = useMemo(() => {
-    const items: Array<{
-      id: string;
-      type: 'call' | 'inquiry' | 'purchase' | 'system_event' | 'risk_alert';
-      title: string;
-      date: string;
-      time: string;
-      detail?: string;
-      meta?: string;
-      severity?: 'high' | 'medium' | 'low';
-      icon?: React.ReactNode;
-    }> = [];
+  const timeline: TimelineEvent[] = useMemo(() => {
+    const items: TimelineEvent[] = [];
 
-    // Add system events (these could come from your data or be simulated)
-    items.push({
-      id: 'sys-001',
-      type: 'system_event',
-      title: 'System Event',
-      date: new Date().toISOString(),
-      time: formatTime(new Date().toISOString()),
-      detail: 'Customer account created',
-      meta: 'System',
-    });
-
-    callLogs.forEach((log) => {
+    callLogs.forEach((call) => {
       items.push({
-        id: `call-${log.id}`,
+        id: `call-${call.id}`,
         type: 'call',
-        title: log.channel === 'text' ? 'SMS' : 'Call',
-        date: log.occurred_at,
-        time: formatTime(log.occurred_at),
-        detail: log.notes,
-        meta: `${log.direction === 'inbound' ? 'Inbound' : 'Outbound'} • ${log.outcome?.replace('_', ' ') || 'Logged'}`,
+        title: 'Call',
+        date: call.occurred_at,
+        time: formatTime(call.occurred_at),
+        detail: call.notes,
+        meta: `${call.call_direction} • ${call.outcome || 'No outcome'}`,
       });
     });
 
@@ -250,7 +212,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
   };
 
   const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] max-h-[90vh] flex overflow-hidden">
         {/* Left Sidebar */}
         <div className="w-80 border-r border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-hidden">
@@ -269,14 +231,10 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                 </p>
               </div>
             </div>
-            
+
             {/* Status and Tier */}
             <div className="flex items-center gap-2 mb-4">
-              <span
-                className={`text-xs font-semibold px-2 py-1 rounded-full ${statusBadgeClasses(
-                  contact.status
-                )}`}
-              >
+              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${statusBadgeClasses(contact.status)}`}>
                 {contact.status}
               </span>
               <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
@@ -297,22 +255,29 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex-shrink-0 space-y-3">
             <div>
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">EMAIL</p>
-              <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{contact.email || 'Not provided'}</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-2 mt-1">
+                <Mail className="w-3 h-3 text-slate-400" />
+                {contact.email || 'N/A'}
+              </p>
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">PHONE</p>
-              <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">{contact.phone || contact.mobile || 'Not provided'}</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-2 mt-1">
+                <Phone className="w-3 h-3 text-slate-400" />
+                {contact.phone || 'N/A'}
+              </p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">SHIPPING ADDRESS</p>
-              <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">
-                {contact.address || `${contact.city}, ${contact.province}`} {contact.postalCode}
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">ADDRESS</p>
+              <p className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2 mt-1">
+                <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0 mt-0.5" />
+                <span>{contact.shipping_address || 'N/A'}</span>
               </p>
             </div>
           </div>
 
-          {/* Sidebar Menu */}
-          <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+          {/* Navigation Menu */}
+          <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-1">
             {sidebarMenuItems.map((item) => (
               <button
                 key={item.id}
@@ -363,7 +328,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] p-6 bg-slate-50 dark:bg-slate-950">
+          <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-950">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <CustomLoadingSpinner label="Loading" />
@@ -380,47 +345,24 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                       </div>
                     ) : (
                       timeline.map((event) => (
-                        <div
-                          key={event.id}
-                          className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4"
-                        >
+                        <div key={event.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                           <div className="flex items-start gap-4">
-                            {/* Timeline Icon */}
                             <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center mt-1">
-                              {event.type === 'call' ? (
-                                <Phone className="w-5 h-5 text-brand-blue" />
-                              ) : event.type === 'inquiry' ? (
-                                <MessageSquare className="w-5 h-5 text-amber-500" />
-                              ) : event.type === 'purchase' ? (
-                                <ShoppingBag className="w-5 h-5 text-emerald-500" />
-                              ) : event.type === 'system_event' ? (
-                                <FileText className="w-5 h-5 text-slate-500" />
-                              ) : (
-                                <ShieldAlert className="w-5 h-5 text-rose-500" />
-                              )}
+                              {event.type === 'call' && <Phone className="w-5 h-5 text-blue-500" />}
+                              {event.type === 'inquiry' && <MessageSquare className="w-5 h-5 text-amber-500" />}
+                              {event.type === 'purchase' && <ShoppingBag className="w-5 h-5 text-emerald-500" />}
+                              {event.type === 'system_event' && <FileText className="w-5 h-5 text-slate-500" />}
+                              {event.type === 'risk_alert' && <ShieldAlert className="w-5 h-5 text-rose-500" />}
                             </div>
-
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-2">
-                                <h3 className="text-sm font-semibold text-slate-800 dark:text-white">
-                                  {event.title}
-                                </h3>
+                                <h3 className="text-sm font-semibold text-slate-800 dark:text-white">{event.title}</h3>
                                 <span className="text-sm font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                   {event.time}
                                 </span>
                               </div>
-
-                              {event.meta && (
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{event.meta}</p>
-                              )}
-
-                              {event.detail && (
-                                <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">{event.detail}</p>
-                              )}
-
-                              <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-                                {formatDateFull(event.date)}
-                              </p>
+                              {event.meta && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{event.meta}</p>}
+                              {event.detail && <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">{event.detail}</p>}
                             </div>
                           </div>
                         </div>
@@ -442,15 +384,11 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                         <div className="grid grid-cols-3 gap-4 mb-6">
                           <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                             <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Total Value</p>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                              {formatCurrency(totalPurchases)}
-                            </p>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(totalPurchases)}</p>
                           </div>
                           <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                             <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Count</p>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                              {purchases.length}
-                            </p>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{purchases.length}</p>
                           </div>
                           <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                             <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Average</p>
@@ -460,24 +398,17 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                           </div>
                         </div>
                         {purchases.map((purchase) => (
-                          <div
-                            key={purchase.id}
-                            className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4"
-                          >
+                          <div key={purchase.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
                                 <ShoppingBag className="w-4 h-4 text-emerald-500" />
-                                <span className="text-sm font-semibold text-slate-800 dark:text-white">
-                                  {formatCurrency(purchase.amount)}
-                                </span>
+                                <span className="text-sm font-semibold text-slate-800 dark:text-white">{formatCurrency(purchase.amount)}</span>
                               </div>
                               <span
                                 className={`text-xs font-semibold px-2 py-1 rounded-full ${
                                   purchase.status === 'paid'
                                     ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                    : purchase.status === 'pending'
-                                    ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300'
-                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                    : 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300'
                                 }`}
                               >
                                 {purchase.status}
@@ -487,9 +418,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                               <span>{formatDateFull(purchase.purchased_at)}</span>
                               <span>Order</span>
                             </div>
-                            {purchase.notes && (
-                              <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">{purchase.notes}</p>
-                            )}
+                            {purchase.notes && <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">{purchase.notes}</p>}
                           </div>
                         ))}
                       </>
@@ -515,22 +444,13 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                       </div>
                     ) : (
                       inquiries.map((inquiry) => (
-                        <div
-                          key={inquiry.id}
-                          className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4"
-                        >
+                        <div key={inquiry.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-sm font-semibold text-slate-800 dark:text-white">
-                              {inquiry.title || 'Inquiry'}
-                            </h3>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              {formatDate(inquiry.occurred_at)}
-                            </span>
+                            <h3 className="text-sm font-semibold text-slate-800 dark:text-white">{inquiry.title || 'Inquiry'}</h3>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">{formatDate(inquiry.occurred_at)}</span>
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">via {inquiry.channel}</p>
-                          {inquiry.notes && (
-                            <p className="text-sm text-slate-600 dark:text-slate-300">{inquiry.notes}</p>
-                          )}
+                          {inquiry.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{inquiry.notes}</p>}
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">via {inquiry.channel}</p>
                         </div>
                       ))
                     )}
@@ -543,75 +463,39 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                     {callLogs.length === 0 ? (
                       <div className="text-center py-12 text-slate-400 dark:text-slate-500">
                         <Phone className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                        <p>No call history</p>
+                        <p>No call logs</p>
                       </div>
                     ) : (
-                      callLogs.map((log) => (
-                        <div
-                          key={log.id}
-                          className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4"
-                        >
+                      callLogs.map((call) => (
+                        <div key={call.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <Phone className="w-4 h-4 text-brand-blue" />
-                              <span className="text-sm font-semibold text-slate-800 dark:text-white">
-                                {log.channel === 'text' ? 'SMS' : 'Call'}
-                              </span>
+                              <Phone className="w-4 h-4 text-blue-500" />
+                              <span className="text-sm font-semibold text-slate-800 dark:text-white">{call.call_direction}</span>
                             </div>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              {formatDate(log.occurred_at)} at {formatTime(log.occurred_at)}
-                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">{formatTime(call.occurred_at)}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
-                            <span
-                              className={`px-2 py-0.5 rounded-full font-semibold ${
-                                log.direction === 'inbound'
-                                  ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                  : 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300'
-                              }`}
-                            >
-                              {log.direction === 'inbound' ? 'Inbound' : 'Outbound'}
-                            </span>
-                            <span
-                              className={`px-2 py-0.5 rounded-full font-semibold ${
-                                log.outcome === 'positive'
-                                  ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                  : log.outcome === 'negative'
-                                  ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300'
-                                  : 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300'
-                              }`}
-                            >
-                              {log.outcome?.replace('_', ' ') || 'Logged'}
-                            </span>
-                          </div>
-                          {log.notes && (
-                            <p className="text-sm text-slate-600 dark:text-slate-300">{log.notes}</p>
-                          )}
+                          {call.notes && <p className="text-sm text-slate-600 dark:text-slate-300">{call.notes}</p>}
+                          {call.outcome && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Outcome: {call.outcome}</p>}
                         </div>
                       ))
                     )}
                   </div>
                 )}
 
-                {/* Ledger Tab */}
+                {/* Credit Ledger Tab */}
                 {activeTab === 'ledger' && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
                         <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Credit Limit</p>
-                        <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                          {formatCurrency(contact.creditLimit || 0)}
-                        </p>
+                        <p className="text-2xl font-bold text-slate-800 dark:text-white">{formatCurrency(contact.creditLimit || 0)}</p>
                       </div>
                       <div className={`rounded-xl p-4 border ${(contact.balance || 0) > 0 ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-900/50' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-900/50'}`}>
-                        <p className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{
-                          color: (contact.balance || 0) > 0 ? '#dc2626' : '#059669'
-                        }}>
+                        <p className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{ color: (contact.balance || 0) > 0 ? '#dc2626' : '#059669' }}>
                           Outstanding Balance
                         </p>
-                        <p className="text-2xl font-bold" style={{
-                          color: (contact.balance || 0) > 0 ? '#dc2626' : '#059669'
-                        }}>
+                        <p className="text-2xl font-bold" style={{ color: (contact.balance || 0) > 0 ? '#dc2626' : '#059669' }}>
                           {formatCurrency(contact.balance || 0)}
                         </p>
                       </div>
@@ -620,7 +504,7 @@ const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
                       <p className="text-sm font-semibold text-slate-800 dark:text-white mb-3">Credit Utilization</p>
                       <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-emerald-500 to-brand-blue"
+                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-500"
                           style={{
                             width: `${Math.min(((contact.balance || 0) / (contact.creditLimit || 1)) * 100, 100)}%`,
                           }}
