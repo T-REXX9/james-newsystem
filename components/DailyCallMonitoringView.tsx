@@ -35,6 +35,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import AgentCallActivity from './AgentCallActivity';
 import PatientChartModal from './PatientChartModal';
 import ContactDetails from './ContactDetails';
+import CustomerProfileModal from './CustomerProfileModal';
 import { useToast } from './ToastProvider';
 import {
   countCallLogsByChannelInRange,
@@ -277,6 +278,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [showContactDetails, setShowContactDetails] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const handleOpenSalesInquiry = useCallback(() => {
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'salesinquiry' } }));
@@ -1240,7 +1242,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                       style={{ height: `${tableRowHeight}px` }}
                       onClick={() => {
                         setSelectedClientId(row.contact.id);
-                        setDetailsPanelOpen(true);
+                        setShowProfileModal(true);
                       }}
                     >
                       <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} overflow-hidden`}>
@@ -1651,6 +1653,18 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             }}
           />
         </div>
+      )}
+
+      {showProfileModal && selectedClient && (
+        <CustomerProfileModal
+          contact={selectedClient}
+          currentUser={currentUser}
+          onClose={() => setShowProfileModal(false)}
+          onCreateInquiry={(contact) => {
+            // You can handle inquiry creation here if needed
+            console.log('Creating inquiry for:', contact);
+          }}
+        />
       )}
     </div>
   );
