@@ -37,6 +37,8 @@ import PatientChartModal from './PatientChartModal';
 import ContactDetails from './ContactDetails';
 import CustomerProfileModal from './CustomerProfileModal';
 import { useToast } from './ToastProvider';
+import { createSalesInquiry } from '../services/salesInquiryService';
+import { SalesInquiryStatus } from '../types';
 import {
   countCallLogsByChannelInRange,
   countCallLogsInRange,
@@ -1660,9 +1662,35 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           contact={selectedClient}
           currentUser={currentUser}
           onClose={() => setShowProfileModal(false)}
-          onCreateInquiry={(contact) => {
-            // You can handle inquiry creation here if needed
-            console.log('Creating inquiry for:', contact);
+          onCreateInquiry={async (contact) => {
+            try {
+              console.log('[v0] Creating inquiry for contact:', contact.id);
+              
+              // Create a new inquiry with minimal data
+              const newInquiry = await createSalesInquiry({
+                contact_id: contact.id,
+                sales_date: new Date().toISOString().split('T')[0],
+                sales_person: currentUser?.name || 'Agent',
+                status: SalesInquiryStatus.DRAFT,
+                items: [
+                  {
+                    item_id: 'temp-1',
+                    qty: 1,
+                    unit_price: 0,
+                    amount: 0,
+                  },
+                ],
+              });
+              
+              console.log('[v0] Inquiry created:', newInquiry.id);
+              addToast('success', `Inquiry ${newInquiry.inquiry_no} created successfully`);
+              
+              // Optionally navigate to the inquiry editor
+              // window.location.href = `/sales-inquiry/${newInquiry.id}`;
+            } catch (error) {
+              console.error('[v0] Error creating inquiry:', error);
+              addToast('error', `Failed to create inquiry: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
           }}
         />
       )}
