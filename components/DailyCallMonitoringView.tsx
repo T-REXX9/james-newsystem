@@ -33,7 +33,7 @@ import {
 import CustomLoadingSpinner from './CustomLoadingSpinner';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import AgentCallActivity from './AgentCallActivity';
-import PatientChartModal from './PatientChartModal';
+import CustomerProfileModal from './CustomerProfileModal';
 import ContactDetails from './ContactDetails';
 import { useToast } from './ToastProvider';
 import {
@@ -1633,7 +1633,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       )}
 
       {showPatientChart && selectedClient && (
-        <PatientChartModal
+        <CustomerProfileModal
           contact={selectedClient}
           currentUser={currentUser}
           onClose={() => setShowPatientChart(false)}
