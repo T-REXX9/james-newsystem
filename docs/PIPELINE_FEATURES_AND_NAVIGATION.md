@@ -420,8 +420,8 @@
 
 ## 🔗 NAVIGATION SHORTCUTS
 
-### 1. SIDEBAR NAVIGATION 📌
-**Location:** Main sidebar (left side)
+### 1. TOPBAR NAVIGATION 📌
+**Location:** Main topbar navigation (top section)
 
 **Shortcut:**
 ```
@@ -752,18 +752,18 @@ Search: "pipeline deals" → [Enter]
 
 ---
 
-### 15. FAVORITES ⭐
-**Location:** Sidebar → Favorites section
+### 15. SAVED SHORTCUTS ⭐
+**Location:** Topbar navigation quick-access group
 
 **Shortcut:**
 ```
-⭐ Favorites
+⭐ Saved Shortcuts
 ├── 📊 Pipelines ← Click!
 ├── 👥 Customer Database
 └── 📋 My Tasks
 ```
 
-**Action:** Click "Pipelines" → Opens Pipeline View (if favorited)
+**Action:** Click "Pipelines" → Opens Pipeline View from saved topbar shortcuts
 
 ---
 
@@ -771,7 +771,7 @@ Search: "pipeline deals" → [Enter]
 
 | From Page | Shortcut Type | Action | Result |
 |-----------|--------------|---------|---------|
-| **Sidebar** | Direct link | Click "Pipelines" | Opens Pipeline View |
+| **Topbar** | Direct link | Click "Pipelines" | Opens Pipeline View |
 | **Dashboard** | Widget button | Click "View Full Pipeline" | Opens Pipeline View |
 | **Customer Database** | "View Pipeline History" | Click button | Opens Pipeline View (filtered by customer) |
 | **Customer Database** | "Create New Deal" | Click button | Creates deal → Opens Pipeline View |

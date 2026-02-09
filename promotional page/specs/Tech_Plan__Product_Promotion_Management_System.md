@@ -51,7 +51,7 @@
 - **Product Database** (`file:components/ProductDatabase.tsx`): Product selection uses existing product search
 - **Sales Orders/Invoices**: Performance tracking queries these tables
 - **RBAC System**: Owner-only access enforced via existing permission checks
-- **Sidebar Navigation** (`file:utils/sidebarConfig.ts`): Add new menu item under Sales → Transactions
+- **Topbar Navigation** (`file:utils/topbarMenuConfig.ts`): Add new menu item under Sales → Transactions
 
 **New Infrastructure**:
 - Supabase Storage bucket (first file upload feature in the system)
@@ -464,7 +464,7 @@ Real-time subscription management for live updates.
 
 ### Integration with Existing Systems
 
-**Navigation** (`file:utils/sidebarConfig.ts`):
+**Navigation** (`file:utils/topbarMenuConfig.ts`):
 ```typescript
 // Add to Sales → Transactions
 {
@@ -653,7 +653,7 @@ sequenceDiagram
 
 **Database Schema Reference**: `file:database.types.ts`
 
-**Navigation Config**: `file:utils/sidebarConfig.ts`
+**Navigation Config**: `file:utils/topbarMenuConfig.ts`
 
 **Routing**: `file:App.tsx`
 

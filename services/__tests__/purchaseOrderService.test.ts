@@ -16,6 +16,16 @@ vi.mock('../inventoryLogService', () => ({
     createInventoryLogFromPO: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../activityLogService', () => ({
+    ENTITY_TYPES: {
+        PURCHASE_ORDER: 'purchase_order',
+    },
+    logCreate: vi.fn().mockResolvedValue(undefined),
+    logUpdate: vi.fn().mockResolvedValue(undefined),
+    logStatusChange: vi.fn().mockResolvedValue(undefined),
+    logDelete: vi.fn().mockResolvedValue(undefined),
+}));
+
 const createQueryBuilderMock = (result: any) => {
     const queue = [result];
     const resolveNext = () => queue.shift() ?? { data: null, error: null };
