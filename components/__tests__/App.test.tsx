@@ -52,6 +52,10 @@ vi.mock('../../components/OwnerLiveCallMonitoringView', () => ({
   default: () => <div>OwnerLiveCallMonitoringView</div>
 }));
 
+vi.mock('../../components/OwnerDailyCallMonitoringUnifiedView', () => ({
+  default: () => <div>OwnerDailyCallMonitoringUnifiedView</div>
+}));
+
 vi.mock('../../components/DailyCallMonitoringView', () => ({
   default: () => <div>DailyCallMonitoringView</div>
 }));
@@ -111,7 +115,7 @@ describe('App authentication flow', () => {
 
     await waitFor(() => expect(screen.getByTestId('topnav')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('topnav'));
-    expect(typedSupabase.auth.signOut).toHaveBeenCalled();
+    await waitFor(() => expect(typedSupabase.auth.signOut).toHaveBeenCalled());
   });
 
   it('falls back to user metadata when profile fetch fails', async () => {

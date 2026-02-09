@@ -13,8 +13,8 @@ import PipelineView from './components/PipelineView';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
 import StaffView from './components/StaffView';
-import OwnerLiveCallMonitoringView from './components/OwnerLiveCallMonitoringView';
 import DailyCallMonitoringView from './components/DailyCallMonitoringView';
+import OwnerDailyCallMonitoringUnifiedView from './components/OwnerDailyCallMonitoringUnifiedView';
 import ProductDatabase from './components/ProductDatabase';
 import CustomerDatabase from './components/CustomerDatabase';
 import ReorderReport from './components/ReorderReport';
@@ -301,9 +301,7 @@ const App: React.FC = () => {
             <DailyCallMonitoringView currentUser={userProfile} />
           </div>
         ) : (
-          <div className="h-full overflow-hidden">
-            <OwnerLiveCallMonitoringView currentUser={userProfile} />
-          </div>
+          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} />
         );
       }
       case 'pipelines':
@@ -508,7 +506,7 @@ const App: React.FC = () => {
         return isSalesAgent ? (
           <DailyCallMonitoringView currentUser={userProfile} />
         ) : (
-          <OwnerLiveCallMonitoringView currentUser={userProfile} />
+          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} />
         );
       }
       case 'accounting-transactions-freight-charges-debit':
@@ -597,7 +595,7 @@ const App: React.FC = () => {
         return isSalesAgent ? (
           <DailyCallMonitoringView currentUser={userProfile} />
         ) : (
-          <OwnerLiveCallMonitoringView currentUser={userProfile} />
+          <OwnerDailyCallMonitoringUnifiedView currentUser={userProfile} />
         );
       }
       case 'tasks':

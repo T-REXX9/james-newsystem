@@ -273,6 +273,11 @@ export interface Contact {
   dealershipSince: string;
   dealershipQuota: number;
   creditLimit: number;
+  ishinomotoDealerSince?: string;
+  ishinomotoSignageSince?: string;
+  signageSince?: string;
+  codeText?: string;
+  codeDate?: string;
 
   // Status & Logic
   status: CustomerStatus; // "status_filter"
@@ -517,6 +522,56 @@ export interface TeamMessage {
   message: string;
   created_at: string;
   is_from_owner: boolean;
+}
+
+export type DailyCallCustomerFilterStatus = 'all' | 'active' | 'inactive' | 'prospective';
+
+export interface DailyActivityRecord {
+  id: string;
+  contact_id: string;
+  activity_date: string;
+  activity_type: 'call' | 'text' | 'order' | 'none';
+  activity_count: number;
+  notes?: string;
+}
+
+export interface LBCRTORecord {
+  id: string;
+  contact_id: string;
+  date: string;
+  tracking_number: string;
+  reason: string;
+  status: 'pending' | 'in_transit' | 'resolved' | 'cancelled';
+  notes?: string;
+}
+
+export interface DailyCallCustomerRow {
+  id: string;
+  source: string;
+  assignedTo: string;
+  assignedDate?: string;
+  clientSince: string;
+  city: string;
+  shopName: string;
+  contactNumber: string;
+  codeDate: string;
+  ishinomotoDealerSince: string;
+  ishinomotoSignageSince: string;
+  quota: number;
+  modeOfPayment: string;
+  courier: string;
+  status: CustomerStatus;
+  outstandingBalance: number;
+  averageMonthlyOrder: number;
+  monthlyOrder: number;
+  weeklyRangeTotals: number[];
+  dailyActivity: DailyActivityRecord[];
+}
+
+export interface CustomerDetailExpansionState {
+  isOpen: boolean;
+  contactId: string | null;
+  activeTab: 'sales' | 'incident' | 'returns' | 'lbc-rto' | 'purchase' | 'comments';
 }
 
 // --- Customer Database Enhancement Types ---
