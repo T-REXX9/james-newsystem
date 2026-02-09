@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CustomerDatabase from '../CustomerDatabase';
+import { ToastProvider } from '../ToastProvider';
 
 const refetchMock = vi.fn();
 const setDataMock = vi.fn();
@@ -52,7 +53,11 @@ describe('CustomerDatabase - create new customer', () => {
     const user = userEvent.setup();
     createContactMock.mockResolvedValue({ id: 'c-1', company: 'Acme Corp' });
 
-    render(<CustomerDatabase />);
+    render(
+      <ToastProvider>
+        <CustomerDatabase />
+      </ToastProvider>
+    );
 
     await user.click(screen.getByText('New Customer'));
     expect(await screen.findByText('Add New Customer')).toBeInTheDocument();

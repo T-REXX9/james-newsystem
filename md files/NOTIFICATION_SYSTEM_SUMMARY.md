@@ -94,7 +94,6 @@ Updated imports to include Notification types.
     {authenticated && (
       <NotificationProvider userId={userProfile.id}>
         <TopNav with NotificationCenter />
-        <Sidebar />
         <main>Content</main>
       </NotificationProvider>
     )}

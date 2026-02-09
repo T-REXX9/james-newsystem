@@ -855,4 +855,4 @@ Module ID: `sales-transaction-product-promotions`
 - **Sales Orders/Invoices**: Performance tracking pulls from these tables
 - **Notification System**: Uses existing notification infrastructure
 - **Dashboard**: Sales person dashboard widget integrates with existing dashboard layout
-- **Sidebar**: New menu item added to Sales → Transactions hierarchy
+- **Topbar Navigation**: New menu item added to Sales → Transactions hierarchy

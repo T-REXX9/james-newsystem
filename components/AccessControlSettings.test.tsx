@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AccessControlSettings from './AccessControlSettings';
 import { DEFAULT_STAFF_ACCESS_RIGHTS } from '../constants';
 import { createStaffAccount, fetchProfiles } from '../services/supabaseService';
+import { ToastProvider } from './ToastProvider';
 
 vi.mock('../services/supabaseService', () => ({
   fetchProfiles: vi.fn(),
@@ -14,6 +15,9 @@ vi.mock('../services/supabaseService', () => ({
 
 const fetchProfilesMock = fetchProfiles as unknown as ReturnType<typeof vi.fn>;
 const createStaffAccountMock = createStaffAccount as unknown as ReturnType<typeof vi.fn>;
+
+const renderWithProviders = (ui: React.ReactElement) =>
+  render(<ToastProvider>{ui}</ToastProvider>);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -32,7 +36,7 @@ describe('AccessControlSettings - create staff account', () => {
     fetchProfilesMock.mockResolvedValueOnce([]).mockResolvedValueOnce(refreshedProfiles);
     createStaffAccountMock.mockResolvedValue({ success: true, userId: 'new-user' });
 
-    render(<AccessControlSettings />);
+    renderWithProviders(<AccessControlSettings />);
 
     const addButtons = await screen.findAllByText('Add New Account');
     await user.click(addButtons[0]);
@@ -63,7 +67,7 @@ describe('AccessControlSettings - create staff account', () => {
 
   it('shows client-side validation errors and does not call the service', async () => {
     const user = userEvent.setup();
-    render(<AccessControlSettings />);
+    renderWithProviders(<AccessControlSettings />);
 
     const addButtons = await screen.findAllByText('Add New Account');
     await user.click(addButtons[0]);
@@ -88,7 +92,7 @@ describe('AccessControlSettings - create staff account', () => {
       validationErrors: { password: 'Service-level password issue' }
     });
 
-    render(<AccessControlSettings />);
+    renderWithProviders(<AccessControlSettings />);
     const addButtons = await screen.findAllByText('Add New Account');
     await user.click(addButtons[0]);
 
@@ -98,7 +102,7 @@ describe('AccessControlSettings - create staff account', () => {
 
     await user.click(screen.getByRole('button', { name: 'Create Account' }));
 
-    expect(await screen.findByText(/Unable to create account/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Unable to create account/i)).length).toBeGreaterThan(0);
     expect(screen.getByText(/Service-level password issue/i)).toBeInTheDocument();
     expect(screen.getByText('Create Staff Account')).toBeInTheDocument();
   });
@@ -110,7 +114,7 @@ describe('AccessControlSettings - create staff account', () => {
       error: 'An account with this email already exists.'
     });
 
-    render(<AccessControlSettings />);
+    renderWithProviders(<AccessControlSettings />);
     const addButtons = await screen.findAllByText('Add New Account');
     await user.click(addButtons[0]);
 
@@ -120,7 +124,7 @@ describe('AccessControlSettings - create staff account', () => {
 
     await user.click(screen.getByRole('button', { name: 'Create Account' }));
 
-    expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/already exists/i)).length).toBeGreaterThan(0);
     await user.click(screen.getByRole('button', { name: /Retry/i }));
     expect(screen.getByText('Create Staff Account')).toBeInTheDocument();
   });

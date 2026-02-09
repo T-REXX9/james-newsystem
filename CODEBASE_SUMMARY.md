@@ -49,8 +49,7 @@ james-newsystem/
 │   ├── __tests__/                    # Component tests
 │   │   ├── AccessControlSettings.test.tsx
 │   │   ├── App.test.tsx
-│   │   ├── Sidebar.test.tsx
-│   │   └── SidebarGroup.test.tsx
+│   │   └── OwnerDailyCallMonitoringUnifiedView.test.tsx
 │   ├── AccessControlSettings.tsx     # Role & permission management
 │   ├── AddContactModal.tsx           # Add customer contact modal
 │   ├── AgentActivityFeed.tsx         # Sales agent activity display
@@ -92,15 +91,6 @@ james-newsystem/
 │   ├── SalesPerformanceCard.tsx      # Sales performance metrics
 │   ├── SalesReportTab.tsx            # Sales reports
 │   ├── SalesReturnTab.tsx            # Sales returns
-│   ├── Sidebar.tsx                   # Main navigation sidebar
-│   ├── SidebarBadge.tsx              # Sidebar notification badges
-│   ├── SidebarGroup.tsx              # Sidebar group sections
-│   ├── SidebarLeafItem.tsx           # Sidebar leaf items
-│   ├── SidebarMenuItem.tsx           # Sidebar menu items
-│   ├── SidebarNestedMenu.tsx         # Nested menu support
-│   ├── SidebarSearch.tsx             # Sidebar search functionality
-│   ├── SidebarSubmenu.tsx            # Sidebar submenus
-│   ├── SidebarUserProfile.tsx        # User profile in sidebar
 │   ├── StaffView.tsx                 # Staff account management
 │   ├── StatusBadge.tsx               # Status indicator badges
 │   ├── StockAdjustmentView.tsx       # Stock adjustment
@@ -116,7 +106,6 @@ james-newsystem/
 ├── conductor/                        # Conductor framework (code standards)
 │   ├── code_styleguides/
 │   └── tracks/
-│       └── rbac_sidebar_20251222/    # RBAC sidebar implementation track
 ├── data/                             # Static data or fixtures
 ├── docs/                             # Documentation (17 files)
 │   ├── ADDING_NAVIGATION_ITEMS.md    # Navigation addition guide
@@ -154,8 +143,6 @@ james-newsystem/
 │   ├── __tests__/
 │   │   └── optimisticUpdates.test.ts
 │   ├── optimisticUpdates.ts          # Optimistic UI updates
-│   ├── sidebarAnalytics.ts           # Sidebar analytics
-│   ├── sidebarConfig.ts              # Sidebar configuration
 │   ├── subscriptionManager.ts        # Real-time subscriptions
 │   └── topbarMenuConfig.ts           # Topbar menu configuration
 ├── App.tsx                           # Main application component (535 lines)
@@ -623,7 +610,7 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ### Naming Conventions
 - Components: PascalCase (e.g., SalesOrderView)
-- Utilities: camelCase (e.g., sidebarConfig)
+- Utilities: camelCase (e.g., topbarMenuConfig)
 - Types: PascalCase (e.g., SalesInquiry)
 - Constants: UPPER_SNAKE_CASE (e.g., DEFAULT_STAFF_ACCESS_RIGHTS)
 

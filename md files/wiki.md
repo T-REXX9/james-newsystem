@@ -79,8 +79,8 @@ This is a comprehensive sales management and customer relationship management (C
 
 ### Layout Components
 - **App.tsx**: Main application router and layout orchestrator
-- **Sidebar.tsx**: Navigation with role-based menu visibility
-- **TopNav.tsx**: User profile and application header
+- **TopNav.tsx**: Application header with role-aware topbar navigation
+- **TopbarNavigation.tsx**: Dropdown navigation menus with role-based visibility
 
 ### Core Views
 - **Dashboard.tsx**: Overview with metrics and charts
