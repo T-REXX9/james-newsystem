@@ -48,10 +48,6 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                 // Fetch Suppliers
                 const suppliersData = await receivingService.getSuppliers();
                 setSuppliers(suppliersData);
-
-                // Generate RR Number
-                const newRrNo = await receivingService.generateRRNumber();
-                setRrNumber(newRrNo);
             } catch (error) {
                 console.error("Error initializing form:", error);
                 addToast({ type: 'error', message: 'Failed to initialize form' });
@@ -106,8 +102,6 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
 
     const validateForm = () => {
         const errors: Record<string, string> = {};
-        const rrValidation = validateRequired(rrNumber, 'an RR number');
-        if (!rrValidation.isValid) errors.rrNumber = rrValidation.message;
         const supplierValidation = validateRequired(supplierId, 'a supplier');
         if (!supplierValidation.isValid) errors.supplierId = supplierValidation.message;
         if (items.length === 0) {
@@ -129,35 +123,21 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
 
         setLoading(true);
         try {
-            // Check duplicates
-            const isDuplicate = await receivingService.checkDuplicateRR(rrNumber);
-            if (isDuplicate) {
-                addToast({ type: 'error', title: 'Duplicate RR number', description: `RR Number ${rrNumber} already exists.` });
-                setLoading(false);
-                return;
-            }
-
-            // Create RR Header
-            const grandTotal = items.reduce((sum, item) => sum + (item.total_amount || 0), 0);
-
-            const rrData: ReceivingReportInsert = {
-                rr_no: rrNumber,
+            const rrData: Omit<ReceivingReportInsert, 'rr_no' | 'grand_total' | 'status'> & {
+                rr_no?: string | null;
+                status?: string;
+            } = {
+                rr_no: rrNumber.trim() || null,
                 receive_date: receiveDate,
                 supplier_id: supplierId,
                 supplier_name: supplierName,
                 po_no: poNo || null,
                 remarks: remarks || null,
                 warehouse_id: warehouseId,
-                grand_total: grandTotal,
                 status: 'Draft'
             };
 
-            const newRr = await receivingService.createReceivingReport(rrData);
-
-            // Create Items
-            for (const item of items) {
-                const itemData: ReceivingReportItemInsert = {
-                    rr_id: newRr.id,
+            const itemsPayload: Omit<ReceivingReportItemInsert, 'rr_id'>[] = items.map((item) => ({
                     item_id: item.item_id,
                     item_code: item.item_code,
                     part_no: item.part_no,
@@ -167,9 +147,10 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                     total_amount: item.total_amount,
                     qty_ordered: 0,
                     qty_returned: 0
-                };
-                await receivingService.addReceivingReportItem(itemData);
-            }
+                }));
+
+            const created = await receivingService.createReceivingReportWithItems(rrData, itemsPayload);
+            setRrNumber(created.rr_no);
 
             addToast({ type: 'success', title: 'Receiving report created', description: 'The receiving report was saved successfully.' });
             onSuccess();
@@ -184,10 +165,6 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
 
     const handleBlur = (field: string, value: unknown) => {
         let message = '';
-        if (field === 'rrNumber') {
-            const result = validateRequired(value, 'an RR number');
-            message = result.isValid ? '' : result.message;
-        }
         if (field === 'supplierId') {
             const result = validateRequired(value, 'a supplier');
             message = result.isValid ? '' : result.message;
@@ -242,7 +219,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                RR Number <span className="text-red-500">*</span>
+                                RR Number
                             </label>
                             <input
                                 type="text"
@@ -252,6 +229,7 @@ const ReceivingForm: React.FC<ReceivingFormProps> = ({ onClose, onSuccess }) => 
                                 className={`w-full px-3 py-2 border rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none ${
                                     validationErrors.rrNumber ? 'border-rose-400' : 'border-slate-300 dark:border-slate-600'
                                 }`}
+                                placeholder="Auto-generated on save (optional override)"
                             />
                             <FieldHelp text="Use the RR number printed on the supplier delivery receipt." example="RR-2026-00124" />
                             {validationErrors.rrNumber && (

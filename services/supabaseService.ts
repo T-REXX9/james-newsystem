@@ -3,6 +3,7 @@
 
 
 import { supabase } from '../lib/supabaseClient';
+import type { RealtimeChannelStatus } from '@supabase/supabase-js';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STAFF_ROLES } from '../constants';
 import { Contact, ContactPerson, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer } from '../types';
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
@@ -2289,9 +2290,15 @@ export const restoreNotification = async (id: string): Promise<boolean> => {
   }
 };
 
+export interface NotificationSubscriptionCallbacks {
+  onInsert: (notification: Notification) => void;
+  onStatusChange?: (status: RealtimeChannelStatus) => void;
+  onError?: (error: Error) => void;
+}
+
 export const subscribeToNotifications = (
   userId: string,
-  callback: (notification: Notification) => void
+  callbacks: NotificationSubscriptionCallbacks
 ): (() => void) => {
   const channel = supabase
     .channel(`notifications:${userId}`)
@@ -2304,10 +2311,19 @@ export const subscribeToNotifications = (
         filter: `recipient_id=eq.${userId}`
       },
       (payload) => {
-        callback(payload.new as Notification);
+        try {
+          callbacks.onInsert(payload.new as Notification);
+        } catch (error) {
+          callbacks.onError?.(error as Error);
+        }
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      callbacks.onStatusChange?.(status);
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        callbacks.onError?.(new Error(`Notification subscription status: ${status}`));
+      }
+    });
 
   return () => {
     supabase.removeChannel(channel);

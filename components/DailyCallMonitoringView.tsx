@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowUpRight,
@@ -80,6 +80,16 @@ interface ActivityItemWithRead extends ActivityItem {
   read: boolean;
 }
 
+interface MasterRow {
+  contact: Contact;
+  priority: number;
+  lastContact?: string;
+  lastPurchase?: string;
+  totalSales: number;
+  totalInteractions: number;
+  latestOutcome?: string;
+}
+
 interface VirtualizedListOptions {
   itemHeight?: number;
   viewportHeight?: number;
@@ -159,9 +169,19 @@ const useVirtualizedList = <T,>(items: T[], options: VirtualizedListOptions = {}
     setScrollTop(event.currentTarget.scrollTop);
   }, []);
 
-  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
   const visibleCount = Math.ceil(viewportHeight / itemHeight) + overscan * 2;
+  const maxScrollTop = Math.max(0, items.length * itemHeight - viewportHeight);
+  const clampedScrollTop = Math.min(scrollTop, maxScrollTop);
+  const rawStartIndex = Math.max(0, Math.floor(clampedScrollTop / itemHeight) - overscan);
+  const maxStartIndex = Math.max(0, items.length - visibleCount);
+  const startIndex = Math.min(rawStartIndex, maxStartIndex);
   const endIndex = Math.min(items.length, startIndex + visibleCount);
+
+  useEffect(() => {
+    if (scrollTop > maxScrollTop) {
+      setScrollTop(maxScrollTop);
+    }
+  }, [scrollTop, maxScrollTop]);
 
   const visibleItems = useMemo(() => items.slice(startIndex, endIndex), [items, startIndex, endIndex]);
   const offsetTop = startIndex * itemHeight;
@@ -238,6 +258,131 @@ const getRowHeight = (density: DensityMode) => {
   }
 };
 
+type DensityConfig = ReturnType<typeof getDensityConfig>;
+
+interface MasterTableRowProps {
+  row: MasterRow;
+  densityConfig: DensityConfig;
+  tableRowHeight: number;
+  selectedClientId: string | null;
+  onSelectClient: (contactId: string) => void;
+  onCallContact: (contact: Contact) => void;
+  onOpenSMSModal: (contact: Contact) => void;
+  onOpenPatientChart: (contactId: string) => void;
+}
+
+const MasterTableRow = React.memo(({
+  row,
+  densityConfig,
+  tableRowHeight,
+  selectedClientId,
+  onSelectClient,
+  onCallContact,
+  onOpenSMSModal,
+  onOpenPatientChart
+}: MasterTableRowProps) => {
+  const isSelected = selectedClientId === row.contact.id;
+  return (
+    <tr
+      className={`hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer ${densityConfig.rowPadding} ${isSelected ? 'bg-brand-blue/5 dark:bg-brand-blue/10' : ''}`}
+      style={{ height: `${tableRowHeight}px` }}
+      onClick={() => onSelectClient(row.contact.id)}
+    >
+      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} overflow-hidden`}>
+        <div className="flex items-center gap-2">
+          <p className={`font-semibold text-slate-800 dark:text-white truncate ${densityConfig.fontSize}`} title={row.contact.company}>
+            {row.contact.company}
+          </p>
+        </div>
+        <p className={`text-slate-500 dark:text-slate-400 truncate ${densityConfig.fontSize}`} title={row.contact.province || 'No location'}>
+          {row.contact.province || 'No location'}
+        </p>
+      </td>
+      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+        <span className={`font-semibold rounded-full ${densityConfig.badgePadding} ${statusBadgeClasses(row.contact.status)} ${densityConfig.fontSize}`}>
+          {row.contact.status}
+        </span>
+      </td>
+      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+        <p className={`font-semibold text-slate-700 dark:text-slate-200 ${densityConfig.fontSize}`} title={row.lastContact ? new Date(row.lastContact).toLocaleDateString() : 'No activity yet'}>
+          {formatRelativeTime(row.lastContact)}
+        </p>
+      </td>
+      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+        <p className={`text-slate-600 dark:text-slate-300 ${densityConfig.fontSize}`} title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString() : 'No purchases'}>
+          {formatDate(row.lastPurchase)}
+        </p>
+      </td>
+      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
+        <p className={`font-bold text-slate-800 dark:text-white ${densityConfig.fontSize}`} title={`Total sales: ${formatCurrency(row.totalSales)}`}>
+          {formatCurrency(row.totalSales)}
+        </p>
+        <span className={`inline-block mt-0.5 rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
+          {Math.round(row.priority)}
+        </span>
+      </td>
+      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center`}>
+        <span className={`inline-block rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
+          {Math.round(row.priority)}
+        </span>
+      </td>
+      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} align-middle`}>
+        <div className="flex items-center justify-center gap-2.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCallContact(row.contact);
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-brand-blue/20 hover:text-brand-blue active:scale-95 active:bg-brand-blue/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 leading-none shrink-0"
+            title="Call"
+            aria-label={`Call ${row.contact.company}`}
+          >
+            <Phone className="w-5 h-5" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSMSModal(row.contact);
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 active:scale-95 active:bg-emerald-200 dark:active:bg-emerald-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 leading-none shrink-0"
+            title="SMS"
+            aria-label={`Send SMS to ${row.contact.company}`}
+          >
+            <MessageSquare className="w-5 h-5" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenPatientChart(row.contact.id);
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white active:scale-95 active:bg-slate-300/80 dark:active:bg-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/40 leading-none shrink-0"
+            title="Details"
+            aria-label={`Open details for ${row.contact.company}`}
+          >
+            <ClipboardList className="w-5 h-5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}, (previousProps, nextProps) => {
+  return (
+    previousProps.row.contact.id === nextProps.row.contact.id &&
+    previousProps.row.contact.updated_at === nextProps.row.contact.updated_at &&
+    previousProps.row.contact.status === nextProps.row.contact.status &&
+    previousProps.row.lastContact === nextProps.row.lastContact &&
+    previousProps.row.lastPurchase === nextProps.row.lastPurchase &&
+    previousProps.row.totalSales === nextProps.row.totalSales &&
+    previousProps.row.priority === nextProps.row.priority &&
+    previousProps.tableRowHeight === nextProps.tableRowHeight &&
+    previousProps.selectedClientId === nextProps.selectedClientId &&
+    previousProps.densityConfig.fontSize === nextProps.densityConfig.fontSize &&
+    previousProps.densityConfig.rowPadding === nextProps.densityConfig.rowPadding &&
+    previousProps.densityConfig.cellPadding === nextProps.densityConfig.cellPadding &&
+    previousProps.densityConfig.badgePadding === nextProps.densityConfig.badgePadding
+  );
+});
+
 const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ currentUser }) => {
   const { addToast } = useToast();
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -277,6 +422,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>('master');
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [showContactDetails, setShowContactDetails] = useState(false);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [masterViewportHeight, setMasterViewportHeight] = useState(420);
+  const masterViewportWrapperRef = useRef<HTMLDivElement | null>(null);
+  const masterScrollRef = useRef<HTMLDivElement | null>(null);
+  const selectionInitializedRef = useRef(false);
+  const pendingFilterSnapshotRef = useRef<{ scrollTop: number; selectedClientId: string | null } | null>(null);
 
   const handleOpenSalesInquiry = useCallback(() => {
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'salesinquiry' } }));
@@ -662,7 +813,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     CustomerStatus.BLACKLISTED
   ];
 
-  const masterRows = useMemo(() => {
+  const statusMatchesFilter = useCallback(
+    (status: CustomerStatus) => !statusFilters.length || statusFilters.includes(status),
+    [statusFilters]
+  );
+
+  const baseMasterRows = useMemo<MasterRow[]>(() => {
     const rows = contacts.map((contact) => {
       const contactPurchases = purchasesByContact.get(contact.id) || [];
       const lastPaid = contactPurchases.find((purchase) => purchase.status === 'paid');
@@ -683,11 +839,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         latestOutcome: callLogsByContact.get(contact.id)?.[0]?.outcome
       };
     });
+    return rows;
+  }, [contacts, purchasesByContact, lastContactMap, callLogsByContact, inquiriesByContact]);
 
-    const filtered = rows.filter((row) => {
+  const masterRows = useMemo<MasterRow[]>(() => {
+    const filtered = baseMasterRows.filter((row) => {
       const matchesRep = repFilter === 'All' || row.contact.salesman === repFilter;
       const matchesProvince = provinceFilter === 'All' || row.contact.province === provinceFilter;
-      const matchesStatus = !statusFilters.length || statusFilters.includes(row.contact.status);
+      const matchesStatus = statusMatchesFilter(row.contact.status);
       const matchesPurchaseFilter = !noPurchaseOnly || noPurchaseSet.has(row.contact.id);
       const matchesSearchQuery = matchesSearch(row.contact, debouncedSearch);
       return matchesRep && matchesProvince && matchesStatus && matchesPurchaseFilter && matchesSearchQuery;
@@ -712,16 +871,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
     return sorted;
   }, [
-    contacts,
-    purchasesByContact,
-    lastContactMap,
-    callLogsByContact,
-    inquiriesByContact,
+    baseMasterRows,
     repFilter,
     provinceFilter,
     noPurchaseSet,
     noPurchaseOnly,
-    statusFilters,
+    statusMatchesFilter,
     debouncedSearch,
     sortField,
     sortDirection
@@ -734,10 +889,35 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       }
       return;
     }
-    if (!selectedClientId || !masterRows.some((row) => row.contact.id === selectedClientId)) {
-      setSelectedClientId(masterRows[0].contact.id);
+    if (selectedClientId === null) {
+      if (!selectionInitializedRef.current) {
+        selectionInitializedRef.current = true;
+        setSelectedClientId(masterRows[0].contact.id);
+      }
+      return;
+    }
+    if (!masterRows.some((row) => row.contact.id === selectedClientId)) {
+      setSelectedClientId(null);
+      if (masterScrollRef.current) {
+        masterScrollRef.current.scrollTop = 0;
+      }
     }
   }, [masterRows, selectedClientId]);
+
+  useEffect(() => {
+    const wrapper = masterViewportWrapperRef.current;
+    if (!wrapper) return;
+    const updateHeight = () => {
+      if (wrapper.clientHeight > 0) {
+        setMasterViewportHeight(wrapper.clientHeight);
+      }
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
 
   const selectedTimeline = useMemo(() => {
     if (!selectedClientId) return [];
@@ -845,14 +1025,21 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       .slice(0, 4);
   }, [contacts, callLogsByContact, inquiriesByContact, lastContactMap]);
 
-  const toggleStatusFilter = (status: CustomerStatus) => {
-    setStatusFilters((prev) => {
-      if (prev.includes(status)) {
-        return prev.filter((item) => item !== status);
-      }
-      return [...prev, status];
+  const toggleStatusFilter = useCallback((status: CustomerStatus) => {
+    pendingFilterSnapshotRef.current = {
+      scrollTop: masterScrollRef.current?.scrollTop || 0,
+      selectedClientId
+    };
+    setIsFiltering(true);
+    React.startTransition(() => {
+      setStatusFilters((prev) => {
+        if (prev.includes(status)) {
+          return prev.filter((item) => item !== status);
+        }
+        return [...prev, status];
+      });
     });
-  };
+  }, [selectedClientId]);
 
   if (!currentUser) {
     return (
@@ -906,6 +1093,72 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
   const densityConfig = getDensityConfig(density);
   const tableRowHeight = getRowHeight(density);
+  const masterVirtual = useVirtualizedList(masterRows, {
+    viewportHeight: masterViewportHeight,
+    itemHeight: tableRowHeight,
+    overscan: 6
+  });
+
+  const handleMasterTableScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    masterVirtual.handleScroll(event);
+  }, [masterVirtual]);
+
+  const handleSelectClient = useCallback((contactId: string) => {
+    setSelectedClientId(contactId);
+    setDetailsPanelOpen(true);
+  }, []);
+
+  const handleMasterRowCall = useCallback((contact: Contact) => {
+    handleCallContact(contact);
+  }, [handleCallContact]);
+
+  const handleMasterRowSMS = useCallback((contact: Contact) => {
+    handleOpenSMSModal(contact);
+  }, [handleOpenSMSModal]);
+
+  const handleMasterRowDetails = useCallback((contactId: string) => {
+    setSelectedClientId(contactId);
+    setShowPatientChart(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isFiltering) return;
+    const snapshot = pendingFilterSnapshotRef.current;
+    if (!snapshot) return;
+
+    const frameId = requestAnimationFrame(() => {
+      const selectedStillVisible = snapshot.selectedClientId
+        ? masterRows.some((row) => row.contact.id === snapshot.selectedClientId)
+        : false;
+      const scrollNode = masterScrollRef.current;
+
+      if (selectedStillVisible && scrollNode) {
+        const selectedIndex = masterRows.findIndex((row) => row.contact.id === snapshot.selectedClientId);
+        const selectedTop = Math.max(0, selectedIndex * tableRowHeight);
+        const selectedBottom = selectedTop + tableRowHeight;
+        const viewportTop = snapshot.scrollTop;
+        const viewportBottom = viewportTop + masterViewportHeight;
+        let nextTop = snapshot.scrollTop;
+
+        if (selectedTop < viewportTop || selectedBottom > viewportBottom) {
+          nextTop = Math.max(0, selectedTop - Math.max(0, (masterViewportHeight - tableRowHeight) / 2));
+        }
+
+        scrollNode.scrollTo({
+          top: nextTop,
+          behavior: Math.abs(nextTop - snapshot.scrollTop) > tableRowHeight * 2 ? 'smooth' : 'auto'
+        });
+      } else if (scrollNode) {
+        const maxValidScrollTop = Math.max(0, masterRows.length * tableRowHeight - masterViewportHeight);
+        scrollNode.scrollTop = maxValidScrollTop;
+      }
+
+      pendingFilterSnapshotRef.current = null;
+      setIsFiltering(false);
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [isFiltering, statusFilters, masterRows, masterViewportHeight, tableRowHeight]);
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -1171,9 +1424,22 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             </div>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden" ref={masterViewportWrapperRef}>
           {activeTab === 'master' && (
-            <div className="h-full overflow-y-auto">
+            <div
+              ref={masterScrollRef}
+              className="h-full overflow-y-auto relative"
+              style={{ height: `${masterViewportHeight}px` }}
+              onScroll={handleMasterTableScroll}
+            >
+              {isFiltering && (
+                <div className="absolute inset-0 z-20 bg-white/40 dark:bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-200 pointer-events-none flex items-center justify-center">
+                  <div className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/90 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Filtering
+                  </div>
+                </div>
+              )}
               <table className="w-full divide-y divide-slate-200 dark:divide-slate-800" style={{ tableLayout: 'fixed' }}>
                 <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 sticky top-0 z-10">
                   <tr>
@@ -1232,94 +1498,31 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {masterRows.map((row) => (
-                    <tr
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800" style={{ transform: `translateY(${masterVirtual.offsetTop}px)` }}>
+                  {masterVirtual.visibleItems.map((row) => (
+                    <MasterTableRow
                       key={row.contact.id}
-                      className={`hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors cursor-pointer ${densityConfig.rowPadding}`}
-                      style={{ height: `${tableRowHeight}px` }}
-                      onClick={() => {
-                        setSelectedClientId(row.contact.id);
-                        setDetailsPanelOpen(true);
-                      }}
-                    >
-                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} overflow-hidden`}>
-                        <div className="flex items-center gap-2">
-                          <p className={`font-semibold text-slate-800 dark:text-white truncate ${densityConfig.fontSize}`} title={row.contact.company}>
-                            {row.contact.company}
-                          </p>
-                        </div>
-                        <p className={`text-slate-500 dark:text-slate-400 truncate ${densityConfig.fontSize}`} title={row.contact.province || 'No location'}>
-                          {row.contact.province || 'No location'}
-                        </p>
-                      </td>
-                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-                        <span className={`font-semibold rounded-full ${densityConfig.badgePadding} ${statusBadgeClasses(row.contact.status)} ${densityConfig.fontSize}`}>
-                          {row.contact.status}
-                        </span>
-                      </td>
-                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-                        <p className={`font-semibold text-slate-700 dark:text-slate-200 ${densityConfig.fontSize}`} title={row.lastContact ? new Date(row.lastContact).toLocaleDateString() : 'No activity yet'}>
-                          {formatRelativeTime(row.lastContact)}
-                        </p>
-                      </td>
-                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-                        <p className={`text-slate-600 dark:text-slate-300 ${densityConfig.fontSize}`} title={row.lastPurchase ? new Date(row.lastPurchase).toLocaleDateString() : 'No purchases'}>
-                          {formatDate(row.lastPurchase)}
-                        </p>
-                      </td>
-                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding}`}>
-                        <p className={`font-bold text-slate-800 dark:text-white ${densityConfig.fontSize}`} title={`Total sales: ${formatCurrency(row.totalSales)}`}>
-                          {formatCurrency(row.totalSales)}
-                        </p>
-                        <span className={`inline-block mt-0.5 rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
-                          {Math.round(row.priority)}
-                        </span>
-                      </td>
-                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center`}>
-                        <span className={`inline-block rounded-full ${densityConfig.badgePadding} font-semibold ${priorityBadgeClasses(row.priority)} ${densityConfig.fontSize}`}>
-                          {Math.round(row.priority)}
-                        </span>
-                      </td>
-                      <td className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} align-middle`}>
-                        <div className="flex items-center justify-center gap-2.5">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCallContact(row.contact);
-                            }}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-brand-blue/20 hover:text-brand-blue active:scale-95 active:bg-brand-blue/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 leading-none shrink-0"
-                            title="Call"
-                            aria-label={`Call ${row.contact.company}`}
-                          >
-                            <Phone className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenSMSModal(row.contact);
-                            }}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-500/20 dark:hover:text-emerald-300 active:scale-95 active:bg-emerald-200 dark:active:bg-emerald-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 leading-none shrink-0"
-                            title="SMS"
-                            aria-label={`Send SMS to ${row.contact.company}`}
-                          >
-                            <MessageSquare className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenPatientChart(row.contact.id);
-                            }}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all duration-150 hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white active:scale-95 active:bg-slate-300/80 dark:active:bg-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/40 leading-none shrink-0"
-                            title="Details"
-                            aria-label={`Open details for ${row.contact.company}`}
-                          >
-                            <ClipboardList className="w-5 h-5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                      row={row}
+                      densityConfig={densityConfig}
+                      tableRowHeight={tableRowHeight}
+                      selectedClientId={selectedClientId}
+                      onSelectClient={handleSelectClient}
+                      onCallContact={handleMasterRowCall}
+                      onOpenSMSModal={handleMasterRowSMS}
+                      onOpenPatientChart={handleMasterRowDetails}
+                    />
                   ))}
+                  {masterRows.length > 0 && (
+                    <tr aria-hidden="true">
+                      <td
+                        colSpan={7}
+                        style={{
+                          height: `${Math.max(0, masterVirtual.totalHeight - (masterVirtual.visibleItems.length * tableRowHeight))}px`,
+                          padding: 0
+                        }}
+                      />
+                    </tr>
+                  )}
                   {masterRows.length === 0 && (
                     <tr>
                       <td colSpan={7} className={`${densityConfig.cellPadding} ${densityConfig.rowPadding} text-center text-sm text-slate-500 dark:text-slate-400`}>

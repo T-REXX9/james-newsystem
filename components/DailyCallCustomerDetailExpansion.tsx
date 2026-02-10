@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, ClipboardList, FileWarning, History, MessageSquare, RotateCcw, Truck, X } from 'lucide-react';
+import { BarChart3, ClipboardList, FileWarning, History, MessageSquare, RotateCcw, Truck } from 'lucide-react';
 import SalesReportTab from './SalesReportTab';
 import IncidentReportTab from './IncidentReportTab';
 import SalesReturnTab from './SalesReturnTab';
@@ -13,7 +13,6 @@ type DetailTabId = 'sales' | 'incident' | 'returns' | 'lbc-rto' | 'purchase' | '
 interface DailyCallCustomerDetailExpansionProps {
   customer: DailyCallCustomerRow;
   currentUser: UserProfile | null;
-  onClose: () => void;
 }
 
 const tabs: Array<{
@@ -39,13 +38,11 @@ const formatCurrency = (value: number) =>
 const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansionProps> = ({
   customer,
   currentUser,
-  onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<DetailTabId>('sales');
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
 
       const currentIndex = tabs.findIndex((tab) => tab.id === activeTab);
@@ -60,7 +57,7 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeTab, onClose]);
+  }, [activeTab]);
 
   const panel = useMemo(() => {
     if (activeTab === 'sales') {
@@ -100,14 +97,6 @@ const DailyCallCustomerDetailExpansion: React.FC<DailyCallCustomerDetailExpansio
             </h3>
             <p className="text-xs text-slate-500">{customer.city} • {customer.assignedTo}</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-            aria-label="Close detail panel"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { Notification } from '../types';
 import {
   fetchNotifications,
@@ -38,6 +38,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const retryCountRef = useRef(0);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const hasSubscribedRef = useRef(false);
 
   // Fetch initial notifications
   const refreshNotifications = useCallback(async () => {
@@ -63,17 +66,80 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ user
 
   // Subscribe to real-time updates
   useEffect(() => {
-    const unsubscribe = subscribeToNotifications(userId, (newNotification) => {
-      setNotifications((prev) => [newNotification, ...prev]);
-      if (!newNotification.is_read) {
-        setUnreadCount((prev) => prev + 1);
+    let isCancelled = false;
+    let unsubscribe: (() => void) | null = null;
+    const maxRetries = 5;
+    retryCountRef.current = 0;
+    hasSubscribedRef.current = false;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimeoutRef.current !== null) {
+        window.clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
-    });
+    };
+
+    const scheduleReconnect = () => {
+      if (isCancelled || retryCountRef.current >= maxRetries) {
+        return;
+      }
+      retryCountRef.current += 1;
+      const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000);
+      clearReconnectTimer();
+      reconnectTimeoutRef.current = window.setTimeout(() => {
+        if (isCancelled) return;
+        setupSubscription();
+      }, delay);
+    };
+
+    const setupSubscription = () => {
+      if (isCancelled) return;
+      clearReconnectTimer();
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+
+      unsubscribe = subscribeToNotifications(userId, {
+        onInsert: (newNotification) => {
+          setNotifications((prev) => [newNotification, ...prev]);
+          if (!newNotification.is_read) {
+            setUnreadCount((prev) => prev + 1);
+          }
+        },
+        onStatusChange: (status) => {
+          if (isCancelled) return;
+
+          if (status === 'SUBSCRIBED') {
+            const isReconnect = hasSubscribedRef.current || retryCountRef.current > 0;
+            retryCountRef.current = 0;
+            hasSubscribedRef.current = true;
+            if (isReconnect) {
+              refreshNotifications();
+            }
+            return;
+          }
+
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            scheduleReconnect();
+          }
+        },
+        onError: () => {
+          scheduleReconnect();
+        }
+      });
+    };
+
+    setupSubscription();
 
     return () => {
-      unsubscribe();
+      isCancelled = true;
+      clearReconnectTimer();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
-  }, [userId]);
+  }, [userId, refreshNotifications]);
 
   // Handle mark as read
   const handleMarkAsRead = useCallback(
