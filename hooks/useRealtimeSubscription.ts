@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from '../services/supabaseService';
+import { supabase } from '../lib/supabaseClient';
 
 export interface RealtimeCallbacks<T = any> {
   onInsert?: (payload: T) => void;
@@ -142,4 +142,3 @@ export function useRealtimeSubscription<T = any>({
     channel: channelRef.current,
   };
 }
-

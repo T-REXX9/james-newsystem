@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { CreateStaffAccountInput, StaffAccountValidationError, UserProfile } from '../types';
-import { fetchProfiles, updateProfile, createStaffAccount } from '../services/supabaseService';
+import { createStaffAccount, fetchProfiles, getCurrentNotificationActor, notifyAccessRightsChange, notifyStaffAccountCreated, updateProfile } from '../services/supabaseService';
 import { parseSupabaseError } from '../utils/errorHandler';
 import {
   AVAILABLE_APP_MODULES,
@@ -116,6 +116,15 @@ const AccessControlSettings: React.FC = () => {
     const original = originalProfiles.find(profile => profile.id === user.id);
     try {
         await updateProfile(user.id, { access_rights: user.access_rights });
+        const actorContext = await getCurrentNotificationActor();
+        await notifyAccessRightsChange({
+          actorId: actorContext?.actorId,
+          actorRole: actorContext?.actorRole,
+          targetUserId: user.id,
+          targetUserRole: user.role,
+          beforeRights: original?.access_rights || [],
+          afterRights: user.access_rights || [],
+        });
         try {
           await logActivity('UPDATE_ACCESS_RIGHTS', ENTITY_TYPES.USER_PROFILE, user.id, {
             old_rights: original?.access_rights || [],
@@ -214,6 +223,17 @@ const AccessControlSettings: React.FC = () => {
           durationMs: 6000,
         });
         return;
+      }
+
+      const actorContext = await getCurrentNotificationActor();
+      if (result.userId) {
+        await notifyStaffAccountCreated({
+          actorId: actorContext?.actorId,
+          actorRole: actorContext?.actorRole,
+          targetUserId: result.userId,
+          targetUserRole: payload.role,
+          email: payload.email,
+        });
       }
 
       await loadProfiles();

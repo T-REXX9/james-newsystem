@@ -10,7 +10,10 @@ import { ToastProvider } from './ToastProvider';
 vi.mock('../services/supabaseService', () => ({
   fetchProfiles: vi.fn(),
   updateProfile: vi.fn(),
-  createStaffAccount: vi.fn()
+  createStaffAccount: vi.fn(),
+  getCurrentNotificationActor: vi.fn().mockResolvedValue({ actorId: 'owner-1', actorRole: 'Owner' }),
+  notifyAccessRightsChange: vi.fn().mockResolvedValue(undefined),
+  notifyStaffAccountCreated: vi.fn().mockResolvedValue(undefined),
 }));
 
 const fetchProfilesMock = fetchProfiles as unknown as ReturnType<typeof vi.fn>;

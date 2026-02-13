@@ -4,6 +4,7 @@ import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle, Loader2, Sun, Moon }
 import { parseSupabaseError } from '../utils/errorHandler';
 import { useToast } from './ToastProvider';
 import { logAuth } from '../services/activityLogService';
+import { dispatchWorkflowNotification } from '../services/supabaseService';
 
 export default function Login() {
   const { addToast } = useToast();
@@ -58,6 +59,51 @@ export default function Login() {
     return input;
   };
 
+  const getAuthDeviceMetadata = () => ({
+    ip_address: null,
+    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+    platform: typeof navigator !== 'undefined' ? navigator.platform : null,
+    language: typeof navigator !== 'undefined' ? navigator.language : null,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    origin: typeof window !== 'undefined' ? window.location.origin : null,
+  });
+
+  const isSuspiciousLoginError = (message: string) => {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('invalid login credentials') ||
+      normalized.includes('too many requests') ||
+      normalized.includes('rate limit') ||
+      normalized.includes('email not confirmed')
+    );
+  };
+
+  const notifySuspiciousLoginSignal = async (
+    attemptedEmail: string,
+    status: 'failed' | 'error',
+    reason: string
+  ) => {
+    await dispatchWorkflowNotification({
+      title: 'Suspicious Login Signal',
+      message: `A suspicious login signal was detected for ${attemptedEmail || 'unknown account'}.`,
+      type: 'warning',
+      action: 'suspicious_login_signal',
+      status,
+      entityType: 'auth_event',
+      entityId: attemptedEmail || 'unknown',
+      actionUrl: '/security/audit',
+      targetRoles: ['Owner', 'Manager', 'Security'],
+      includeActor: false,
+      metadata: {
+        actor_id: null,
+        actor_email: attemptedEmail || null,
+        auth_provider: 'password',
+        reason,
+        ...getAuthDeviceMetadata(),
+      },
+    });
+  };
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -107,13 +153,18 @@ export default function Login() {
     setLoading(true);
     setMessage({ type: '', text: '' });
     
+    const attemptedEmail = getEmail(formData.email).trim().toLowerCase();
+
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email: getEmail(formData.email),
+        email: attemptedEmail,
         password: formData.password
       });
 
       if (error) {
+        if (isSuspiciousLoginError(error.message)) {
+          await notifySuspiciousLoginSignal(attemptedEmail, 'failed', error.message);
+        }
         setMessage({ type: 'error', text: error.message });
         addToast({
           type: 'error',
@@ -140,6 +191,11 @@ export default function Login() {
       }
     } catch (err: any) {
        console.error("Unexpected Login Error:", err);
+       await notifySuspiciousLoginSignal(
+         attemptedEmail,
+         'error',
+         err instanceof Error ? err.message : 'unexpected_login_error'
+       );
        setMessage({ type: 'error', text: "An unexpected error occurred." });
        addToast({
          type: 'error',

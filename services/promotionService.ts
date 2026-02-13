@@ -1,4 +1,4 @@
-import { supabase } from './supabaseService';
+import { dispatchWorkflowNotification, supabase } from './supabaseService';
 import {
     Promotion,
     PromotionProduct,
@@ -9,7 +9,199 @@ import {
     PromotionStats,
     PromotionStatus,
     PostingStatus,
+    NotificationType,
 } from '../types';
+
+const PROMOTION_ACTION_URL = (promotionId: string): string =>
+    `/sales-transaction-product-promotions?promotionId=${promotionId}`;
+
+type PromotionNotificationContext = Pick<
+    Promotion,
+    'id' | 'campaign_title' | 'status' | 'assigned_to' | 'end_date'
+>;
+
+const normalizeUserIds = (userIds: string[] = []): string[] =>
+    Array.from(new Set(userIds.filter(Boolean)));
+
+const areSameUserSets = (a: string[] = [], b: string[] = []): boolean => {
+    const left = normalizeUserIds(a).sort();
+    const right = normalizeUserIds(b).sort();
+
+    if (left.length !== right.length) return false;
+    return left.every((value, index) => value === right[index]);
+};
+
+const isSevenDaysFromExpiry = (endDate?: string): boolean => {
+    if (!endDate) return false;
+
+    const end = new Date(endDate);
+    if (Number.isNaN(end.getTime())) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const dayDiff = Math.round((end.getTime() - today.getTime()) / msPerDay);
+
+    return dayDiff === 7;
+};
+
+async function resolveAssignedSalesUserIds(assignedTo: string[] = []): Promise<string[]> {
+    const normalizedAssigned = normalizeUserIds(assignedTo);
+    if (normalizedAssigned.length > 0) {
+        return normalizedAssigned;
+    }
+
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'Sales Agent');
+
+    if (error) {
+        console.error('Error resolving assigned sales users:', error);
+        return [];
+    }
+
+    return normalizeUserIds((data || []).map((profile) => String(profile.id)));
+}
+
+async function getPromotionNotificationContext(
+    promotionId: string
+): Promise<PromotionNotificationContext | null> {
+    const { data, error } = await supabase
+        .from('promotions')
+        .select('id, campaign_title, status, assigned_to, end_date')
+        .eq('id', promotionId)
+        .eq('is_deleted', false)
+        .maybeSingle();
+
+    if (error || !data) {
+        if (error) {
+            console.error('Error loading promotion notification context:', error);
+        }
+        return null;
+    }
+
+    return data as PromotionNotificationContext;
+}
+
+async function notifyPromotionLifecycleEvent(input: {
+    title: string;
+    message: string;
+    type: NotificationType;
+    action: string;
+    status: string;
+    promotion: PromotionNotificationContext;
+    actorId?: string;
+    actorRole?: string;
+    metadata?: Record<string, unknown>;
+}): Promise<void> {
+    const assignedSalesUserIds = await resolveAssignedSalesUserIds(input.promotion.assigned_to);
+    const actionUrl = PROMOTION_ACTION_URL(input.promotion.id);
+
+    await dispatchWorkflowNotification({
+        title: input.title,
+        message: input.message,
+        type: input.type,
+        action: input.action,
+        status: input.status,
+        entityType: 'promotion',
+        entityId: input.promotion.id,
+        actionUrl,
+        actorId: input.actorId,
+        actorRole: input.actorRole,
+        targetRoles: ['Owner'],
+        targetUserIds: assignedSalesUserIds,
+        includeActor: true,
+        metadata: {
+            promotion_id: input.promotion.id,
+            current_status: input.promotion.status,
+            action: input.action,
+            action_url: actionUrl,
+            ...input.metadata,
+        },
+    });
+}
+
+async function notifyPromotionAssignment(
+    promotion: PromotionNotificationContext,
+    actorId?: string,
+    actorRole?: string
+): Promise<void> {
+    const assignmentLabel =
+        promotion.assigned_to.length === 0
+            ? 'all sales users'
+            : `${promotion.assigned_to.length} assigned sales user(s)`;
+
+    await notifyPromotionLifecycleEvent({
+        title: 'Promotion Assigned',
+        message: `Promotion "${promotion.campaign_title}" was assigned to ${assignmentLabel}.`,
+        type: 'info',
+        action: 'promotion_assigned',
+        status: 'assigned',
+        promotion,
+        actorId,
+        actorRole,
+        metadata: {
+            assignment_scope: promotion.assigned_to.length === 0 ? 'all_sales_users' : 'specific_sales_users',
+            assigned_user_ids: promotion.assigned_to,
+        },
+    });
+}
+
+async function notifyPromotionProofEvent(input: {
+    promotion: PromotionNotificationContext;
+    posting: Pick<PromotionPosting, 'id' | 'platform_name' | 'status' | 'rejection_reason'>;
+    action: 'promotion_proof_uploaded' | 'promotion_proof_approved' | 'promotion_proof_rejected';
+    title: string;
+    message: string;
+    type: NotificationType;
+    status: string;
+    actorId?: string;
+    actorRole?: string;
+}): Promise<void> {
+    await notifyPromotionLifecycleEvent({
+        title: input.title,
+        message: input.message,
+        type: input.type,
+        action: input.action,
+        status: input.status,
+        promotion: input.promotion,
+        actorId: input.actorId,
+        actorRole: input.actorRole,
+        metadata: {
+            posting_id: input.posting.id,
+            posting_platform: input.posting.platform_name,
+            posting_status: input.posting.status,
+            rejection_reason: input.posting.rejection_reason,
+        },
+    });
+}
+
+async function notifyPromotionSevenDayExpiryWarning(
+    promotion: PromotionNotificationContext,
+    actorId?: string,
+    actorRole?: string
+): Promise<void> {
+    if (!isSevenDaysFromExpiry(promotion.end_date) || promotion.status !== 'Active') {
+        return;
+    }
+
+    await notifyPromotionLifecycleEvent({
+        title: 'Promotion Expiry Warning',
+        message: `Promotion "${promotion.campaign_title}" expires in 7 days.`,
+        type: 'warning',
+        action: 'promotion_expiry_warning_7_day',
+        status: 'expiring_in_7_days',
+        promotion,
+        actorId,
+        actorRole,
+        metadata: {
+            expiry_date: promotion.end_date,
+        },
+    });
+}
 
 // ============================================================================
 // Promotion CRUD Operations
@@ -95,6 +287,8 @@ export async function createPromotion(
             // Don't rollback - postings can be added later
         }
     }
+
+    await notifyPromotionAssignment(promotion as PromotionNotificationContext, createdBy);
 
     return promotion as unknown as Promotion;
 }
@@ -189,6 +383,13 @@ export async function updatePromotion(
     id: string,
     updates: UpdatePromotionDTO
 ): Promise<Promotion | null> {
+    const { data: previousPromotion } = await supabase
+        .from('promotions')
+        .select('id, campaign_title, status, assigned_to, end_date')
+        .eq('id', id)
+        .eq('is_deleted', false)
+        .maybeSingle();
+
     const { data, error } = await supabase
         .from('promotions')
         .update(updates)
@@ -200,6 +401,17 @@ export async function updatePromotion(
     if (error) {
         console.error('Error updating promotion:', error);
         return null;
+    }
+
+    const updatedPromotion = data as PromotionNotificationContext;
+    if (
+        updates.assigned_to !== undefined &&
+        !areSameUserSets(
+            (previousPromotion as PromotionNotificationContext | null)?.assigned_to || [],
+            updatedPromotion.assigned_to || []
+        )
+    ) {
+        await notifyPromotionAssignment(updatedPromotion);
     }
 
     return data as unknown as Promotion;
@@ -458,6 +670,20 @@ export async function submitProof(
         return null;
     }
 
+    const promotion = await getPromotionNotificationContext(data.promotion_id);
+    if (promotion) {
+        await notifyPromotionProofEvent({
+            promotion,
+            posting: data as PromotionPosting,
+            action: 'promotion_proof_uploaded',
+            title: 'Promotion Proof Uploaded',
+            message: `Proof uploaded for "${promotion.campaign_title}" on ${data.platform_name}.`,
+            type: 'info',
+            status: 'pending_review',
+            actorId: postedBy,
+        });
+    }
+
     return data as unknown as PromotionPosting;
 }
 
@@ -482,6 +708,20 @@ export async function approveProof(
     if (error) {
         console.error('Error approving proof:', error);
         return null;
+    }
+
+    const promotion = await getPromotionNotificationContext(data.promotion_id);
+    if (promotion) {
+        await notifyPromotionProofEvent({
+            promotion,
+            posting: data as PromotionPosting,
+            action: 'promotion_proof_approved',
+            title: 'Promotion Proof Approved',
+            message: `Proof for "${promotion.campaign_title}" on ${data.platform_name} was approved.`,
+            type: 'success',
+            status: 'approved',
+            actorId: reviewerId,
+        });
     }
 
     return data as unknown as PromotionPosting;
@@ -512,7 +752,71 @@ export async function rejectProof(
         return null;
     }
 
+    const promotion = await getPromotionNotificationContext(data.promotion_id);
+    if (promotion) {
+        await notifyPromotionProofEvent({
+            promotion,
+            posting: data as PromotionPosting,
+            action: 'promotion_proof_rejected',
+            title: 'Promotion Proof Rejected',
+            message: `Proof for "${promotion.campaign_title}" on ${data.platform_name} was rejected. Reason: ${reason}`,
+            type: 'warning',
+            status: 'rejected',
+            actorId: reviewerId,
+        });
+    }
+
     return data as unknown as PromotionPosting;
+}
+
+/**
+ * Dispatch one 7-day expiry warning for a single promotion.
+ * Intended for realtime hooks and scheduled jobs.
+ */
+export async function dispatchPromotionSevenDayExpiryWarning(
+    promotionId: string,
+    actorId = 'system',
+    actorRole = 'system'
+): Promise<void> {
+    const promotion = await getPromotionNotificationContext(promotionId);
+    if (!promotion) return;
+
+    await notifyPromotionSevenDayExpiryWarning(promotion, actorId, actorRole);
+}
+
+/**
+ * Dispatch 7-day expiry warnings for all active promotions.
+ * Intended for scheduled/cron execution.
+ */
+export async function dispatchScheduledPromotionExpiryWarnings(): Promise<number> {
+    const targetDate = new Date();
+    targetDate.setHours(0, 0, 0, 0);
+    targetDate.setDate(targetDate.getDate() + 7);
+
+    const startOfTargetDay = new Date(targetDate);
+    const endOfTargetDay = new Date(targetDate);
+    endOfTargetDay.setHours(23, 59, 59, 999);
+
+    const { data, error } = await supabase
+        .from('promotions')
+        .select('id')
+        .eq('status', 'Active')
+        .eq('is_deleted', false)
+        .gte('end_date', startOfTargetDay.toISOString())
+        .lte('end_date', endOfTargetDay.toISOString());
+
+    if (error) {
+        console.error('Error fetching promotions for scheduled expiry warnings:', error);
+        return 0;
+    }
+
+    let dispatchedCount = 0;
+    for (const promotion of data || []) {
+        await dispatchPromotionSevenDayExpiryWarning(String(promotion.id));
+        dispatchedCount += 1;
+    }
+
+    return dispatchedCount;
 }
 
 // ============================================================================

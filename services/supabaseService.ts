@@ -5,7 +5,7 @@
 import { supabase } from '../lib/supabaseClient';
 import type { RealtimeChannelStatus } from '@supabase/supabase-js';
 import { DEFAULT_STAFF_ACCESS_RIGHTS, DEFAULT_STAFF_ROLE, generateAvatarUrl, STAFF_ROLES } from '../constants';
-import { Contact, ContactPerson, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer } from '../types';
+import { Contact, ContactPerson, PipelineDeal, Product, Task, UserProfile, CallLogEntry, Inquiry, Purchase, ReorderReportEntry, TeamMessage, CreateStaffAccountInput, CreateStaffAccountResult, StaffAccountValidationError, Notification, CreateNotificationInput, NotificationType, RecycleBinItemType, CreateIncidentReportInput, AgentSalesData, AgentPerformanceSummary, TopCustomer, StandardNotificationPayload } from '../types';
 import { sanitizeObject, SanitizationConfig } from '../utils/dataSanitization';
 import { parseSupabaseError } from '../utils/errorHandler';
 import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogService';
@@ -644,6 +644,88 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
   }
 };
 
+export interface AccessRightsChangeNotificationInput {
+  actorId?: string;
+  actorRole?: string;
+  targetUserId: string;
+  targetUserRole?: string;
+  beforeRights: string[];
+  afterRights: string[];
+}
+
+export const notifyAccessRightsChange = async (input: AccessRightsChangeNotificationInput): Promise<void> => {
+  const actionUrl = `/settings?section=access-control&userId=${input.targetUserId}`;
+  const sharedMetadata = {
+    before_rights: input.beforeRights,
+    after_rights: input.afterRights,
+    target_user_id: input.targetUserId,
+    target_user_role: input.targetUserRole || 'Unknown',
+  };
+
+  await dispatchWorkflowNotification({
+    title: 'Access Rights Updated',
+    message: `Access rights were updated for user ${input.targetUserId}.`,
+    type: 'warning',
+    action: 'update_access_rights',
+    status: 'success',
+    entityType: 'user_profile',
+    entityId: input.targetUserId,
+    actionUrl,
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    targetRoles: ['Owner', 'Manager'],
+    includeActor: true,
+    metadata: sharedMetadata,
+  });
+
+  await dispatchWorkflowNotification({
+    title: 'Your Access Rights Changed',
+    message: 'Your access permissions were updated. Please review your available modules.',
+    type: 'info',
+    action: 'notify_access_rights_change',
+    status: 'success',
+    entityType: 'user_profile',
+    entityId: input.targetUserId,
+    actionUrl,
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    targetUserIds: [input.targetUserId],
+    includeActor: false,
+    metadata: sharedMetadata,
+  });
+};
+
+export interface StaffCreationNotificationInput {
+  actorId?: string;
+  actorRole?: string;
+  targetUserId: string;
+  targetUserRole?: string;
+  email?: string;
+}
+
+export const notifyStaffAccountCreated = async (input: StaffCreationNotificationInput): Promise<void> => {
+  const actionUrl = `/settings?section=access-control&userId=${input.targetUserId}`;
+  await dispatchWorkflowNotification({
+    title: 'Staff Account Created',
+    message: `A new staff account (${input.email || input.targetUserId}) was created with role ${input.targetUserRole || 'Unknown'}.`,
+    type: 'success',
+    action: 'create_staff_account',
+    status: 'success',
+    entityType: 'user_profile',
+    entityId: input.targetUserId,
+    actionUrl,
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    targetRoles: ['Owner', 'Manager'],
+    includeActor: true,
+    metadata: {
+      target_user_id: input.targetUserId,
+      target_user_role: input.targetUserRole || 'Unknown',
+      target_user_email: input.email || '',
+    },
+  });
+};
+
 // --- STAFF ACCOUNT CREATION ---
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -812,10 +894,74 @@ export const bulkCreateStaffAccounts = async (inputs: CreateStaffAccountInput[])
   return results;
 };
 
+const getAuthClientMetadata = () => ({
+  ip_address: null,
+  user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+  platform: typeof navigator !== 'undefined' ? navigator.platform : null,
+  language: typeof navigator !== 'undefined' ? navigator.language : null,
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  origin: typeof window !== 'undefined' ? window.location.origin : null,
+});
+
 export const resetStaffPassword = async (userId: string, newPassword: string) => {
   try {
-    const { error } = await supabase.auth.admin.updateUserById(userId, { password: newPassword });
+    const { data: authData } = await supabase.auth.getUser();
+    const actorUser = authData?.user;
+    const { data: actorProfile } = actorUser
+      ? await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', actorUser.id)
+        .maybeSingle()
+      : { data: null };
+    const actorRole = (actorProfile as { role?: string } | null)?.role || 'Unknown';
+
+    const { data, error } = await supabase.functions.invoke('reset-staff-password', {
+      body: { userId, newPassword },
+    });
     if (error) throw error;
+    if (!data?.success) throw new Error(data?.error || 'Unable to reset password');
+
+    const notificationMetadata = {
+      actor_id: actorUser?.id || null,
+      actor_email: actorUser?.email || null,
+      target_user_id: userId,
+      auth_provider: 'admin_reset',
+      ...getAuthClientMetadata(),
+    };
+
+    await dispatchWorkflowNotification({
+      title: 'Password Reset Initiated',
+      message: `A password reset was initiated for user ${userId}.`,
+      type: 'warning',
+      action: 'password_reset_initiation',
+      status: 'initiated',
+      entityType: 'auth_event',
+      entityId: userId,
+      actionUrl: '/security/audit',
+      actorId: actorUser?.id,
+      actorRole,
+      targetRoles: ['Owner', 'Manager', 'Security'],
+      includeActor: true,
+      metadata: notificationMetadata,
+    });
+
+    await dispatchWorkflowNotification({
+      title: 'Password Reset Completed',
+      message: `A password reset completed for user ${userId}.`,
+      type: 'success',
+      action: 'password_reset_completion',
+      status: 'success',
+      entityType: 'auth_event',
+      entityId: userId,
+      actionUrl: '/security/audit',
+      actorId: actorUser?.id,
+      actorRole,
+      targetRoles: ['Owner', 'Manager', 'Security'],
+      includeActor: true,
+      metadata: notificationMetadata,
+    });
+
     console.info('Password reset for user', { userId });
     return true;
   } catch (err) {
@@ -2139,15 +2285,114 @@ export const getUnreadCount = async (userId: string): Promise<number> => {
   }
 };
 
+const NOTIFICATION_RETRY_ATTEMPTS = 3;
+const NOTIFICATION_BACKOFF_MS = 200;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const withNotificationRetry = async <T>(operation: () => Promise<T>, context: string): Promise<T> => {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= NOTIFICATION_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt < NOTIFICATION_RETRY_ATTEMPTS) {
+        await sleep(NOTIFICATION_BACKOFF_MS * Math.pow(2, attempt - 1));
+      }
+    }
+  }
+  throw new Error(`Notification dispatch failed: ${context}. ${String(lastError)}`);
+};
+
+const buildDefaultIdempotencyKey = (
+  recipientId: string,
+  title: string,
+  action: string,
+  entityType: string,
+  entityId: string,
+  status?: string
+) => [recipientId, action, entityType, entityId, status || 'unknown', title].join(':');
+
+const normalizeNotificationPayload = (
+  recipientId: string,
+  title: string,
+  type: NotificationType,
+  actionUrl?: string,
+  metadata?: Partial<StandardNotificationPayload> & Record<string, unknown>
+): StandardNotificationPayload => {
+  const action = String(metadata?.action || title || 'notify');
+  const entityType = String(metadata?.entity_type || 'system');
+  const entityId = String(metadata?.entity_id || recipientId);
+  const status = metadata?.status ? String(metadata.status) : 'created';
+  const normalizedActionUrl = actionUrl || metadata?.action_url ? String(actionUrl || metadata?.action_url) : undefined;
+
+  return {
+    ...metadata,
+    actor_id: String(metadata?.actor_id || 'system'),
+    actor_role: String(metadata?.actor_role || 'system'),
+    entity_type: entityType,
+    entity_id: entityId,
+    org_id: metadata?.org_id ? String(metadata.org_id) : undefined,
+    tenant: metadata?.tenant ? String(metadata.tenant) : undefined,
+    severity: (metadata?.severity as NotificationType) || type,
+    action,
+    status,
+    action_url: normalizedActionUrl,
+    idempotency_key: String(
+      metadata?.idempotency_key ||
+      buildDefaultIdempotencyKey(recipientId, title, action, entityType, entityId, status)
+    ),
+    correlation_id: metadata?.correlation_id ? String(metadata.correlation_id) : undefined,
+  };
+};
+
+const findExistingNotificationByIdempotency = async (
+  recipientId: string,
+  idempotencyKey: string
+): Promise<Notification | null> => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('recipient_id', recipientId)
+    .contains('metadata', { idempotency_key: idempotencyKey })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data as Notification) || null;
+};
+
 export const createNotification = async (input: CreateNotificationInput): Promise<Notification | null> => {
   try {
-    const { data, error } = await supabase
-      .from('notifications')
-      .insert(input)
-      .select()
-      .maybeSingle();
-    if (error) throw error;
-    return (data as Notification) || null;
+    const metadata = normalizeNotificationPayload(
+      input.recipient_id,
+      input.title,
+      input.type,
+      input.action_url,
+      input.metadata
+    );
+    const existing = await findExistingNotificationByIdempotency(input.recipient_id, metadata.idempotency_key);
+    if (existing) return existing;
+
+    const payload: CreateNotificationInput = {
+      ...input,
+      action_url: input.action_url || metadata.action_url,
+      metadata,
+    };
+
+    const created = await withNotificationRetry(async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert(payload)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      return (data as Notification) || null;
+    }, `create notification for recipient ${input.recipient_id}`);
+
+    return created;
   } catch (err) {
     console.error('Error creating notification:', err);
     return null;
@@ -2156,12 +2401,8 @@ export const createNotification = async (input: CreateNotificationInput): Promis
 
 export const createBulkNotifications = async (inputs: CreateNotificationInput[]): Promise<Notification[]> => {
   try {
-    const { data, error } = await supabase
-      .from('notifications')
-      .insert(inputs)
-      .select();
-    if (error) throw error;
-    return (data as Notification[]) || [];
+    const settled = await Promise.all(inputs.map((input) => createNotification(input)));
+    return settled.filter((notification): notification is Notification => Boolean(notification));
   } catch (err) {
     console.error('Error creating bulk notifications:', err);
     return [];
@@ -2332,13 +2573,120 @@ export const subscribeToNotifications = (
 
 // --- NOTIFICATION HELPER FUNCTIONS ---
 
+export interface NotificationActorContext {
+  actorId: string;
+  actorRole: string;
+}
+
+export interface NotifyWorkflowEventInput {
+  title: string;
+  message: string;
+  type: NotificationType;
+  action: string;
+  status: string;
+  entityType: string;
+  entityId: string;
+  actionUrl?: string;
+  includeActor?: boolean;
+  actorId?: string;
+  actorRole?: string;
+  targetRoles?: string[];
+  targetUserIds?: string[];
+  orgId?: string;
+  tenant?: string;
+  correlationId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+const fetchRoleRecipientIds = async (roles: string[]): Promise<string[]> => {
+  if (!roles.length) return [];
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .in('role', roles);
+  if (error) throw error;
+  return ((data as Array<{ id: string; role: string }>) || []).map((profile) => profile.id);
+};
+
+export const getCurrentNotificationActor = async (): Promise<NotificationActorContext | null> => {
+  try {
+    const { data: authData } = await supabase.auth.getUser();
+    const actor = authData?.user;
+    if (!actor) return null;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', actor.id)
+      .maybeSingle();
+
+    return {
+      actorId: actor.id,
+      actorRole: (profile as { role?: string } | null)?.role || 'Unknown',
+    };
+  } catch (err) {
+    console.error('Unable to resolve notification actor context:', err);
+    return null;
+  }
+};
+
+export const dispatchWorkflowNotification = async (input: NotifyWorkflowEventInput): Promise<Notification[]> => {
+  try {
+    const actorContext = input.actorId
+      ? {
+        actorId: input.actorId,
+        actorRole: input.actorRole || 'Unknown',
+      }
+      : await getCurrentNotificationActor();
+
+    const actorId = actorContext?.actorId || 'system';
+    const actorRole = actorContext?.actorRole || 'system';
+    const roleRecipients = await fetchRoleRecipientIds(input.targetRoles || []);
+    const recipients = new Set<string>([...(input.targetUserIds || []), ...roleRecipients]);
+    if (input.includeActor !== false) recipients.add(actorId);
+
+    const notificationInputs: CreateNotificationInput[] = Array.from(recipients).map((recipientId) => ({
+      recipient_id: recipientId,
+      title: input.title,
+      message: input.message,
+      type: input.type,
+      action_url: input.actionUrl,
+      metadata: normalizeNotificationPayload(
+        recipientId,
+        input.title,
+        input.type,
+        input.actionUrl,
+        {
+          actor_id: actorId,
+          actor_role: actorRole,
+          entity_type: input.entityType,
+          entity_id: input.entityId,
+          action: input.action,
+          status: input.status,
+          action_url: input.actionUrl,
+          org_id: input.orgId,
+          tenant: input.tenant,
+          severity: input.type,
+          correlation_id: input.correlationId,
+          ...input.metadata,
+        }
+      )
+    }));
+
+    return createBulkNotifications(notificationInputs);
+  } catch (err) {
+    console.error('Error dispatching workflow notification:', err);
+    return [];
+  }
+};
+
 export const notifyUser = async (
   userId: string,
   title: string,
   message: string,
   type: NotificationType,
   actionUrl?: string,
-  metadata?: Record<string, any>
+  metadata?: Partial<StandardNotificationPayload> & Record<string, unknown>
 ): Promise<Notification | null> => {
   return createNotification({
     recipient_id: userId,
@@ -2346,7 +2694,7 @@ export const notifyUser = async (
     message,
     type,
     action_url: actionUrl,
-    metadata
+    metadata: normalizeNotificationPayload(userId, title, type, actionUrl, metadata)
   });
 };
 
@@ -2356,25 +2704,18 @@ export const notifyRole = async (
   message: string,
   type: NotificationType,
   actionUrl?: string,
-  metadata?: Record<string, any>
+  metadata?: Partial<StandardNotificationPayload> & Record<string, unknown>
 ): Promise<Notification[]> => {
   try {
-    const { data: profiles, error: profileError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('role', role);
-
-    if (profileError) throw profileError;
-
-    const inputs: CreateNotificationInput[] = (profiles || []).map((profile: any) => ({
-      recipient_id: profile.id,
+    const recipientIds = await fetchRoleRecipientIds([role]);
+    const inputs: CreateNotificationInput[] = recipientIds.map((recipientId) => ({
+      recipient_id: recipientId,
       title,
       message,
       type,
       action_url: actionUrl,
-      metadata
+      metadata: normalizeNotificationPayload(recipientId, title, type, actionUrl, metadata),
     }));
-
     return createBulkNotifications(inputs);
   } catch (err) {
     console.error('Error notifying role:', err);
@@ -2387,7 +2728,7 @@ export const notifyAll = async (
   message: string,
   type: NotificationType,
   actionUrl?: string,
-  metadata?: Record<string, any>
+  metadata?: Partial<StandardNotificationPayload> & Record<string, unknown>
 ): Promise<Notification[]> => {
   try {
     const { data: profiles, error: profileError } = await supabase
@@ -2396,13 +2737,13 @@ export const notifyAll = async (
 
     if (profileError) throw profileError;
 
-    const inputs: CreateNotificationInput[] = (profiles || []).map((profile: any) => ({
+    const inputs: CreateNotificationInput[] = ((profiles as Array<{ id: string }> | null) || []).map((profile) => ({
       recipient_id: profile.id,
       title,
       message,
       type,
       action_url: actionUrl,
-      metadata
+      metadata: normalizeNotificationPayload(profile.id, title, type, actionUrl, metadata)
     }));
 
     return createBulkNotifications(inputs);

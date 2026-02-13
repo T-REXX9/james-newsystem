@@ -429,9 +429,19 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const selectionInitializedRef = useRef(false);
   const pendingFilterSnapshotRef = useRef<{ scrollTop: number; selectedClientId: string | null } | null>(null);
 
-  const handleOpenSalesInquiry = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'salesinquiry' } }));
-  }, []);
+  const handleOpenSalesInquiry = useCallback((contactId?: string) => {
+    const targetContactId = contactId || selectedClientId || undefined;
+    window.dispatchEvent(new CustomEvent('workflow:navigate', {
+      detail: {
+        tab: 'salesinquiry',
+        payload: {
+          ...(targetContactId ? { contactId: targetContactId } : {}),
+          prefillToken: Date.now().toString(),
+          openMode: 'new'
+        }
+      }
+    }));
+  }, [selectedClientId]);
 
   const handleOpenPatientChart = (contactId: string) => {
     setSelectedClientId(contactId);
@@ -1041,56 +1051,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     });
   }, [selectedClientId]);
 
-  if (!currentUser) {
-    return (
-      <div className="flex items-center justify-center h-full p-6">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
-          <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-          <h2 className="text-lg font-bold text-slate-800 dark:text-white">Sign in to continue</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Please sign in with your sales agent account to view daily call monitoring insights.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isSalesAgent) {
-    return (
-      <div className="flex items-center justify-center h-full p-6">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
-          <ShieldAlert className="w-10 h-10 text-amber-500 mx-auto mb-3" />
-          <h2 className="text-lg font-bold text-slate-800 dark:text-white">Sales agent view</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            The Daily Call Monitoring workspace is tailored for sales agents. Switch to the live owner view to monitor the entire team.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!agentDataName) {
-    return (
-      <div className="flex items-center justify-center h-full p-6">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
-          <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-          <h2 className="text-lg font-bold text-slate-800 dark:text-white">Profile Required</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Please make sure your profile includes your full name so we can match assigned accounts for {agentDisplayName}.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full p-6">
-        <CustomLoadingSpinner label="Loading" />
-      </div>
-    );
-  }
-
   const densityConfig = getDensityConfig(density);
   const tableRowHeight = getRowHeight(density);
   const masterVirtual = useVirtualizedList(masterRows, {
@@ -1159,6 +1119,56 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
 
     return () => cancelAnimationFrame(frameId);
   }, [isFiltering, statusFilters, masterRows, masterViewportHeight, tableRowHeight]);
+
+  if (!currentUser) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
+          <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white">Sign in to continue</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Please sign in with your sales agent account to view daily call monitoring insights.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSalesAgent) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
+          <ShieldAlert className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white">Sales agent view</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            The Daily Call Monitoring workspace is tailored for sales agents. Switch to the live owner view to monitor the entire team.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!agentDataName) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center shadow-sm max-w-md">
+          <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-slate-800 dark:text-white">Profile Required</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Please make sure your profile includes your full name so we can match assigned accounts for {agentDisplayName}.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <CustomLoadingSpinner label="Loading" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
@@ -1663,7 +1673,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                 Email
               </button>
               <button
-                onClick={handleOpenSalesInquiry}
+                onClick={() => handleOpenSalesInquiry(selectedClient.id)}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
               >
                 <FileText className="w-4 h-4" />

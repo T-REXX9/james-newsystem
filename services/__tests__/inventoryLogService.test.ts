@@ -185,6 +185,7 @@ describe('inventoryLogService', () => {
                 id: invoiceId,
                 invoice_no: 'INV-001',
                 contact_id: 'customer-123',
+                warehouse_id: 'WH2',
                 status: 'sent',
                 sales_date: '2024-01-01',
                 invoice_items: [
@@ -217,6 +218,7 @@ describe('inventoryLogService', () => {
             const insertBuilder = (buildersByTable.inventory_logs || [])[0];
             expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
+                    warehouse_id: 'WH2',
                     qty_in: 0,
                     qty_out: 5,
                     status_indicator: '-',
@@ -232,6 +234,7 @@ describe('inventoryLogService', () => {
                 id: invoiceId,
                 invoice_no: 'INV-001',
                 contact_id: 'customer-123',
+                warehouse_id: 'WH2',
                 status: 'paid', // Valid status
                 sales_date: '2024-01-01',
                 invoice_items: [
@@ -266,6 +269,7 @@ describe('inventoryLogService', () => {
             expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
                     transaction_type: 'Invoice',
+                    warehouse_id: 'WH2',
                     qty_in: 0,
                     qty_out: 3,
                     status_indicator: '-',
@@ -306,6 +310,45 @@ describe('inventoryLogService', () => {
                 'Invoice must be sent or paid to create inventory logs'
             );
         });
+
+        it('throws error when invoice warehouse cannot be resolved', async () => {
+            const invoiceId = 'invoice-123';
+            const userId = 'user-123';
+
+            const mockInvoice = {
+                id: invoiceId,
+                invoice_no: 'INV-001',
+                contact_id: 'customer-123',
+                status: 'sent',
+                sales_date: '2024-01-01',
+                invoice_items: [
+                    {
+                        id: 'ii-1',
+                        item_id: 'item-1',
+                        qty: 5,
+                        unit_price: 200,
+                    },
+                ],
+            };
+
+            const mockCustomer = {
+                id: 'customer-123',
+                company: 'Test Customer Corp.',
+            };
+
+            const { fromFn } = createFromMock({
+                invoices: [{ data: mockInvoice, error: null }],
+                contacts: [{ data: mockCustomer, error: null }],
+            });
+
+            mockSupabase.from.mockImplementation(fromFn);
+
+            const { createInventoryLogFromInvoice } = await import('../inventoryLogService');
+
+            await expect(createInventoryLogFromInvoice(invoiceId, userId)).rejects.toThrow(
+                'Missing warehouse_id for invoice INV-001 item item-1'
+            );
+        });
     });
 
     describe('createInventoryLogFromOrderSlip', () => {
@@ -317,6 +360,7 @@ describe('inventoryLogService', () => {
                 id: slipId,
                 slip_no: 'OS-001',
                 contact_id: 'customer-123',
+                warehouse_id: 'WH3',
                 status: 'finalized',
                 sales_date: '2024-01-01',
                 order_slip_items: [
@@ -350,6 +394,7 @@ describe('inventoryLogService', () => {
             expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
                     transaction_type: 'Order Slip',
+                    warehouse_id: 'WH3',
                     qty_in: 0,
                     qty_out: 8,
                     status_indicator: '-',
@@ -580,6 +625,7 @@ describe('inventoryLogService', () => {
             const mockReturn = {
                 id: returnId,
                 contact_id: 'customer-123',
+                warehouse_id: 'WH4',
                 status: 'processed',
                 returnDate: '2024-01-01',
                 reason: 'Defective product',
@@ -620,6 +666,7 @@ describe('inventoryLogService', () => {
             expect(insertBuilder.insert).toHaveBeenCalledWith(
                 expect.objectContaining({
                     transaction_type: 'Credit Memo',
+                    warehouse_id: 'WH4',
                     qty_in: 2,
                     qty_out: 0,
                     status_indicator: '+',
