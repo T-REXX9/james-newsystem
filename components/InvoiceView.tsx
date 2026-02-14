@@ -9,10 +9,9 @@ import {
   markOverdue,
   printInvoice,
 } from '../services/invoiceService';
-import { fetchContacts, createNotification } from '../services/supabaseService';
+import { dispatchWorkflowNotification, fetchContacts } from '../services/supabaseService';
 import { isInvoiceAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderService';
-import { supabase } from '../lib/supabaseClient';
-import { Contact, Invoice, InvoiceItem, InvoiceStatus, NotificationType } from '../types';
+import { Contact, Invoice, InvoiceItem, InvoiceStatus } from '../types';
 import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
 import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
@@ -71,15 +70,26 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
-  const notifyUser = useCallback(async (title: string, message: string, type: NotificationType = 'success') => {
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (!user) return;
-      await createNotification({ recipient_id: user.id, title, message, type });
-    } catch (err) {
-      console.error('Error sending notification:', err);
-    }
+  const notifyInvoiceEvent = useCallback(async (
+    title: string,
+    message: string,
+    action: string,
+    status: 'success' | 'failed',
+    entityId: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'success'
+  ) => {
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'invoice',
+      entityId,
+      actionUrl: `/invoice?invoiceId=${entityId}`,
+      targetRoles: ['Owner', 'Manager', 'Support'],
+      includeActor: true,
+    });
   }, []);
 
   // Auto-select first invoice when invoices change
@@ -131,9 +141,10 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
 
     try {
       await sendInvoice(selectedInvoice.id);
-      await notifyUser('Invoice Sent', `Invoice ${selectedInvoice.invoice_no} sent to customer.`);
+      await notifyInvoiceEvent('Invoice Sent', `Invoice ${selectedInvoice.invoice_no} sent to customer.`, 'send', 'success', selectedInvoice.id);
     } catch (err) {
       console.error('Error sending invoice:', err);
+      await notifyInvoiceEvent('Invoice Send Failed', `Failed to send invoice ${selectedInvoice.invoice_no}.`, 'send', 'failed', selectedInvoice.id, 'error');
       alert('Failed to send invoice');
       // Real-time subscription will correct the state
     } finally {
@@ -151,9 +162,10 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
 
     try {
       await markOverdue(selectedInvoice.id);
-      await notifyUser('Invoice Overdue', `Invoice ${selectedInvoice.invoice_no} marked as overdue.`, 'warning');
+      await notifyInvoiceEvent('Invoice Overdue', `Invoice ${selectedInvoice.invoice_no} marked as overdue.`, 'mark_overdue', 'success', selectedInvoice.id, 'warning');
     } catch (err) {
       console.error('Error marking overdue:', err);
+      await notifyInvoiceEvent('Invoice Overdue Update Failed', `Failed to mark invoice ${selectedInvoice.invoice_no} as overdue.`, 'mark_overdue', 'failed', selectedInvoice.id, 'error');
       alert('Failed to mark invoice overdue');
       // Real-time subscription will correct the state
     } finally {
@@ -182,13 +194,14 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
         payment_date: paymentDate,
         payment_method: paymentMethod,
       });
-      await notifyUser('Payment Recorded', `Invoice ${selectedInvoice.invoice_no} marked as paid (${paymentAmount || 'Full amount'}).`);
+      await notifyInvoiceEvent('Payment Recorded', `Invoice ${selectedInvoice.invoice_no} marked as paid (${paymentAmount || 'Full amount'}).`, 'record_payment', 'success', selectedInvoice.id);
       setPaymentModalOpen(false);
       setPaymentDate('');
       setPaymentMethod('Cash');
       setPaymentAmount('');
     } catch (err) {
       console.error('Error recording payment:', err);
+      await notifyInvoiceEvent('Payment Recording Failed', `Failed to record payment for invoice ${selectedInvoice.invoice_no}.`, 'record_payment', 'failed', selectedInvoice.id, 'error');
       alert('Failed to record payment');
       // Real-time subscription will correct the state
     }
@@ -205,10 +218,11 @@ const InvoiceView: React.FC<InvoiceViewProps> = ({ initialInvoiceId }) => {
 
     try {
       await printInvoice(selectedInvoice.id);
-      await notifyUser('Invoice Printed', `Invoice ${selectedInvoice.invoice_no} printed.`);
+      await notifyInvoiceEvent('Invoice Printed', `Invoice ${selectedInvoice.invoice_no} printed.`, 'print', 'success', selectedInvoice.id);
       window.print();
     } catch (err) {
       console.error('Error printing invoice:', err);
+      await notifyInvoiceEvent('Invoice Print Failed', `Failed to print invoice ${selectedInvoice.invoice_no}.`, 'print', 'failed', selectedInvoice.id, 'error');
       alert('Failed to print invoice');
       // Real-time subscription will correct the state
     } finally {

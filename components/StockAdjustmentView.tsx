@@ -11,11 +11,9 @@ import {
   getAllStockAdjustments,
   finalizeAdjustment,
 } from '../services/stockAdjustmentService';
-import { fetchProducts, createNotification } from '../services/supabaseService';
-import { supabase } from '../lib/supabaseClient';
+import { dispatchWorkflowNotification, fetchProducts } from '../services/supabaseService';
 import {
   Product,
-  NotificationType,
   StockAdjustment,
   StockAdjustmentDTO,
   StockAdjustmentItem,
@@ -92,15 +90,26 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
 
   const productMap = useMemo(() => new Map(products.map(product => [product.id, product])), [products]);
 
-  const notifyUser = useCallback(async (title: string, message: string, type: NotificationType = 'success') => {
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (!user) return;
-      await createNotification({ recipient_id: user.id, title, message, type });
-    } catch (err) {
-      console.error('Error sending notification:', err);
-    }
+  const notifyStockAdjustmentEvent = useCallback(async (
+    title: string,
+    message: string,
+    action: string,
+    status: 'success' | 'failed',
+    entityId: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'success'
+  ) => {
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'stock_adjustment',
+      entityId,
+      actionUrl: `/stock-adjustment?adjustmentId=${entityId}`,
+      targetRoles: ['Owner', 'Manager', 'Support'],
+      includeActor: true,
+    });
   }, []);
 
   // Auto-select first adjustment when adjustments change
@@ -175,14 +184,24 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
 
     try {
       await finalizeAdjustment(selectedAdjustment.id);
-      await notifyUser(
+      await notifyStockAdjustmentEvent(
         'Stock Adjustment Finalized',
         `Adjustment ${selectedAdjustment.adjustment_no} has been finalized. Inventory updated.`,
-        'success'
+        'finalize',
+        'success',
+        selectedAdjustment.id
       );
       setShowFinalizeConfirm(false);
     } catch (err) {
       console.error('Error finalizing adjustment:', err);
+      await notifyStockAdjustmentEvent(
+        'Stock Adjustment Finalization Failed',
+        `Failed to finalize adjustment ${selectedAdjustment.adjustment_no}.`,
+        'finalize',
+        'failed',
+        selectedAdjustment.id,
+        'error'
+      );
       alert('Failed to finalize adjustment');
       // Real-time subscription will correct state
     } finally {
@@ -208,7 +227,13 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
 
     try {
       const newAdjustment = await createStockAdjustment(adjustmentData);
-      await notifyUser('Stock Adjustment Created', `Adjustment ${adjustmentNo} has been created successfully.`);
+      await notifyStockAdjustmentEvent(
+        'Stock Adjustment Created',
+        `Adjustment ${adjustmentNo} has been created successfully.`,
+        'create',
+        'success',
+        newAdjustment.id
+      );
       setShowCreateForm(false);
       // Reset form
       setAdjustmentNo('');
@@ -220,6 +245,14 @@ const StockAdjustmentView: React.FC<StockAdjustmentViewProps> = ({ initialAdjust
       setItemSearch('');
     } catch (err) {
       console.error('Error creating adjustment:', err);
+      await notifyStockAdjustmentEvent(
+        'Stock Adjustment Creation Failed',
+        `Failed to create adjustment ${adjustmentNo || 'n/a'}.`,
+        'create',
+        'failed',
+        adjustmentNo || 'pending',
+        'error'
+      );
       alert('Failed to create stock adjustment');
     } finally {
       setCreating(false);

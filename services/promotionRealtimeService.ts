@@ -1,5 +1,6 @@
 import { supabase } from './supabaseService';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { dispatchPromotionSevenDayExpiryWarning } from './promotionService';
 
 export interface PromotionCallbacks {
     onInsert?: (promotion: any) => void;
@@ -14,6 +15,32 @@ export interface PromotionPostingCallbacks {
     onDelete?: (payload: { id: string }) => void;
     onError?: (error: Error) => void;
 }
+
+interface PromotionRealtimeRow {
+    id: string;
+    status?: string;
+    end_date?: string;
+}
+
+const isSevenDaysFromExpiry = (endDate?: string): boolean => {
+    if (!endDate) return false;
+
+    const end = new Date(endDate);
+    if (Number.isNaN(end.getTime())) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const dayDiff = Math.round((end.getTime() - today.getTime()) / msPerDay);
+    return dayDiff === 7;
+};
+
+const isEligibleForSevenDayWarning = (promotion: PromotionRealtimeRow | null): boolean =>
+    Boolean(promotion?.id) &&
+    promotion?.status === 'Active' &&
+    isSevenDaysFromExpiry(promotion?.end_date);
 
 /**
  * Subscribe to all promotions table changes
@@ -32,6 +59,17 @@ export function subscribeToPromotions(callbacks: PromotionCallbacks): () => void
             },
             (payload) => {
                 try {
+                    const newPromotion = (payload.new || null) as PromotionRealtimeRow | null;
+                    const oldPromotion = (payload.old || null) as PromotionRealtimeRow | null;
+
+                    if (
+                        (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') &&
+                        isEligibleForSevenDayWarning(newPromotion) &&
+                        !isEligibleForSevenDayWarning(oldPromotion)
+                    ) {
+                        void dispatchPromotionSevenDayExpiryWarning(newPromotion!.id, 'system', 'system');
+                    }
+
                     switch (payload.eventType) {
                         case 'INSERT':
                             callbacks.onInsert?.(payload.new);

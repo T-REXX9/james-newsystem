@@ -39,73 +39,28 @@ export const returnToSupplierService = {
 
     // 4. Create new return
     createReturn: async (returnData: CreateReturnDTO) => {
-        // Start a transaction-like process (client-side orchestration)
+        const { data: authData } = await supabase.auth.getUser();
 
-        // A. Generate Return Number (Simple auto-increment logic or random for now)
-        // Ideally this should be a DB function or use a sequence. 
-        // For this implementation, we'll try to find the latest and increment, or use a timestamp based generated ID if allowed.
-        // However, the schema has return_no. Let's assume we generate it here or let the user input it? 
-        // The guide says "Auto-generated Return Number".
-        // Let's generate a unique string.
+        const { data: returnRecord, error } = await supabase.rpc('create_supplier_return_with_items', {
+            p_return_date: returnData.return_date,
+            p_return_type: returnData.return_type,
+            p_rr_id: returnData.rr_id,
+            p_rr_no: returnData.rr_no,
+            p_supplier_id: returnData.supplier_id,
+            p_supplier_name: returnData.supplier_name,
+            p_po_no: returnData.po_no || null,
+            p_remarks: returnData.remarks || null,
+            p_created_by: authData.user?.id || null,
+            p_items: returnData.items
+        });
 
-        const { count } = await supabase.from('supplier_returns').select('*', { count: 'exact', head: true });
-        const nextNum = (count || 0) + 1;
-        const returnNo = `RTS-${new Date().getFullYear()}-${String(nextNum).padStart(4, '0')}`;
-
-        const { data: returnRecord, error: returnError } = await supabase
-            .from('supplier_returns')
-            .insert({
-                return_no: returnNo,
-                reference_no: returnNo, // fallback
-                return_date: returnData.return_date,
-                return_type: returnData.return_type,
-                rr_id: returnData.rr_id,
-                rr_no: returnData.rr_no,
-                supplier_id: returnData.supplier_id,
-                supplier_name: returnData.supplier_name,
-                po_no: returnData.po_no,
-                status: 'Pending',
-                remarks: returnData.remarks,
-                grand_total: returnData.items.reduce((sum, item) => sum + item.total_amount, 0),
-                created_by: (await supabase.auth.getUser()).data.user?.id
-            })
-            .select()
-            .single();
-
-        if (returnError) throw returnError;
-
-        // B. Insert Items
-        if (returnRecord && returnData.items.length > 0) {
-            const itemsToInsert = returnData.items.map(item => ({
-                return_id: returnRecord.id,
-                rr_item_id: item.rr_item_id,
-                item_id: item.item_id,
-                item_code: item.item_code,
-                part_no: item.part_no,
-                description: item.description,
-                qty_returned: item.qty_returned,
-                unit_cost: item.unit_cost,
-                total_amount: item.total_amount,
-                return_reason: item.return_reason,
-                remarks: item.remarks
-            }));
-
-            const { error: itemsError } = await supabase
-                .from('supplier_return_items')
-                .insert(itemsToInsert);
-
-            if (itemsError) {
-                // cleanup if items fail? Manual delete?
-                // Ideally we use an RPC for atomic transaction, but for now we follow the simple service pattern.
-                console.error("Error inserting items:", itemsError);
-                throw itemsError;
-            }
-        }
+        if (error) throw error;
+        if (!returnRecord) throw new Error('Failed to create return');
 
         if (returnRecord) {
             try {
                 await logCreate(ENTITY_TYPES.RETURN_TO_SUPPLIER, returnRecord.id, {
-                    return_no: returnRecord.return_no || returnNo,
+                    return_no: returnRecord.return_no,
                     supplier_id: returnRecord.supplier_id,
                     grand_total: returnRecord.grand_total,
                 });
@@ -203,7 +158,7 @@ export const returnToSupplierService = {
             id: item.id,
             item_id: item.item_id,
             item_code: item.item_code,
-            part_number: item.part_number,
+            part_number: item.part_no || item.part_number || '',
             description: item.description,
             quantity_received: item.qty_received || item.quantity_received || 0, // Handle potential column name diffs
             unit_cost: item.unit_cost,
@@ -216,7 +171,7 @@ export const returnToSupplierService = {
         const { data, error } = await supabase
             .from('receiving_reports')
             .select('*')
-            .ilike('rr_number', `%${query}%`) // Assuming rr_number exists
+            .ilike('rr_no', `%${query}%`)
             .eq('status', 'Posted') // Only from posted RRs
             .limit(10);
 

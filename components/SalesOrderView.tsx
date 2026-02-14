@@ -11,7 +11,6 @@ import {
 import {
   Contact,
   Invoice,
-  NotificationType,
   OrderSlip,
   SalesOrder,
   SalesOrderItem,
@@ -23,10 +22,9 @@ import {
   getAllSalesOrders,
   syncDocumentPolicyState,
 } from '../services/salesOrderService';
-import { fetchContacts, createNotification } from '../services/supabaseService';
+import { dispatchWorkflowNotification, fetchContacts } from '../services/supabaseService';
 import StatusBadge from './StatusBadge';
 import WorkflowStepper from './WorkflowStepper';
-import { supabase } from '../lib/supabaseClient';
 import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
 import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
@@ -75,20 +73,51 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
-  const notifyUser = useCallback(async (title: string, message: string, type: NotificationType = 'success') => {
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (!user) return;
-      await createNotification({ recipient_id: user.id, title, message, type });
-    } catch (err) {
-      console.error('Error sending notification:', err);
-    }
+  const notifySalesOrderEvent = useCallback(async (
+    title: string,
+    message: string,
+    action: string,
+    status: 'success' | 'failed',
+    entityId: string,
+    actionUrl: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'success'
+  ) => {
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'sales_order',
+      entityId,
+      actionUrl,
+      targetRoles: ['Owner', 'Manager'],
+      includeActor: true,
+    });
   }, []);
 
   const navigateToModule = useCallback((tab: string, payload?: Record<string, string>) => {
     window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab, payload } }));
   }, []);
+
+  const getCustomerLabel = useCallback(
+    (order: SalesOrder, fallbackCustomer?: Contact | null) =>
+      fallbackCustomer?.company || customerMap.get(order.contact_id)?.company || order.contact_id,
+    [customerMap]
+  );
+
+  const applyOptimisticStatusUpdate = useCallback((orderId: string, status: SalesOrderStatus) => {
+    setOrders(prev => applyOptimisticUpdate(prev, orderId, { status } as Partial<SalesOrder>));
+    setSelectedOrder(prev => prev ? { ...prev, status } : null);
+  }, [setOrders]);
+
+  const openDocumentFromLink = useCallback((link: { type: 'orderslip' | 'invoice'; id: string }) => {
+    if (link.type === 'orderslip') {
+      navigateToModule('orderslip', { orderSlipId: link.id });
+      return;
+    }
+    navigateToModule('invoice', { invoiceId: link.id });
+  }, [navigateToModule]);
 
   // Auto-select first order when orders change
   useEffect(() => {
@@ -140,14 +169,29 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     setConfirming(true);
 
     // Optimistic update
-    setOrders(prev => applyOptimisticUpdate(prev, selectedOrder.id, { status: SalesOrderStatus.CONFIRMED } as Partial<SalesOrder>));
-    setSelectedOrder(prev => prev ? { ...prev, status: SalesOrderStatus.CONFIRMED } : null);
+    applyOptimisticStatusUpdate(selectedOrder.id, SalesOrderStatus.CONFIRMED);
 
     try {
       await confirmSalesOrder(selectedOrder.id);
-      await notifyUser('Sales Order Confirmed', `Order ${selectedOrder.order_no} has been approved.`);
+      await notifySalesOrderEvent(
+        'Sales Order Confirmed',
+        `Order ${selectedOrder.order_no} has been approved.`,
+        'confirm',
+        'success',
+        selectedOrder.id,
+        `/salesorder?orderId=${selectedOrder.id}`
+      );
     } catch (err) {
       console.error('Error confirming sales order:', err);
+      await notifySalesOrderEvent(
+        'Sales Order Confirmation Failed',
+        `Failed to confirm order ${selectedOrder.order_no}.`,
+        'confirm',
+        'failed',
+        selectedOrder.id,
+        `/salesorder?orderId=${selectedOrder.id}`,
+        'error'
+      );
       alert('Failed to confirm order');
       // Real-time subscription will correct the state
     } finally {
@@ -160,10 +204,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
     setConversionLoading(true);
 
     // Optimistic update
-    setOrders(prev => applyOptimisticUpdate(prev, selectedOrder.id, {
-      status: SalesOrderStatus.CONVERTED_TO_DOCUMENT
-    } as Partial<SalesOrder>));
-    setSelectedOrder(prev => prev ? { ...prev, status: SalesOrderStatus.CONVERTED_TO_DOCUMENT } : null);
+    applyOptimisticStatusUpdate(selectedOrder.id, SalesOrderStatus.CONVERTED_TO_DOCUMENT);
 
     try {
       const document = await convertToDocument(selectedOrder.id);
@@ -172,17 +213,40 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
         const slip = document as OrderSlip;
         setDocumentMessage(`Created Order Slip ${slip.slip_no}`);
         setDocumentLink({ type: 'orderslip', id: slip.id, label: slip.slip_no });
-        await notifyUser('Order Slip Created', `Order ${selectedOrder.order_no} converted to ${slip.slip_no}.`);
+        await notifySalesOrderEvent(
+          'Order Slip Created',
+          `Order ${selectedOrder.order_no} converted to ${slip.slip_no}.`,
+          'convert_to_order_slip',
+          'success',
+          slip.id,
+          `/orderslip?orderSlipId=${slip.id}`
+        );
       } else {
         const invoice = document as Invoice;
         setDocumentMessage(`Created Invoice ${invoice.invoice_no}`);
         setDocumentLink({ type: 'invoice', id: invoice.id, label: invoice.invoice_no });
-        await notifyUser('Invoice Created', `Order ${selectedOrder.order_no} converted to ${invoice.invoice_no}.`);
+        await notifySalesOrderEvent(
+          'Invoice Created',
+          `Order ${selectedOrder.order_no} converted to ${invoice.invoice_no}.`,
+          'convert_to_invoice',
+          'success',
+          invoice.id,
+          `/invoice?invoiceId=${invoice.id}`
+        );
       }
       setConversionModalOpen(false);
       // Real-time subscription will update the state
     } catch (err) {
       console.error('Error converting sales order:', err);
+      await notifySalesOrderEvent(
+        'Sales Order Conversion Failed',
+        `Failed to convert order ${selectedOrder.order_no} to a document.`,
+        'convert_to_document',
+        'failed',
+        selectedOrder.id,
+        `/salesorder?orderId=${selectedOrder.id}`,
+        'error'
+      );
       alert('Failed to convert order to document');
       // Real-time subscription will correct the state
     } finally {
@@ -263,7 +327,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                     <span className="font-semibold text-sm text-slate-800 dark:text-slate-100">{order.order_no}</span>
                     <StatusBadge status={order.status} />
                   </div>
-                  <p className="text-xs text-slate-500">{customer?.company || order.contact_id}</p>
+                  <p className="text-xs text-slate-500">{getCustomerLabel(order, customer)}</p>
                   <p className="text-[11px] text-slate-400">{new Date(order.sales_date).toLocaleDateString()}</p>
                 </button>
               );
@@ -290,7 +354,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                   <div>
                     <p className="text-xs text-slate-500">Sales Order</p>
                     <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">{selectedOrder.order_no}</h2>
-                    <p className="text-xs text-slate-500">{new Date(selectedOrder.sales_date).toLocaleDateString()} · {selectedCustomer?.company || selectedOrder.contact_id}</p>
+                    <p className="text-xs text-slate-500">{new Date(selectedOrder.sales_date).toLocaleDateString()} · {getCustomerLabel(selectedOrder, selectedCustomer)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <StatusBadge status={selectedOrder.status} />
@@ -369,7 +433,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
                   {documentLink && (
                     <button
                       type="button"
-                      onClick={() => navigateToModule(documentLink.type === 'orderslip' ? 'orderslip' : 'invoice', documentLink.type === 'orderslip' ? { orderSlipId: documentLink.id } : { invoiceId: documentLink.id })}
+                      onClick={() => openDocumentFromLink(documentLink)}
                       className="px-3 py-1 rounded bg-emerald-600 text-white"
                     >
                       View {documentLink.type === 'orderslip' ? 'Order Slip' : 'Invoice'}
@@ -395,7 +459,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId }) => {
             </p>
             <div className="bg-slate-50 dark:bg-slate-800/60 rounded p-3 text-xs text-slate-500 dark:text-slate-300 space-y-1">
               <p>Order: {selectedOrder.order_no}</p>
-              <p>Customer: {selectedCustomer?.company || selectedOrder.contact_id}</p>
+              <p>Customer: {getCustomerLabel(selectedOrder, selectedCustomer)}</p>
               <p>Transaction Type: {documentSuggestion}</p>
             </div>
             <div className="flex justify-end gap-2">

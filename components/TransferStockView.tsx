@@ -16,11 +16,10 @@ import {
   deleteTransferStockItem,
   getAvailableStock,
 } from '../services/transferStockService';
-import { fetchProducts, createNotification } from '../services/supabaseService';
+import { dispatchWorkflowNotification, fetchProducts } from '../services/supabaseService';
 import { supabase } from '../lib/supabaseClient';
 import {
   Product,
-  NotificationType,
   TransferStock,
   TransferStockDTO,
   TransferStockItem,
@@ -123,16 +122,30 @@ const TransferStockView: React.FC = () => {
     fetchUser();
   }, []);
 
-  const notifyUser = useCallback(async (title: string, message: string, type: NotificationType = 'success') => {
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (!user) return;
-      await createNotification({ recipient_id: user.id, title, message, type });
-    } catch (err) {
-      console.error('Error sending notification:', err);
-    }
-  }, []);
+  const notifyTransferEvent = useCallback(async (
+    title: string,
+    message: string,
+    action: string,
+    status: 'success' | 'failed',
+    entityId: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'success',
+    targetRoles: string[] = []
+  ) => {
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'stock_transfer',
+      entityId,
+      actionUrl: `/transfer-stock?transferId=${entityId}`,
+      actorId: currentUser?.id,
+      actorRole: currentUser?.role,
+      targetRoles,
+      includeActor: true,
+    });
+  }, [currentUser?.id, currentUser?.role]);
 
   // Auto-select first transfer when transfers change
   useEffect(() => {
@@ -180,9 +193,12 @@ const TransferStockView: React.FC = () => {
 
       // Validate form
       if (!transferNo || !transferDate || items.length === 0) {
-        await notifyUser(
+        await notifyTransferEvent(
           'Validation Error',
           'Please fill in all required fields and add at least one item.',
+          'create',
+          'failed',
+          transferNo || 'pending',
           'error'
         );
         return;
@@ -191,18 +207,24 @@ const TransferStockView: React.FC = () => {
       // Validate each item
       for (const item of items) {
         if (!item.item_id || !item.from_warehouse_id || !item.to_warehouse_id || item.transfer_qty <= 0) {
-          await notifyUser(
+          await notifyTransferEvent(
             'Validation Error',
             'Please ensure all items have valid warehouse selections and quantities.',
+            'create',
+            'failed',
+            transferNo || 'pending',
             'error'
           );
           return;
         }
 
         if (item.from_warehouse_id === item.to_warehouse_id) {
-          await notifyUser(
+          await notifyTransferEvent(
             'Validation Error',
             'Source and destination warehouses must be different.',
+            'create',
+            'failed',
+            transferNo || 'pending',
             'error'
           );
           return;
@@ -212,9 +234,12 @@ const TransferStockView: React.FC = () => {
         const availableStock = await getAvailableStock(item.item_id, item.from_warehouse_id);
         if (availableStock < item.transfer_qty) {
           const product = productMap.get(item.item_id);
-          await notifyUser(
+          await notifyTransferEvent(
             'Insufficient Stock',
             `Insufficient stock for ${product?.part_no || 'item'}. Available: ${availableStock}, Required: ${item.transfer_qty}`,
+            'create',
+            'failed',
+            transferNo || 'pending',
             'error'
           );
           return;
@@ -232,20 +257,28 @@ const TransferStockView: React.FC = () => {
       setTransferStocks(prev => [newTransfer, ...prev]);
       setSelectedTransfer(newTransfer);
       
-      await notifyUser(
+      await notifyTransferEvent(
         'Transfer Created',
         `Transfer ${transferNo} has been created successfully.`,
-        'success'
+        'create',
+        'success',
+        newTransfer.id,
+        'success',
+        ['Owner', 'Manager', 'Support']
       );
 
       resetForm();
       setShowCreateForm(false);
     } catch (error: any) {
       console.error('Error creating transfer:', error);
-      await notifyUser(
+      await notifyTransferEvent(
         'Error Creating Transfer',
         error.message || 'An unexpected error occurred.',
-        'error'
+        'create',
+        'failed',
+        transferNo || 'pending',
+        'error',
+        ['Owner', 'Manager', 'Support']
       );
     } finally {
       setCreating(false);
@@ -265,10 +298,14 @@ const TransferStockView: React.FC = () => {
         );
         setSelectedTransfer(updatedTransfer);
         
-        await notifyUser(
+        await notifyTransferEvent(
           'Transfer Submitted',
           `Transfer ${selectedTransfer.transfer_no} has been submitted for approval.`,
-          'success'
+          'submit',
+          'success',
+          selectedTransfer.id,
+          'success',
+          ['Owner', 'Manager', 'Support']
         );
         addToast({ 
           type: 'success', 
@@ -281,10 +318,14 @@ const TransferStockView: React.FC = () => {
       setShowSubmitConfirm(false);
     } catch (error: any) {
       console.error('Error submitting transfer:', error);
-      await notifyUser(
+      await notifyTransferEvent(
         'Error Submitting Transfer',
         error.message || 'An unexpected error occurred.',
-        'error'
+        'submit',
+        'failed',
+        selectedTransfer.id,
+        'error',
+        ['Owner', 'Manager', 'Support']
       );
       addToast({ 
         type: 'error', 
@@ -310,20 +351,28 @@ const TransferStockView: React.FC = () => {
         );
         setSelectedTransfer(updatedTransfer);
         
-        await notifyUser(
+        await notifyTransferEvent(
           'Transfer Approved',
           `Transfer ${selectedTransfer.transfer_no} has been approved and inventory updated.`,
-          'success'
+          'approve',
+          'success',
+          selectedTransfer.id,
+          'success',
+          ['Owner', 'Manager', 'Support']
         );
       }
       
       setShowApproveConfirm(false);
     } catch (error: any) {
       console.error('Error approving transfer:', error);
-      await notifyUser(
+      await notifyTransferEvent(
         'Error Approving Transfer',
         error.message || 'An unexpected error occurred. Check stock availability.',
-        'error'
+        'approve',
+        'failed',
+        selectedTransfer.id,
+        'error',
+        ['Owner', 'Manager', 'Support']
       );
     } finally {
       setApproving(false);
@@ -338,19 +387,27 @@ const TransferStockView: React.FC = () => {
       setTransferStocks(prev => prev.filter(t => t.id !== selectedTransfer.id));
       setSelectedTransfer(null);
       
-      await notifyUser(
+      await notifyTransferEvent(
         'Transfer Deleted',
         `Transfer ${selectedTransfer.transfer_no} has been deleted.`,
-        'success'
+        'delete',
+        'success',
+        selectedTransfer.id,
+        'success',
+        ['Owner', 'Manager', 'Support']
       );
       
       setShowDeleteConfirm(false);
     } catch (error: any) {
       console.error('Error deleting transfer:', error);
-      await notifyUser(
+      await notifyTransferEvent(
         'Error Deleting Transfer',
         error.message || 'An unexpected error occurred.',
-        'error'
+        'delete',
+        'failed',
+        selectedTransfer.id,
+        'error',
+        ['Owner', 'Manager', 'Support']
       );
     }
   };
@@ -361,9 +418,12 @@ const TransferStockView: React.FC = () => {
       setTransferNo(generatedNo);
     } catch (error) {
       console.error('Error generating transfer number:', error);
-      await notifyUser(
+      await notifyTransferEvent(
         'Error',
         'Failed to generate transfer number.',
+        'generate_transfer_no',
+        'failed',
+        transferNo || 'pending',
         'error'
       );
     }
@@ -372,7 +432,14 @@ const TransferStockView: React.FC = () => {
   const handleAddItem = (product: Product) => {
     // Check if product already in list
     if (items.some(item => item.item_id === product.id)) {
-      notifyUser('Item Already Added', 'This item is already in the transfer list.', 'warning');
+      notifyTransferEvent(
+        'Item Already Added',
+        'This item is already in the transfer list.',
+        'add_item',
+        'failed',
+        transferNo || 'pending',
+        'warning'
+      );
       return;
     }
 

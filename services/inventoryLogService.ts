@@ -4,6 +4,211 @@ import { ENTITY_TYPES, logCreate, logDelete, logUpdate } from './activityLogServ
 
 // Helper type for Supabase query results when table is not in generated types
 type SupabaseAnyTable = ReturnType<typeof supabase.from>;
+const EXPLICIT_DEFAULT_WAREHOUSE_ID =
+  (import.meta as any)?.env?.VITE_INVENTORY_LOG_DEFAULT_WAREHOUSE_ID?.trim() || '';
+
+function normalizeWarehouseId(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function resolveWarehouseId(
+  source: string,
+  candidateWarehouseIds: unknown[]
+): string {
+  for (const candidate of candidateWarehouseIds) {
+    const warehouseId = normalizeWarehouseId(candidate);
+    if (warehouseId) {
+      return warehouseId;
+    }
+  }
+
+  if (EXPLICIT_DEFAULT_WAREHOUSE_ID) {
+    return EXPLICIT_DEFAULT_WAREHOUSE_ID;
+  }
+
+  throw new Error(
+    `Missing warehouse_id for ${source}. Provide warehouse on the originating record/item or configure VITE_INVENTORY_LOG_DEFAULT_WAREHOUSE_ID.`
+  );
+}
+
+async function correctLegacyWh1LogsForItem(
+  transactionType: string,
+  referenceNo: string,
+  itemId: string,
+  resolvedWarehouseId: string
+): Promise<void> {
+  if (resolvedWarehouseId === 'WH1') {
+    return;
+  }
+
+  const { error } = await (supabase as any)
+    .from('inventory_logs')
+    .update({
+      warehouse_id: resolvedWarehouseId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('transaction_type', transactionType)
+    .eq('reference_no', referenceNo)
+    .eq('item_id', itemId)
+    .eq('warehouse_id', 'WH1')
+    .eq('is_deleted', false);
+
+  if (error) {
+    console.error('Failed correcting legacy WH1 inventory logs:', error);
+  }
+}
+
+type LegacyWh1InventoryLog = Pick<InventoryLog, 'id' | 'item_id' | 'reference_no' | 'transaction_type' | 'warehouse_id'>;
+
+function parseReturnIdFromReference(referenceNo: string): string | null {
+  const match = /^RET-(.+)$/.exec(referenceNo);
+  return match?.[1] || null;
+}
+
+async function resolveBackfillWarehouseId(log: LegacyWh1InventoryLog): Promise<string | null> {
+  if (log.transaction_type === 'Invoice') {
+    const { data: invoice } = await (supabase as any)
+      .from('invoices')
+      .select(`
+        id,
+        invoice_no,
+        warehouse_id,
+        invoice_items (
+          item_id,
+          warehouse_id,
+          location
+        )
+      `)
+      .eq('invoice_no', log.reference_no)
+      .single();
+
+    if (!invoice) {
+      return null;
+    }
+
+    const invoiceItem = (invoice.invoice_items || []).find((item: any) => item.item_id === log.item_id);
+    return resolveWarehouseId(`invoice ${invoice.invoice_no || invoice.id} item ${log.item_id}`, [
+      invoiceItem?.warehouse_id,
+      invoiceItem?.location,
+      invoice.warehouse_id,
+      invoice.warehouseId,
+    ]);
+  }
+
+  if (log.transaction_type === 'Order Slip') {
+    const { data: slip } = await (supabase as any)
+      .from('order_slips')
+      .select(`
+        id,
+        slip_no,
+        warehouse_id,
+        order_slip_items (
+          item_id,
+          warehouse_id,
+          location
+        )
+      `)
+      .eq('slip_no', log.reference_no)
+      .single();
+
+    if (!slip) {
+      return null;
+    }
+
+    const slipItem = (slip.order_slip_items || []).find((item: any) => item.item_id === log.item_id);
+    return resolveWarehouseId(`order slip ${slip.slip_no || slip.id}`, [
+      slip.warehouse_id,
+      slip.warehouseId,
+      slipItem?.warehouse_id,
+      slipItem?.location,
+    ]);
+  }
+
+  if (log.transaction_type === 'Credit Memo') {
+    const returnId = parseReturnIdFromReference(log.reference_no);
+    if (!returnId) {
+      return null;
+    }
+
+    const { data: returnRecord } = await (supabase as any)
+      .from('sales_returns')
+      .select('id, return_no, warehouse_id, products')
+      .eq('id', returnId)
+      .single();
+
+    if (!returnRecord) {
+      return null;
+    }
+
+    const matchedProduct = ((returnRecord.products || []) as any[]).find((product: any) =>
+      product.id === log.item_id ||
+      product.item_id === log.item_id ||
+      product.product_id === log.item_id
+    );
+
+    return resolveWarehouseId(`sales return ${returnRecord.return_no || returnRecord.id} item ${log.item_id}`, [
+      matchedProduct?.original_warehouse_id,
+      matchedProduct?.warehouse_id,
+      matchedProduct?.return_warehouse_id,
+      returnRecord.warehouse_id,
+    ]);
+  }
+
+  return null;
+}
+
+/**
+ * Backfill legacy inventory logs that were incorrectly posted to WH1.
+ * Returns number of corrected rows.
+ */
+export async function backfillLegacyWh1InventoryLogs(limit = 500): Promise<number> {
+  const { data: candidateLogs, error } = await (supabase as any)
+    .from('inventory_logs')
+    .select('id, item_id, reference_no, transaction_type, warehouse_id')
+    .eq('is_deleted', false)
+    .eq('warehouse_id', 'WH1')
+    .in('transaction_type', ['Invoice', 'Order Slip', 'Credit Memo'])
+    .limit(limit);
+
+  if (error) {
+    console.error('Failed fetching candidate WH1 inventory logs:', error);
+    throw error;
+  }
+
+  let correctedCount = 0;
+  for (const log of (candidateLogs || []) as LegacyWh1InventoryLog[]) {
+    try {
+      const resolvedWarehouseId = await resolveBackfillWarehouseId(log);
+      if (!resolvedWarehouseId || resolvedWarehouseId === 'WH1') {
+        continue;
+      }
+
+      const { error: updateError } = await (supabase as any)
+        .from('inventory_logs')
+        .update({
+          warehouse_id: resolvedWarehouseId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', log.id);
+
+      if (updateError) {
+        console.error(`Failed correcting inventory log ${log.id}:`, updateError);
+        continue;
+      }
+
+      correctedCount += 1;
+    } catch (resolveError) {
+      console.error(`Failed resolving warehouse for inventory log ${log.id}:`, resolveError);
+    }
+  }
+
+  return correctedCount;
+}
 
 /**
  * Fetch inventory logs with optional filters
@@ -293,18 +498,29 @@ export async function createInventoryLogFromInvoice(invoiceId: string, userId: s
   const logs: InventoryLog[] = [];
   const invoiceItems = (invoice as any).invoice_items || [];
   for (const item of invoiceItems) {
+    const warehouseId = resolveWarehouseId(`invoice ${invoice.invoice_no || invoice.id} item ${item.item_id || item.id || 'unknown'}`, [
+      item.warehouse_id,
+      item.warehouseId,
+      item.original_warehouse_id,
+      item.return_warehouse_id,
+      item.location,
+      invoice.warehouse_id,
+      invoice.warehouseId,
+    ]);
+
     const log = await createInventoryLog({
       item_id: item.item_id,
       date: invoice.sales_date,
       transaction_type: 'Invoice',
       reference_no: invoice.invoice_no,
       partner: customerName,
-      warehouse_id: 'WH1', // Default warehouse - should be configurable
+      warehouse_id: warehouseId,
       qty_in: 0,
       qty_out: item.qty,
       status_indicator: '-',
       unit_price: item.unit_price,
     });
+    await correctLegacyWh1LogsForItem('Invoice', invoice.invoice_no, item.item_id, warehouseId);
     logs.push(log);
   }
 
@@ -358,18 +574,27 @@ export async function createInventoryLogFromOrderSlip(slipOrId: string | OrderSl
   // Create inventory log for each item
   const logs: InventoryLog[] = [];
   for (const item of items) {
+    const warehouseId = resolveWarehouseId(`order slip ${slip.slip_no || slip.id}`, [
+      slip.warehouse_id,
+      slip.warehouseId,
+      item.warehouse_id,
+      item.warehouseId,
+      item.location,
+    ]);
+
     const log = await createInventoryLog({
       item_id: item.item_id,
       date: slip.sales_date,
       transaction_type: 'Order Slip',
       reference_no: slip.slip_no,
       partner: customerName,
-      warehouse_id: 'WH1', // Default warehouse - should be configurable
+      warehouse_id: warehouseId,
       qty_in: 0,
       qty_out: item.qty,
       status_indicator: '-',
       unit_price: item.unit_price,
     });
+    await correctLegacyWh1LogsForItem('Order Slip', slip.slip_no, item.item_id, warehouseId);
     logs.push(log);
   }
 
@@ -474,19 +699,28 @@ export async function createInventoryLogFromReturn(returnId: string, userId: str
       .single();
 
     if (productData) {
+      const warehouseId = resolveWarehouseId(`sales return ${returnRecord.return_no || returnRecord.id} item ${productData.id}`, [
+        (product as any).original_warehouse_id,
+        (product as any).warehouse_id,
+        (product as any).return_warehouse_id,
+        returnRecord.warehouse_id,
+        returnRecord.original_warehouse_id,
+      ]);
+
       const log = await createInventoryLog({
         item_id: productData.id,
         date: returnRecord.return_date, // Fixed: using correct column name
         transaction_type: 'Credit Memo',
         reference_no: `RET-${returnId}`,
         partner: customerName,
-        warehouse_id: 'WH1', // Default warehouse - should be configurable
+        warehouse_id: warehouseId,
         qty_in: product.quantity,
         qty_out: 0,
         status_indicator: '+',
         unit_price: product.originalPrice,
         notes: returnRecord.reason,
       });
+      await correctLegacyWh1LogsForItem('Credit Memo', `RET-${returnId}`, productData.id, warehouseId);
       logs.push(log);
     }
   }

@@ -396,7 +396,16 @@ const App: React.FC = () => {
       case 'sales-transaction-sales-inquiry':
         return (
           <div className="h-full overflow-y-auto">
-            <SalesInquiryView />
+            <SalesInquiryView
+              initialContactId={
+                moduleContext['sales-transaction-sales-inquiry']?.contactId ||
+                moduleContext.salesinquiry?.contactId
+              }
+              initialPrefillToken={
+                moduleContext['sales-transaction-sales-inquiry']?.prefillToken ||
+                moduleContext.salesinquiry?.prefillToken
+              }
+            />
           </div>
         );
       case 'salesorder':

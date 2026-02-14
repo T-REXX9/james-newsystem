@@ -7,10 +7,9 @@ import {
   getAllOrderSlips,
   printOrderSlip,
 } from '../services/orderSlipService';
-import { fetchContacts, createNotification } from '../services/supabaseService';
+import { dispatchWorkflowNotification, fetchContacts } from '../services/supabaseService';
 import { isOrderSlipAllowedForTransactionType, syncDocumentPolicyState } from '../services/salesOrderService';
-import { supabase } from '../lib/supabaseClient';
-import { Contact, NotificationType, OrderSlip, OrderSlipItem, OrderSlipStatus } from '../types';
+import { Contact, OrderSlip, OrderSlipItem, OrderSlipStatus } from '../types';
 import { useRealtimeNestedList } from '../hooks/useRealtimeNestedList';
 import { useRealtimeList } from '../hooks/useRealtimeList';
 import { applyOptimisticUpdate } from '../utils/optimisticUpdates';
@@ -52,15 +51,26 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
 
   const customerMap = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts]);
 
-  const notifyUser = useCallback(async (title: string, message: string, type: NotificationType = 'success') => {
-    try {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
-      if (!user) return;
-      await createNotification({ recipient_id: user.id, title, message, type });
-    } catch (err) {
-      console.error('Error sending notification:', err);
-    }
+  const notifyOrderSlipEvent = useCallback(async (
+    title: string,
+    message: string,
+    action: string,
+    status: 'success' | 'failed',
+    entityId: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'success'
+  ) => {
+    await dispatchWorkflowNotification({
+      title,
+      message,
+      type,
+      action,
+      status,
+      entityType: 'order_slip',
+      entityId,
+      actionUrl: `/orderslip?orderSlipId=${entityId}`,
+      targetRoles: ['Owner', 'Manager', 'Support'],
+      includeActor: true,
+    });
   }, []);
 
   const navigateToModule = useCallback((tab: string, payload?: Record<string, string>) => {
@@ -109,9 +119,10 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
 
     try {
       await finalizeOrderSlip(selectedSlip.id);
-      await notifyUser('Order Slip Finalized', `Order Slip ${selectedSlip.slip_no} marked as finalized.`);
+      await notifyOrderSlipEvent('Order Slip Finalized', `Order Slip ${selectedSlip.slip_no} marked as finalized.`, 'finalize', 'success', selectedSlip.id);
     } catch (err) {
       console.error('Error finalizing order slip:', err);
+      await notifyOrderSlipEvent('Order Slip Finalization Failed', `Failed to finalize order slip ${selectedSlip.slip_no}.`, 'finalize', 'failed', selectedSlip.id, 'error');
       alert('Failed to finalize order slip');
       // Real-time subscription will correct the state
     } finally {
@@ -130,10 +141,11 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId }) => {
 
     try {
       await printOrderSlip(selectedSlip.id);
-      await notifyUser('Order Slip Printed', `Order Slip ${selectedSlip.slip_no} was printed.`);
+      await notifyOrderSlipEvent('Order Slip Printed', `Order Slip ${selectedSlip.slip_no} was printed.`, 'print', 'success', selectedSlip.id);
       window.print();
     } catch (err) {
       console.error('Error printing order slip:', err);
+      await notifyOrderSlipEvent('Order Slip Print Failed', `Failed to print order slip ${selectedSlip.slip_no}.`, 'print', 'failed', selectedSlip.id, 'error');
       alert('Failed to mark order slip as printed');
       // Real-time subscription will correct the state
     } finally {

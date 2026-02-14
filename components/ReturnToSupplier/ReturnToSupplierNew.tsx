@@ -96,7 +96,12 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
 
             // Recalculate total if qty changed
             if (field === 'qty_returned') {
-                const qty = parseFloat(value) || 0;
+                const rrItemId = newItems[index].rr_item_id || '';
+                const maxQty = availableMaxQty(rrItemId);
+                const parsedQty = Number(value);
+                const safeQty = Number.isFinite(parsedQty) ? parsedQty : 1;
+                const qty = Math.max(1, Math.min(safeQty, maxQty > 0 ? maxQty : 1));
+                newItems[index].qty_returned = qty;
                 newItems[index].total_amount = qty * newItems[index].unit_cost;
             }
 
@@ -113,6 +118,42 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
 
     const handleSubmit = async () => {
         if (!selectedRR) return;
+
+        if (formData.items.length === 0) {
+            addToast({
+                type: 'error',
+                title: 'No items selected',
+                description: 'Please add at least one item to return.',
+                durationMs: 5000,
+            });
+            return;
+        }
+
+        const normalizedItems = formData.items.map((item) => {
+            const maxQty = availableMaxQty(item.rr_item_id || '');
+            const qty = Math.max(1, Math.min(Number(item.qty_returned) || 1, maxQty > 0 ? maxQty : 1));
+            return {
+                ...item,
+                qty_returned: qty,
+                total_amount: qty * item.unit_cost,
+            };
+        });
+
+        const invalidItem = normalizedItems.find((item) => {
+            const maxQty = availableMaxQty(item.rr_item_id || '');
+            return item.qty_returned < 1 || item.qty_returned > maxQty;
+        });
+
+        if (invalidItem) {
+            addToast({
+                type: 'error',
+                title: 'Invalid return quantity',
+                description: `Quantity for ${invalidItem.part_no || invalidItem.item_code} exceeds available returnable stock.`,
+                durationMs: 6000,
+            });
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -120,12 +161,12 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                 return_date: formData.return_date,
                 return_type: 'purchase',
                 rr_id: selectedRR.id,
-                rr_no: selectedRR.rr_number, // Assume rr_number exists
+                rr_no: selectedRR.rr_no || selectedRR.rr_number || '',
                 supplier_id: selectedRR.supplier_id,
-                supplier_name: selectedRR.supplier_name, // Assume supplier_name exists
-                po_no: selectedRR.po_number, // Assume po_number exists
+                supplier_name: selectedRR.supplier_name,
+                po_no: selectedRR.po_no || selectedRR.po_number,
                 remarks: formData.remarks,
-                items: formData.items
+                items: normalizedItems
             };
 
             const newReturn = await returnToSupplierService.createReturn(dto);
@@ -156,7 +197,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
         if (alreadyAdded) return false;
 
         return item.part_number.toLowerCase().includes(search) ||
-            item.item_code.toLowerCase().includes(search) ||
+            (item.item_code || '').toLowerCase().includes(search) ||
             (item.description && item.description.toLowerCase().includes(search));
     });
 
@@ -200,11 +241,11 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                         className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-colors"
                                     >
                                         <div className="flex justify-between">
-                                            <span className="font-bold text-gray-900 dark:text-white">{rr.rr_number}</span>
+                                            <span className="font-bold text-gray-900 dark:text-white">{rr.rr_no || rr.rr_number}</span>
                                             <span className="text-sm text-gray-500">{new Date(rr.received_date || rr.created_at).toLocaleDateString()}</span>
                                         </div>
                                         <div className="text-sm text-gray-600 dark:text-gray-400">
-                                            Supplier: {rr.supplier_name} | PO: {rr.po_number || 'N/A'}
+                                            Supplier: {rr.supplier_name} | PO: {rr.po_no || rr.po_number || 'N/A'}
                                         </div>
                                     </div>
                                 ))}
@@ -225,11 +266,11 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                 </div>
                                 <div>
                                     <label className="text-xs text-gray-500 uppercase">RR Number</label>
-                                    <div className="font-medium dark:text-white">{selectedRR.rr_number}</div>
+                                    <div className="font-medium dark:text-white">{selectedRR.rr_no || selectedRR.rr_number}</div>
                                 </div>
                                 <div>
                                     <label className="text-xs text-gray-500 uppercase">PO Number</label>
-                                    <div className="font-medium dark:text-white">{selectedRR.po_number || 'N/A'}</div>
+                                    <div className="font-medium dark:text-white">{selectedRR.po_no || selectedRR.po_number || 'N/A'}</div>
                                 </div>
                                 <div>
                                     <label className="text-xs text-gray-500 uppercase">Return Date</label>
@@ -337,7 +378,7 @@ const ReturnToSupplierNew: React.FC<ReturnToSupplierNewProps> = ({ onClose, onSu
                                                                 min="1"
                                                                 max={max}
                                                                 value={item.qty_returned}
-                                                                onChange={(e) => updateItem(idx, 'qty_returned', e.target.value)}
+                                                                onChange={(e) => updateItem(idx, 'qty_returned', Number(e.target.value))}
                                                                 className="w-16 text-right bg-transparent border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 py-1"
                                                             />
                                                             <div className="text-[10px] text-gray-400">Max: {max}</div>

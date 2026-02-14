@@ -19,12 +19,15 @@ import {
 } from '../types';
 import { fetchContacts } from '../services/supabaseService';
 import {
+  approveInquiry,
+  convertToOrder,
   createSalesInquiry,
   deleteSalesInquiry,
   getAllSalesInquiries,
   updateSalesInquiry,
 } from '../services/salesInquiryService';
 import { getProductPrice } from '../services/productService';
+import { getSalesOrderByInquiry } from '../services/salesOrderService';
 
 import ProductSearchModal from './ProductSearchModal';
 import StatusBadge from './StatusBadge';
@@ -63,8 +66,14 @@ type LoadedFormSnapshot = {
   items: InquiryItemRow[];
 };
 
-const SalesInquiryView: React.FC = () => {
+interface SalesInquiryViewProps {
+  initialContactId?: string;
+  initialPrefillToken?: string;
+}
+
+const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({ initialContactId, initialPrefillToken }) => {
   const { addToast } = useToast();
+  const lastAppliedPrefillRef = React.useRef<string | null>(null);
   // Data
   const [loading, setLoading] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<SalesInquiry | null>(null);
@@ -151,6 +160,14 @@ const SalesInquiryView: React.FC = () => {
   const [deleteConfirming, setDeleteConfirming] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  const generateInquiryNumber = useCallback(() => {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const random = String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+    return `INQ${year}${month}${day}-${random}`;
+  }, []);
 
   const handleOpenProductModal = (rowTempId: string) => {
     setActiveRowId(rowTempId);
@@ -176,12 +193,6 @@ const SalesInquiryView: React.FC = () => {
       }
       return item;
     }));
-    // Modal handling is done in handleProductSelect or modal close logic
-    // Actually simpler to just close it here or let modal callback handle it.
-    // The Modal component calls onSelect then onClose? No, I implemented it to call onSelect then onClose inside the modal.
-    // But better to manage state here if needed. 
-    // Wait, ProductSearchModal: `onSelect(product); onClose();`
-    // So here I just need to update state.
   };
 
   const formatCurrency = useCallback((value: number) => {
@@ -211,26 +222,13 @@ const SalesInquiryView: React.FC = () => {
 
   // Generate initial inquiry number and preload data
   useEffect(() => {
-    const generateInquiryNumber = () => {
-      const date = new Date();
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const random = String(Math.floor(Math.random() * 100000)).padStart(5, '0');
-      return `INQ${year}${month}${day}-${random}`;
-    };
     const newInquiryNo = generateInquiryNumber();
     setInquiryNo(newInquiryNo);
     setReferenceNo(newInquiryNo);
-  }, []);
+  }, [generateInquiryNumber]);
 
   const resetFormForNew = useCallback(() => {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const random = String(Math.floor(Math.random() * 100000)).padStart(5, '0');
-    const newInquiryNo = `INQ${year}${month}${day}-${random}`;
+    const newInquiryNo = generateInquiryNumber();
 
     setInquiryNo(newInquiryNo);
     setSelectedCustomer(null);
@@ -256,7 +254,7 @@ const SalesInquiryView: React.FC = () => {
     setSubmitError('');
     setSubmitCount(0);
     setLoadedSnapshot(null);
-  }, []);
+  }, [generateInquiryNumber]);
 
   const loadInquiryIntoForm = useCallback((inquiry: SalesInquiry) => {
     const customer = customerMap.get(inquiry.contact_id) || null;
@@ -352,6 +350,22 @@ const SalesInquiryView: React.FC = () => {
       setPromiseToPay(customer.dealershipTerms || '');
     }
   };
+
+  useEffect(() => {
+    if (!initialContactId) return;
+
+    const prefillKey = `${initialPrefillToken || 'default'}:${initialContactId}`;
+    if (lastAppliedPrefillRef.current === prefillKey) return;
+
+    const customer = customers.find((entry) => entry.id === initialContactId);
+    if (!customer) return;
+
+    setIsCreatingNew(true);
+    setSelectedInquiry(null);
+    resetFormForNew();
+    handleCustomerSelect(customer.id);
+    lastAppliedPrefillRef.current = prefillKey;
+  }, [customers, handleCustomerSelect, initialContactId, initialPrefillToken, resetFormForNew]);
 
   // Add new item row
   const addItemRow = () => {
@@ -496,19 +510,6 @@ const SalesInquiryView: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleFieldBlur = (field: string, value: unknown) => {
-    let message = '';
-    if (field === 'customer') {
-      const result = validateRequired(value, 'a customer');
-      message = result.isValid ? '' : result.message;
-    }
-    if (field === 'salesDate') {
-      const result = validateRequired(value, 'a sales date');
-      message = result.isValid ? '' : result.message;
-    }
-    setValidationErrors((prev) => ({ ...prev, [field]: message }));
-  };
-
   // Handle delete
   const handleDeleteClick = () => {
     setShowDeleteModal(true);
@@ -536,6 +537,80 @@ const SalesInquiryView: React.FC = () => {
       addToast({ type: 'error', message: 'Failed to delete inquiry' });
     } finally {
       setDeleteConfirming(false);
+    }
+  };
+
+  const handleFinalizeInquiry = async () => {
+    if (!selectedInquiry || isCreatingNew) return;
+
+    setLoading(true);
+    try {
+      const approvedInquiry = await approveInquiry(selectedInquiry.id);
+      await refetchInquiries();
+
+      if (approvedInquiry) {
+        setIsCreatingNew(false);
+        setSelectedInquiry(approvedInquiry);
+        loadInquiryIntoForm(approvedInquiry);
+      }
+
+      addToast({ type: 'success', message: 'Inquiry finalized and ready for conversion.' });
+    } catch (error) {
+      console.error('Error finalizing inquiry:', error);
+      const friendlyMessage = parseSupabaseError(error, 'sales inquiry');
+      addToast({ type: 'error', title: 'Unable to finalize inquiry', description: friendlyMessage, durationMs: 6000 });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const navigateToSalesOrder = (orderId: string) => {
+    window.dispatchEvent(new CustomEvent('workflow:navigate', {
+      detail: {
+        tab: 'salesorder',
+        payload: { orderId }
+      }
+    }));
+  };
+
+  const handleConvertInquiry = async () => {
+    if (!selectedInquiry || isCreatingNew) return;
+
+    setLoading(true);
+    try {
+      const order = await convertToOrder(selectedInquiry.id);
+      await refetchInquiries();
+      addToast({ type: 'success', message: `Converted to Sales Order ${order.order_no || ''}`.trim() });
+
+      if (order?.id) {
+        navigateToSalesOrder(order.id);
+      }
+    } catch (error) {
+      console.error('Error converting inquiry to sales order:', error);
+      const friendlyMessage = parseSupabaseError(error, 'sales order conversion');
+      addToast({ type: 'error', title: 'Unable to convert inquiry', description: friendlyMessage, durationMs: 6000 });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenConvertedOrder = async () => {
+    if (!selectedInquiry || isCreatingNew) return;
+
+    setLoading(true);
+    try {
+      const existingOrder = await getSalesOrderByInquiry(selectedInquiry.id);
+      if (!existingOrder?.id) {
+        addToast({ type: 'warning', message: 'No linked sales order found for this inquiry yet.' });
+        return;
+      }
+
+      navigateToSalesOrder(existingOrder.id);
+    } catch (error) {
+      console.error('Error opening linked sales order:', error);
+      addToast({ type: 'error', message: 'Unable to open linked sales order.' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -572,6 +647,13 @@ const SalesInquiryView: React.FC = () => {
   const activeInquiryNumber = !isCreatingNew && selectedInquiry?.inquiry_no ? selectedInquiry.inquiry_no : inquiryNo;
   const customerOutstanding = selectedCustomer?.balance || 0;
   const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CONVERTED_TO_ORDER;
+  const canFinalizeInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.DRAFT);
+  const canConvertInquiry = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.status === SalesInquiryStatus.APPROVED);
+  const canOpenConvertedOrder = Boolean(
+    selectedInquiry &&
+    !isCreatingNew &&
+    selectedInquiry.status === SalesInquiryStatus.CONVERTED_TO_ORDER
+  );
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950">
@@ -1121,6 +1203,39 @@ const SalesInquiryView: React.FC = () => {
             </button>
 
             <div className="flex items-center gap-2">
+              {canFinalizeInquiry && (
+                <button
+                  type="button"
+                  onClick={handleFinalizeInquiry}
+                  disabled={loading}
+                  className="px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? 'WORKING…' : 'FINALIZE INQUIRY'}
+                </button>
+              )}
+
+              {canConvertInquiry && (
+                <button
+                  type="button"
+                  onClick={handleConvertInquiry}
+                  disabled={loading}
+                  className="px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? 'WORKING…' : 'CONVERT TO SALES ORDER'}
+                </button>
+              )}
+
+              {canOpenConvertedOrder && (
+                <button
+                  type="button"
+                  onClick={handleOpenConvertedOrder}
+                  disabled={loading}
+                  className="px-4 py-2 rounded-lg border border-brand-blue/30 bg-brand-blue/10 text-brand-blue font-semibold hover:bg-brand-blue/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? 'OPENING…' : 'OPEN SALES ORDER'}
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleDiscardChanges}

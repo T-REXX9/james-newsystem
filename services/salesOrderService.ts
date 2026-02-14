@@ -40,7 +40,7 @@ const salesOrderSanitizationConfig: SanitizationConfig<SalesOrderDTO> = {
   remarks: { type: 'string', placeholder: 'n/a' },
   inquiry_type: { type: 'string', placeholder: 'n/a' },
   urgency: { type: 'string', placeholder: 'n/a' },
-  urgency_date: { type: 'string', placeholder: 'n/a' },
+  urgency_date: { type: 'date', placeholder: null },
 };
 
 const salesOrderItemSanitizationConfig: SanitizationConfig<

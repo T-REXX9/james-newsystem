@@ -6,6 +6,9 @@ const mockSupabase = {
   auth: {
     signUp: vi.fn(),
   },
+  functions: {
+    invoke: vi.fn(),
+  },
   from: vi.fn(() => ({
     select: vi.fn(() => ({
       eq: vi.fn(() => ({
@@ -227,5 +230,46 @@ describe('supabaseService createStaffAccount', () => {
     expect(result.success).toBe(true);
     expect(result.userId).toBe(userId);
     expect(mockSupabase.from).toHaveBeenCalledWith('profiles');
+  });
+});
+
+describe('supabaseService resetStaffPassword', () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it('calls the reset-staff-password edge function and returns true on success', async () => {
+    mockSupabase.functions.invoke.mockResolvedValue({
+      data: { success: true },
+      error: null,
+    });
+
+    const { resetStaffPassword } = await import('../supabaseService');
+    const result = await resetStaffPassword('user-123', 'StrongPass1!');
+
+    expect(mockSupabase.functions.invoke).toHaveBeenCalledWith('reset-staff-password', {
+      body: { userId: 'user-123', newPassword: 'StrongPass1!' },
+    });
+    expect(result).toBe(true);
+  });
+
+  it('returns false when the edge function reports an error', async () => {
+    mockSupabase.functions.invoke.mockResolvedValue({
+      data: null,
+      error: { message: 'Forbidden' },
+    });
+
+    const { resetStaffPassword } = await import('../supabaseService');
+    const result = await resetStaffPassword('user-123', 'StrongPass1!');
+
+    expect(result).toBe(false);
   });
 });

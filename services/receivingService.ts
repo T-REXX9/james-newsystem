@@ -119,6 +119,58 @@ export const receivingService = {
         }
     },
 
+    async createReceivingReportWithItems(
+        rr: Omit<ReceivingReportInsert, 'rr_no' | 'grand_total' | 'status'> & {
+            rr_no?: string | null;
+            status?: string | null;
+        },
+        items: Omit<ReceivingReportItemInsert, 'rr_id'>[]
+    ): Promise<ReceivingReport> {
+        try {
+            const sanitizedReport = sanitizeObject(rr as ReceivingReportInsert, receivingReportSanitizationConfig, {
+                enforceRequired: false,
+                onlyProvided: true,
+            });
+            const sanitizedItems = items.map((item) =>
+                sanitizeObject(item as ReceivingReportItemInsert, receivingReportItemSanitizationConfig, {
+                    enforceRequired: false,
+                    onlyProvided: true,
+                })
+            );
+
+            const { data, error } = await supabase.rpc('create_receiving_report_with_items', {
+                p_rr_no: sanitizedReport.rr_no || null,
+                p_receive_date: sanitizedReport.receive_date,
+                p_supplier_id: sanitizedReport.supplier_id,
+                p_supplier_name: sanitizedReport.supplier_name || null,
+                p_po_no: sanitizedReport.po_no || null,
+                p_remarks: sanitizedReport.remarks || null,
+                p_warehouse_id: sanitizedReport.warehouse_id,
+                p_status: sanitizedReport.status || 'Draft',
+                p_items: sanitizedItems,
+            });
+
+            if (error) throw error;
+            if (!data) throw new Error('Failed to create receiving report');
+
+            const created = data as unknown as ReceivingReport;
+            try {
+                await logCreate(ENTITY_TYPES.RECEIVING_STOCK, created.id, {
+                    rr_no: created.rr_no,
+                    supplier_id: created.supplier_id,
+                    grand_total: created.grand_total,
+                });
+            } catch (logError) {
+                console.error('Failed to log activity:', logError);
+            }
+
+            return created;
+        } catch (err) {
+            console.error('Error creating receiving report with items:', err);
+            throw new Error(parseSupabaseError(err, 'receiving report'));
+        }
+    },
+
     async updateReceivingReport(id: string, updates: ReceivingReportUpdate): Promise<ReceivingReport> {
         try {
             const sanitizedUpdates = sanitizeObject(
@@ -247,16 +299,9 @@ export const receivingService = {
     },
 
     async generateRRNumber(): Promise<string> {
-        const year = new Date().getFullYear().toString().slice(-2);
-        const { count, error } = await supabase
-            .from('receiving_reports')
-            .select('*', { count: 'exact', head: true })
-            .ilike('rr_no', `RR-${year}%`);
-
+        const { data, error } = await supabase.rpc('generate_receiving_report_no');
         if (error) throw error;
-
-        const sequence = String((count || 0) + 1).padStart(2, '0');
-        return `RR-${year}${sequence}`;
+        return data as string;
     },
 
     async getSuppliers(): Promise<Supplier[]> {

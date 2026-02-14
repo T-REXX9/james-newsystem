@@ -8,7 +8,7 @@ import {
 } from '../services/dailyCallMonitoringService';
 import { DailyCallCustomerFilterStatus, DailyCallCustomerRow, UserProfile } from '../types';
 import { useToast } from './ToastProvider';
-import DailyCallCustomerDetailExpansion from './DailyCallCustomerDetailExpansion';
+import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
 
 interface DailyCallExcelFormatViewProps {
   currentUser: UserProfile | null;
@@ -46,9 +46,8 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
   const [statusFilter, setStatusFilter] = useState<DailyCallCustomerFilterStatus>('all');
   const [search, setSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [scrollTop, setScrollTop] = useState(0);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [dayPage, setDayPage] = useState(0);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
   const debouncedSearch = useDebounce(search, 300);
   const monthDays = useMemo(() => getMonthDays(), []);
@@ -96,38 +95,21 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
   }, [loadRows]);
 
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  useEffect(() => {
     setDayPage(0);
   }, [statusFilter]);
 
   useEffect(() => {
     const selectedExists = customers.some((row) => row.id === selectedCustomerId);
-    if (!selectedExists) setSelectedCustomerId(null);
+    if (!selectedExists) {
+      setSelectedCustomerId(null);
+      setIsDetailModalOpen(false);
+    }
   }, [customers, selectedCustomerId]);
 
   const selectedCustomer = useMemo(
     () => customers.find((row) => row.id === selectedCustomerId) || null,
     [customers, selectedCustomerId]
   );
-
-  const visibleWindow = useMemo(() => {
-    const visibleCount = Math.ceil(viewportHeightPx / rowHeightPx) + 8;
-    const startIndex = Math.max(0, Math.floor(scrollTop / rowHeightPx) - 4);
-    const endIndex = Math.min(customers.length, startIndex + visibleCount);
-
-    return {
-      startIndex,
-      endIndex,
-      rows: customers.slice(startIndex, endIndex),
-      topSpacer: startIndex * rowHeightPx,
-      bottomSpacer: Math.max(0, (customers.length - endIndex) * rowHeightPx),
-    };
-  }, [customers, scrollTop]);
 
   const getActivityLabel = (row: DailyCallCustomerRow, day: number) => {
     const entry = row.dailyActivity.find((activity) => {
@@ -148,6 +130,11 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
       setError('Unable to refresh data.');
     }
   };
+
+  const handleCloseModal = useCallback(() => {
+    setIsDetailModalOpen(false);
+    setSelectedCustomerId(null);
+  }, []);
 
   const columnCount = 16 + weeklyRangeBuckets.length + pagedDays.length;
 
@@ -259,8 +246,15 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
             </div>
           </div>
 
-          <div className="overflow-auto" style={{ maxHeight: `${viewportHeightPx}px` }} onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
-            <table className="min-w-[1600px] divide-y divide-slate-200 text-xs dark:divide-slate-700">
+          <div
+            className="overflow-x-auto overflow-y-hidden [scrollbar-gutter:stable_both-edges]"
+            style={{ overscrollBehaviorX: 'contain', overflowAnchor: 'none' }}
+          >
+            <div
+              className="w-max min-w-full overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
+              style={{ height: `${viewportHeightPx}px`, overscrollBehaviorY: 'contain', overflowAnchor: 'none' }}
+            >
+            <table className="min-w-[1600px] table-fixed divide-y divide-slate-200 text-xs dark:divide-slate-700">
               <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
                 <tr>
                   <th className="sticky left-0 z-20 border-r border-slate-200 bg-slate-100 px-3 py-2 text-left font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900">
@@ -295,18 +289,23 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
               </thead>
 
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {visibleWindow.topSpacer > 0 && (
-                  <tr>
-                    <td colSpan={columnCount} style={{ height: `${visibleWindow.topSpacer}px` }} />
-                  </tr>
-                )}
-
-                {visibleWindow.rows.map((row) => {
+                {customers.map((row) => {
                   const isSelected = selectedCustomerId === row.id;
                   return (
                     <tr
                       key={row.id}
-                      onClick={() => setSelectedCustomerId((prev) => (prev === row.id ? null : row.id))}
+                      tabIndex={0}
+                      onClick={() => {
+                        setSelectedCustomerId(row.id);
+                        setIsDetailModalOpen(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedCustomerId(row.id);
+                          setIsDetailModalOpen(true);
+                        }
+                      }}
                       className={`cursor-pointer ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white hover:bg-slate-50 dark:bg-slate-900/40 dark:hover:bg-slate-800/50'}`}
                       style={{ height: `${rowHeightPx}px` }}
                     >
@@ -348,36 +347,20 @@ const DailyCallExcelFormatView: React.FC<DailyCallExcelFormatViewProps> = ({ cur
                     </tr>
                   );
                 })}
-
-                {visibleWindow.bottomSpacer > 0 && (
-                  <tr>
-                    <td colSpan={columnCount} style={{ height: `${visibleWindow.bottomSpacer}px` }} />
-                  </tr>
-                )}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
 
-      {selectedCustomer && !isMobile && (
-        <DailyCallCustomerDetailExpansion
+      {isDetailModalOpen && selectedCustomer && (
+        <DailyCallCustomerDetailModal
+          isOpen={isDetailModalOpen}
           customer={selectedCustomer}
           currentUser={currentUser}
-          onClose={() => setSelectedCustomerId(null)}
+          onClose={handleCloseModal}
         />
-      )}
-
-      {selectedCustomer && isMobile && (
-        <div className="fixed inset-0 z-50 flex items-end bg-slate-950/60 p-2 md:hidden">
-          <div className="max-h-[92vh] w-full overflow-hidden rounded-t-2xl bg-white shadow-2xl">
-            <DailyCallCustomerDetailExpansion
-              customer={selectedCustomer}
-              currentUser={currentUser}
-              onClose={() => setSelectedCustomerId(null)}
-            />
-          </div>
-        </div>
       )}
     </div>
   );
