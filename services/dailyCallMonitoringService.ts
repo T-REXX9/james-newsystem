@@ -8,6 +8,7 @@ import {
   DailyCallCustomerRow,
   LBCRTORecord,
 } from '../types';
+import { formatDateFull } from '../utils/formatUtils';
 
 export interface DailyCallFilterParams {
   status?: DailyCallCustomerFilterStatus;
@@ -55,16 +56,9 @@ export interface WeeklyRangeBucket {
   year: number;
 }
 
-const formatDate = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
-  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
 const formatCodeDate = (codeText?: string | null, codeDate?: string | null) => {
   const trimmedText = (codeText || '').trim();
-  const formattedDate = formatDate(codeDate);
+  const formattedDate = formatDateFull(codeDate);
   if (trimmedText && formattedDate !== '—') {
     return `${trimmedText} (${formattedDate})`;
   }
@@ -355,8 +349,8 @@ export const fetchCustomersForDailyCall = async (
       const monthlyOrder = computeMonthlyOrderTotal(contactPurchases);
       const weeklyRangeTotals = computeWeeklyRangeTotals(contactPurchases, weeklyRangeBuckets);
       const activity = buildActivityByDay(logsByContact.get(contact.id) || []);
-      const ishinomotoDealerSince = formatDate(contact.ishinomotoDealerSince || contact.dealershipSince);
-      const ishinomotoSignageSince = formatDate(contact.ishinomotoSignageSince || contact.signageSince);
+      const ishinomotoDealerSince = formatDateFull(contact.ishinomotoDealerSince || contact.dealershipSince);
+      const ishinomotoSignageSince = formatDateFull(contact.ishinomotoSignageSince || contact.signageSince);
       const codeText = contact.codeText || contact.priceGroup || contact.dealershipTerms;
       const codeDateValue = contact.codeDate || contact.dealershipSince || contact.ishinomotoDealerSince;
 
@@ -364,8 +358,8 @@ export const fetchCustomersForDailyCall = async (
         id: contact.id,
         source: contact.referBy || 'Manual',
         assignedTo: contact.salesman || contact.assignedAgent || 'Unassigned',
-        assignedDate: formatDate(contact.updated_at),
-        clientSince: formatDate(contact.customerSince),
+        assignedDate: formatDateFull(contact.updated_at),
+        clientSince: formatDateFull(contact.customerSince),
         city: contact.city || '—',
         shopName: contact.company || 'Unnamed Shop',
         contactNumber: contact.mobile || contact.phone || '—',

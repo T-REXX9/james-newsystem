@@ -63,6 +63,31 @@ import {
   TeamMessage,
   UserProfile
 } from '../types';
+import { useVirtualizedList } from '../hooks/useVirtualizedList';
+import {
+  formatCurrency,
+  formatDate,
+  formatRelativeTime,
+  getDaysSince,
+  formatComment,
+  matchesSearch,
+  getPhoneNumber
+} from '../utils/formatUtils';
+import {
+  BUTTON_BASE,
+  BUTTON_PRIMARY,
+  BUTTON_ICON_BASE,
+  BUTTON_ICON_CALL,
+  BUTTON_ICON_SMS,
+  statusBadgeClasses,
+  priorityBadgeClasses,
+  DIRECTION_BADGE_CLASSES,
+  OUTCOME_BADGE_CLASSES,
+  INPUT_BASE,
+  CARD_BASE,
+  FILTER_TAB_ACTIVE,
+  FILTER_TAB_INACTIVE
+} from '../utils/uiConstants';
 
 interface DailyCallMonitoringViewProps {
   currentUser: UserProfile | null;
@@ -90,12 +115,6 @@ interface MasterRow {
   latestOutcome?: string;
 }
 
-interface VirtualizedListOptions {
-  itemHeight?: number;
-  viewportHeight?: number;
-  overscan?: number;
-}
-
 type ClientListKey = 'active' | 'inactivePositive' | 'prospectivePositive';
 
 const PIE_COLORS = ['#2563eb', '#0ea5e9', '#059669', '#f97316'];
@@ -112,105 +131,6 @@ const clientsNoPurchaseThisMonth = (contacts: Contact[], purchases: Purchase[]) 
 
 const calculatePriority = (contact: Contact, daysSinceContact: number, totalSales: number) => {
   return (daysSinceContact * 2) + totalSales / 10000 + (contact.status === CustomerStatus.ACTIVE ? 50 : 0);
-};
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value);
-
-const formatDate = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
-  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
-};
-
-const formatRelativeTime = (value?: string | null) => {
-  if (!value) return 'No activity yet';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 'No activity yet';
-  const diffMs = Date.now() - parsed.getTime();
-  const minutes = Math.max(1, Math.round(diffMs / 60000));
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.round(days / 30);
-  return `${months}mo ago`;
-};
-
-const getDaysSince = (value?: string | null) => {
-  if (!value) return 999;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return 999;
-  const diffMs = Date.now() - parsed.getTime();
-  return Math.max(0, Math.round(diffMs / 86400000));
-};
-
-const formatComment = (value?: string | null) => {
-  if (!value) return 'No notes provided';
-  const trimmed = value.trim();
-  if (!trimmed) return 'No notes provided';
-  return trimmed.length > 90 ? `${trimmed.slice(0, 87)}...` : trimmed;
-};
-
-const matchesSearch = (contact: Contact, query: string) => {
-  if (!query) return true;
-  const normalized = query.toLowerCase();
-  const fields = [contact.company, contact.name, contact.province, contact.city];
-  return fields.some((field) => (field || '').toLowerCase().includes(normalized));
-};
-
-const useVirtualizedList = <T,>(items: T[], options: VirtualizedListOptions = {}) => {
-  const { itemHeight = 96, viewportHeight = 320, overscan = 3 } = options;
-  const [scrollTop, setScrollTop] = useState(0);
-
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(event.currentTarget.scrollTop);
-  }, []);
-
-  const visibleCount = Math.ceil(viewportHeight / itemHeight) + overscan * 2;
-  const maxScrollTop = Math.max(0, items.length * itemHeight - viewportHeight);
-  const clampedScrollTop = Math.min(scrollTop, maxScrollTop);
-  const rawStartIndex = Math.max(0, Math.floor(clampedScrollTop / itemHeight) - overscan);
-  const maxStartIndex = Math.max(0, items.length - visibleCount);
-  const startIndex = Math.min(rawStartIndex, maxStartIndex);
-  const endIndex = Math.min(items.length, startIndex + visibleCount);
-
-  useEffect(() => {
-    if (scrollTop > maxScrollTop) {
-      setScrollTop(maxScrollTop);
-    }
-  }, [scrollTop, maxScrollTop]);
-
-  const visibleItems = useMemo(() => items.slice(startIndex, endIndex), [items, startIndex, endIndex]);
-  const offsetTop = startIndex * itemHeight;
-  const totalHeight = items.length * itemHeight;
-
-  return { visibleItems, offsetTop, totalHeight, handleScroll, viewportHeight };
-};
-
-const statusBadgeClasses = (status: CustomerStatus) => {
-  switch (status) {
-    case CustomerStatus.ACTIVE:
-      return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300';
-    case CustomerStatus.INACTIVE:
-      return 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300';
-    case CustomerStatus.PROSPECTIVE:
-      return 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300';
-    default:
-      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
-  }
-};
-
-const priorityBadgeClasses = (priority: number) => {
-  if (priority >= 150) {
-    return 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300';
-  }
-  if (priority >= 110) {
-    return 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300';
-  }
-  return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
 };
 
 type DensityMode = 'comfortable' | 'compact' | 'ultra-compact';
@@ -1199,7 +1119,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             Refresh
           </button>
           <button
-            onClick={handleOpenSalesInquiry}
+            onClick={() => handleOpenSalesInquiry()}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
             title="Open Sales Inquiry"
           >
