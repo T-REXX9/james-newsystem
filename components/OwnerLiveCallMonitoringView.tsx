@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Bell,
@@ -20,7 +20,6 @@ import {
 import { BarChart as MuiBarChart, PieChart as MuiPieChart } from '@mui/x-charts';
 import { LineChartPro as MuiLineChartPro } from '@mui/x-charts-pro/LineChartPro';
 import {
-  addDays,
   differenceInDays,
   format,
   getDate,
@@ -39,6 +38,7 @@ import {
 } from '@tanstack/react-table';
 import SalesMap from './SalesMap';
 import { UserProfile } from '../types';
+import { supabase } from '../lib/supabaseClient';
 
 interface OwnerLiveCallMonitoringViewProps {
   currentUser: UserProfile | null;
@@ -145,93 +145,6 @@ const DEAL_COLOR_BY_STATUS: Record<DealStatus, string> = {
 const NOTES_KEY = 'owner-daily-call-notes';
 const REPORTS_KEY = 'owner-daily-call-reports-state';
 
-const AREAS = [
-  'NCR',
-  'Bulacan',
-  'Laguna',
-  'Cavite',
-  'Pampanga',
-  'Cebu',
-  'Davao del Sur',
-  'Iloilo',
-] as const;
-
-const AGENTS_SEED: Agent[] = [
-  {
-    id: 'a1',
-    name: 'Sarah Reyes',
-    quota: 900000,
-    salesMTD: 760000,
-    callsToday: 19,
-    textsToday: 26,
-    successRate: 0.62,
-    online: true,
-  },
-  {
-    id: 'a2',
-    name: 'Miguel Cruz',
-    quota: 850000,
-    salesMTD: 690000,
-    callsToday: 15,
-    textsToday: 21,
-    successRate: 0.55,
-    online: true,
-  },
-  {
-    id: 'a3',
-    name: 'Alyssa Santos',
-    quota: 780000,
-    salesMTD: 510000,
-    callsToday: 12,
-    textsToday: 16,
-    successRate: 0.48,
-    online: false,
-  },
-  {
-    id: 'a4',
-    name: 'John Lim',
-    quota: 700000,
-    salesMTD: 590000,
-    callsToday: 17,
-    textsToday: 14,
-    successRate: 0.51,
-    online: true,
-  },
-  {
-    id: 'a5',
-    name: 'Ella Dizon',
-    quota: 650000,
-    salesMTD: 430000,
-    callsToday: 10,
-    textsToday: 18,
-    successRate: 0.44,
-    online: false,
-  },
-];
-
-const CUSTOMER_NAMES = [
-  'Arden Automotive',
-  'Metro Wheel Hub',
-  'Northline Spare Parts',
-  'Prime Motion Trading',
-  'Velocity Tech Supply',
-  'Roadmax Auto Depot',
-  'Blueway Engineering',
-  'Kingfield Industrial',
-  'Gearpoint Logistics',
-  'Crownworks Garage',
-  'Torque Alliance',
-  'Apex Mobility Group',
-  'Rapidlane Motors',
-  'Southport Auto',
-  'Pioneer Fleet Tools',
-  'Motive House',
-  'Midland Parts Center',
-  'Zenith Auto Works',
-  'Bridgeway Commerce',
-  'Legacy Motoring',
-];
-
 const CATEGORY_LABEL: Record<CustomerCategory, string> = {
   'active-buyers-no-purchase': 'Active buyer',
   'inactive-positives': 'Inactive positive',
@@ -261,64 +174,107 @@ const toCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const seedCustomers = (): Customer[] => {
-  const monthStart = startOfMonth(new Date());
-  return CUSTOMER_NAMES.map((name, i) => {
-    const area = AREAS[i % AREAS.length];
-    const agent = AGENTS_SEED[i % AGENTS_SEED.length];
-    const categoryByIndex: CustomerCategory[] = [
-      'active-buyers-no-purchase',
-      'inactive-positives',
-      'prospective-positives',
-      'inactive-negatives',
-      'blacklisted',
-      'negative-prospects',
-    ];
+interface ContactSnapshotRow {
+  id: string;
+  company: string | null;
+  province: string | null;
+  city: string | null;
+  assignedAgent: string | null;
+  salesman: string | null;
+  status: string | null;
+  lastContactDate: string | null;
+  created_at: string | null;
+  creditLimit: number | null;
+  balance: number | null;
+  is_deleted: boolean | null;
+}
 
-    return {
-      id: `c${i + 1}`,
-      name,
-      locationArea: area,
-      agentId: agent.id,
-      category: categoryByIndex[i % categoryByIndex.length],
-      lastContactAt: format(subDays(monthStart, (i * 4) % 50), 'yyyy-MM-dd'),
-      rtoCount: i % 5,
-      creditLimit: 70000 + (i % 6) * 30000,
-      ledgerBalance: 9000 + (i % 7) * 7800,
-      dealStatus: (['Open', 'Won', 'Lost', 'Follow-up'] as DealStatus[])[i % 4],
-    };
-  });
+interface CallLogSnapshotRow {
+  id: string;
+  contact_id: string;
+  agent_name: string | null;
+  channel: string | null;
+  outcome: string | null;
+  occurred_at: string | null;
+}
+
+interface PurchaseSnapshotRow {
+  id: string;
+  contact_id: string;
+  total_amount: number | null;
+  purchase_date: string | null;
+}
+
+interface InquirySnapshotRow {
+  id: string;
+  contact_id: string;
+  sales_person: string | null;
+  status: string | null;
+  sales_date: string | null;
+  is_deleted: boolean | null;
+}
+
+interface ReturnSnapshotRow {
+  id: string;
+  contact_id: string;
+  return_date: string | null;
+  total_refund: number | null;
+  reason: string | null;
+}
+
+interface DealSnapshotRow {
+  id: string;
+  company: string | null;
+  stageId?: string | null;
+  stageid?: string | null;
+  title: string | null;
+  is_deleted: boolean;
+  [key: string]: unknown;
+}
+
+interface ProfileSnapshotRow {
+  id: string;
+  full_name: string | null;
+  monthly_quota: number | null;
+}
+
+const slugify = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const toDateKey = (value?: string | null) => {
+  if (!value) return format(new Date(), 'yyyy-MM-dd');
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return format(new Date(), 'yyyy-MM-dd');
+  return format(parsed, 'yyyy-MM-dd');
 };
 
-const seedInteractions = (customers: Customer[]): InteractionItem[] => {
-  const today = new Date();
-  const outcomes: Outcome[] = ['Successful', 'Follow-up', 'No Answer', 'Rejected', 'Pending'];
-  const interactions: InteractionItem[] = [];
+const mapCallOutcome = (value?: string | null): Outcome => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (normalized.includes('success') || normalized.includes('won') || normalized.includes('answered')) return 'Successful';
+  if (normalized.includes('follow')) return 'Follow-up';
+  if (normalized.includes('no answer') || normalized.includes('unanswered') || normalized.includes('missed')) return 'No Answer';
+  if (normalized.includes('reject') || normalized.includes('decline') || normalized.includes('cancel')) return 'Rejected';
+  return 'Pending';
+};
 
-  customers.forEach((customer, cIndex) => {
-    for (let i = 0; i < 10; i += 1) {
-      const agentId = customer.agentId;
-      const dayOffset = (cIndex * 5 + i * 2) % 45;
-      const date = format(subDays(today, dayOffset), 'yyyy-MM-dd');
-      const type: InteractionType =
-        i % 7 === 0 ? 'purchase' : i % 6 === 0 ? 'return' : i % 3 === 0 ? 'text' : i % 2 === 0 ? 'inquiry' : 'call';
-      const outcome = outcomes[(cIndex + i) % outcomes.length];
-      const amount = type === 'purchase' ? 22000 + ((cIndex + i) % 7) * 8500 : type === 'return' ? 2500 + (i % 3) * 900 : undefined;
+const mapInquiryOutcome = (value?: string | null): Outcome => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (normalized.includes('approved') || normalized.includes('convert')) return 'Successful';
+  if (normalized.includes('cancel') || normalized.includes('reject')) return 'Rejected';
+  if (normalized.includes('draft') || normalized.includes('pending')) return 'Pending';
+  return 'Follow-up';
+};
 
-      interactions.push({
-        id: `i-${customer.id}-${i}`,
-        customerId: customer.id,
-        agentId,
-        type,
-        outcome,
-        date,
-        amount,
-        itemName: type === 'return' ? `Returned Item ${(cIndex + i) % 4 + 1}` : undefined,
-      });
-    }
-  });
-
-  return interactions;
+const mapDealStatus = (value?: string | null): DealStatus => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (normalized.includes('won') || normalized.includes('closed_won') || normalized.includes('closed won')) return 'Won';
+  if (normalized.includes('lost') || normalized.includes('closed_lost') || normalized.includes('closed lost')) return 'Lost';
+  if (normalized.includes('follow')) return 'Follow-up';
+  return 'Open';
 };
 
 const seedReports = (): ReportItem[] => {
@@ -418,8 +374,11 @@ const MapBridge: React.FC<MapBridgeProps> = ({ selectedArea, selectedAgentId, on
 };
 
 const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = ({ currentUser }) => {
-  const customers = useMemo(() => seedCustomers(), []);
-  const interactions = useMemo(() => seedInteractions(customers), [customers]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [interactions, setInteractions] = useState<InteractionItem[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [areaFilter, setAreaFilter] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -441,26 +400,264 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
   const [notesByCustomer, setNotesByCustomer] = useState<Record<string, string>>(() => STORAGE_HELPER.readNotes());
   const [reports, setReports] = useState<ReportItem[]>(() => STORAGE_HELPER.readReports(seedReports()));
 
-  const agents = useMemo(() => {
-    const successfulByAgent = interactions.reduce<Record<string, number>>((acc, item) => {
-      if (item.outcome === 'Successful') acc[item.agentId] = (acc[item.agentId] || 0) + 1;
-      return acc;
-    }, {});
+  const loadSnapshot = useCallback(async () => {
+    setIsLoadingSnapshot(true);
+    setSnapshotError(null);
 
-    const totalsByAgent = interactions.reduce<Record<string, number>>((acc, item) => {
-      if (item.type === 'call' || item.type === 'text') acc[item.agentId] = (acc[item.agentId] || 0) + 1;
-      return acc;
-    }, {});
+    try {
+      const [
+        contactsResponse,
+        callLogsResponse,
+        purchasesResponse,
+        inquiriesResponse,
+        returnsResponse,
+        dealsResponse,
+        profilesResponse,
+      ] = await Promise.all([
+        supabase
+          .from('contacts')
+          .select('id, company, province, city, assignedAgent, salesman, status, lastContactDate, created_at, creditLimit, balance, is_deleted'),
+        supabase
+          .from('call_logs')
+          .select('id, contact_id, agent_name, channel, outcome, occurred_at'),
+        supabase
+          .from('purchase_history')
+          .select('id, contact_id, total_amount, purchase_date'),
+        supabase
+          .from('sales_inquiries')
+          .select('id, contact_id, sales_person, status, sales_date, is_deleted'),
+        supabase
+          .from('sales_returns')
+          .select('id, contact_id, return_date, total_refund, reason'),
+        supabase
+          .from('deals')
+          .select('*'),
+        supabase
+          .from('profiles')
+          .select('id, full_name, monthly_quota'),
+      ]);
 
-    return AGENTS_SEED.map((agent) => {
-      const total = totalsByAgent[agent.id] || 1;
-      const successful = successfulByAgent[agent.id] || 0;
-      return {
-        ...agent,
-        successRate: successful / total,
+      if (contactsResponse.error) throw contactsResponse.error;
+      if (callLogsResponse.error) throw callLogsResponse.error;
+      if (purchasesResponse.error) throw purchasesResponse.error;
+      if (inquiriesResponse.error) throw inquiriesResponse.error;
+      if (returnsResponse.error) throw returnsResponse.error;
+      if (dealsResponse.error) throw dealsResponse.error;
+      if (profilesResponse.error) throw profilesResponse.error;
+
+      const contacts = ((contactsResponse.data as ContactSnapshotRow[]) || []).filter((row) => !row.is_deleted);
+      const callLogs = (callLogsResponse.data as CallLogSnapshotRow[]) || [];
+      const purchases = (purchasesResponse.data as PurchaseSnapshotRow[]) || [];
+      const inquiries = ((inquiriesResponse.data as InquirySnapshotRow[]) || []).filter((row) => !row.is_deleted);
+      const returns = (returnsResponse.data as ReturnSnapshotRow[]) || [];
+      const deals = ((dealsResponse.data as DealSnapshotRow[]) || []).filter((row) => !row.is_deleted);
+      const profiles = (profilesResponse.data as ProfileSnapshotRow[]) || [];
+
+      const profileById = new Map(profiles.map((row) => [row.id, row]));
+      const profileByName = new Map(
+        profiles
+          .filter((row) => row.full_name)
+          .map((row) => [row.full_name!.trim().toLowerCase(), row])
+      );
+
+      const contactById = new Map(contacts.map((row) => [row.id, row]));
+      const contactAgentId = new Map<string, string>();
+      const dealStatusByCompany = new Map<string, DealStatus>();
+
+      deals.forEach((deal) => {
+        const key = (deal.company || '').trim().toLowerCase();
+        if (!key) return;
+        const stageValue = (deal.stageId ?? deal.stageid) as string | null | undefined;
+        dealStatusByCompany.set(key, mapDealStatus(stageValue || deal.title));
+      });
+
+      const resolveAgent = (raw: string | null | undefined, fallback = 'Unassigned') => {
+        const value = (raw || '').trim();
+        if (!value) {
+          const id = 'agent:unassigned';
+          return { id, name: fallback };
+        }
+        const profile = profileById.get(value) || profileByName.get(value.toLowerCase());
+        if (profile) {
+          return {
+            id: profile.id,
+            name: profile.full_name?.trim() || value,
+          };
+        }
+        return { id: `agent:${slugify(value) || 'unknown'}`, name: value };
       };
-    });
-  }, [interactions]);
+
+      const derivedCustomers: Customer[] = contacts.map((contact) => {
+        const agent = resolveAgent(contact.assignedAgent || contact.salesman, 'Unassigned');
+        contactAgentId.set(contact.id, agent.id);
+        return {
+          id: contact.id,
+          name: contact.company || 'Unnamed Customer',
+          locationArea: contact.province || contact.city || 'Unknown',
+          agentId: agent.id,
+          category: 'active-buyers-no-purchase',
+          lastContactAt: toDateKey(contact.lastContactDate || contact.created_at),
+          rtoCount: returns.filter((row) => row.contact_id === contact.id).length,
+          creditLimit: Number(contact.creditLimit || 0),
+          ledgerBalance: Number(contact.balance || 0),
+          dealStatus: dealStatusByCompany.get((contact.company || '').trim().toLowerCase()) || 'Open',
+        };
+      });
+
+      const generatedInteractions: InteractionItem[] = [
+        ...callLogs.map((log) => {
+          const contact = contactById.get(log.contact_id);
+          const fallbackAgent = contact ? contactAgentId.get(contact.id) : undefined;
+          const resolvedAgent = resolveAgent(log.agent_name, 'Unassigned');
+          return {
+            id: `call-${log.id}`,
+            customerId: log.contact_id,
+            agentId: log.agent_name ? resolvedAgent.id : fallbackAgent || resolvedAgent.id,
+            type: (log.channel || '').toLowerCase().includes('text') || (log.channel || '').toLowerCase().includes('sms') ? 'text' : 'call',
+            outcome: mapCallOutcome(log.outcome),
+            date: toDateKey(log.occurred_at),
+          };
+        }),
+        ...inquiries.map((inquiry) => {
+          const fallbackAgent = contactAgentId.get(inquiry.contact_id);
+          const resolvedAgent = resolveAgent(inquiry.sales_person, 'Unassigned');
+          return {
+            id: `inq-${inquiry.id}`,
+            customerId: inquiry.contact_id,
+            agentId: inquiry.sales_person ? resolvedAgent.id : fallbackAgent || resolvedAgent.id,
+            type: 'inquiry',
+            outcome: mapInquiryOutcome(inquiry.status),
+            date: toDateKey(inquiry.sales_date),
+          };
+        }),
+        ...purchases.map((purchase) => ({
+          id: `purchase-${purchase.id}`,
+          customerId: purchase.contact_id,
+          agentId: contactAgentId.get(purchase.contact_id) || 'agent:unassigned',
+          type: 'purchase' as const,
+          outcome: 'Successful' as const,
+          date: toDateKey(purchase.purchase_date),
+          amount: Number(purchase.total_amount || 0),
+        })),
+        ...returns.map((item) => ({
+          id: `return-${item.id}`,
+          customerId: item.contact_id,
+          agentId: contactAgentId.get(item.contact_id) || 'agent:unassigned',
+          type: 'return' as const,
+          outcome: 'Rejected' as const,
+          date: toDateKey(item.return_date),
+          amount: Number(item.total_refund || 0),
+          itemName: item.reason || 'Return',
+        })),
+      ];
+
+      const metricsByCustomer = new Map<string, { inquiries: number; purchases: number; successful: number; lastDate: string }>();
+      generatedInteractions.forEach((item) => {
+        const current = metricsByCustomer.get(item.customerId) || {
+          inquiries: 0,
+          purchases: 0,
+          successful: 0,
+          lastDate: item.date,
+        };
+        current.lastDate = current.lastDate > item.date ? current.lastDate : item.date;
+        if (item.type === 'inquiry') current.inquiries += 1;
+        if (item.type === 'purchase') current.purchases += 1;
+        if (item.outcome === 'Successful') current.successful += 1;
+        metricsByCustomer.set(item.customerId, current);
+      });
+
+      const categorizedCustomers = derivedCustomers.map((customer) => {
+        const contact = contactById.get(customer.id);
+        const status = (contact?.status || '').toLowerCase();
+        const metrics = metricsByCustomer.get(customer.id) || { inquiries: 0, purchases: 0, successful: 0, lastDate: customer.lastContactAt };
+        const category: CustomerCategory =
+          status.includes('blacklist')
+            ? 'blacklisted'
+            : status.includes('inactive')
+              ? metrics.successful > 0
+                ? 'inactive-positives'
+                : 'inactive-negatives'
+              : status.includes('prospective')
+                ? metrics.successful > 0
+                  ? 'prospective-positives'
+                  : 'negative-prospects'
+                : metrics.purchases === 0
+                  ? 'active-buyers-no-purchase'
+                  : 'active-buyers-no-purchase';
+        const dealStatus = customer.dealStatus === 'Open'
+          ? metrics.purchases > 0
+            ? 'Won'
+            : metrics.inquiries > 0
+              ? 'Follow-up'
+              : 'Open'
+          : customer.dealStatus;
+        return {
+          ...customer,
+          category,
+          dealStatus,
+          lastContactAt: metrics.lastDate || customer.lastContactAt,
+        };
+      });
+
+      const monthStart = startOfMonth(new Date());
+      const todayKey = format(new Date(), 'yyyy-MM-dd');
+      const agentNames = new Map<string, string>();
+      categorizedCustomers.forEach((row) => {
+        if (!agentNames.has(row.agentId)) {
+          const profile = profileById.get(row.agentId);
+          agentNames.set(row.agentId, profile?.full_name?.trim() || row.agentId.replace(/^agent:/, '').replace(/-/g, ' '));
+        }
+      });
+      generatedInteractions.forEach((interaction) => {
+        if (!agentNames.has(interaction.agentId)) {
+          const profile = profileById.get(interaction.agentId);
+          agentNames.set(interaction.agentId, profile?.full_name?.trim() || interaction.agentId.replace(/^agent:/, '').replace(/-/g, ' '));
+        }
+      });
+
+      const derivedAgents: Agent[] = Array.from(agentNames.entries()).map(([agentId, rawName]) => {
+        const rows = generatedInteractions.filter((item) => item.agentId === agentId);
+        const callTextRows = rows.filter((item) => item.type === 'call' || item.type === 'text');
+        const successful = callTextRows.filter((item) => item.outcome === 'Successful').length;
+        const salesMTD = rows
+          .filter((item) => item.type === 'purchase' && parseISO(item.date) >= monthStart)
+          .reduce((sum, item) => sum + (item.amount || 0), 0);
+        const latestDate = rows.reduce((latest, row) => (row.date > latest ? row.date : latest), '');
+        const profile = profileById.get(agentId);
+
+        return {
+          id: agentId,
+          name: rawName
+            .split(' ')
+            .filter(Boolean)
+            .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+            .join(' '),
+          quota: Number(profile?.monthly_quota || 0),
+          salesMTD,
+          callsToday: rows.filter((item) => item.type === 'call' && item.date === todayKey).length,
+          textsToday: rows.filter((item) => item.type === 'text' && item.date === todayKey).length,
+          successRate: callTextRows.length ? successful / callTextRows.length : 0,
+          online: latestDate === todayKey,
+        };
+      });
+
+      setCustomers(categorizedCustomers);
+      setInteractions(generatedInteractions);
+      setAgents(derivedAgents.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (error) {
+      console.error('Error loading owner live call monitoring snapshot:', error);
+      setCustomers([]);
+      setInteractions([]);
+      setAgents([]);
+      setSnapshotError('Unable to load live monitoring data from Supabase.');
+    } finally {
+      setIsLoadingSnapshot(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSnapshot();
+  }, [loadSnapshot]);
 
   useEffect(() => {
     STORAGE_HELPER.saveNotes(notesByCustomer);
@@ -914,6 +1111,16 @@ const OwnerLiveCallMonitoringView: React.FC<OwnerLiveCallMonitoringViewProps> = 
   return (
     <div className="h-full overflow-auto bg-slate-100 p-3.5 pt-1 lg:p-3.5 lg:pt-1">
       <div className="mx-auto max-w-[1700px] space-y-2">
+        {isLoadingSnapshot && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+            Loading live dashboard data from Supabase...
+          </div>
+        )}
+        {snapshotError && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {snapshotError}
+          </div>
+        )}
         <div className="grid gap-3 lg:grid-cols-8">
           <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm lg:col-span-5">
             <div className="mb-1.5 flex items-center justify-between">
