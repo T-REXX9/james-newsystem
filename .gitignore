@@ -30,3 +30,5 @@ dist-ssr
 
 # Auto Claude data directory
 .auto-claude/
+
+backup.fixed.sql
